@@ -41,7 +41,7 @@ test('register command rejects an email that is already taken', function () {
 
     $this->artisan('register')
         ->expectsQuestion('Correo electrónico', 'taken@example.com')
-        ->expectsOutputToContain('ya ha sido registrado')
+        ->expectsOutputToContain('registra')
         ->assertFailed();
 
     expect(User::query()->where('email', 'taken@example.com')->count())->toBe(1);

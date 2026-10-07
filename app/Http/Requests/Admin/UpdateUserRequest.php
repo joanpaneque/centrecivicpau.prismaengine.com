@@ -2,21 +2,17 @@
 
 namespace App\Http\Requests\Admin;
 
-use App\Concerns\ProfileValidationRules;
+use App\Enums\UserRole;
 use App\Models\User;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateUserRequest extends FormRequest
 {
-    use ProfileValidationRules;
-
-    /**
-     * Determine if the user is authorized to make this request.
-     */
     public function authorize(): bool
     {
-        return $this->user()?->is_admin === true;
+        return $this->user()?->isAdmin() === true;
     }
 
     /**
@@ -28,8 +24,12 @@ class UpdateUserRequest extends FormRequest
         $user = $this->route('user');
 
         return [
-            'name' => $this->nameRules(),
-            'email' => $this->emailRules($user->id),
+            'name' => ['required', 'string', 'max:120'],
+            'email' => ['nullable', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'role' => ['sometimes', Rule::enum(UserRole::class)],
+            'locale' => ['sometimes', Rule::in(['ca', 'es'])],
+            'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+            'tax_id' => ['nullable', 'string', 'max:20'],
         ];
     }
 }

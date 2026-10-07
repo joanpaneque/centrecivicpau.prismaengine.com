@@ -1,0 +1,15 @@
+---
+description: Keep the in-app AI assistant manual in sync with the product
+alwaysApply: true
+---
+
+# Manual del asistente (`docs/MANUAL.md`)
+
+El TPV tiene un asistente de IA (OpenRouter, `openai/gpt-5.6-luna`) que **solo** conoce lo que pone en `docs/MANUAL.md`. Ese archivo es la fuente de verdad para el personal.
+
+Cuando añadas, cambies o quites una función visible (pantalla, botón, flujo, permiso, limitación):
+
+1. Actualiza **el mismo turno** el apartado correspondiente de `docs/MANUAL.md` (cómo se usa, dónde está, textos CA/ES de los botones, qué no hace).
+2. No dejes el manual a medias: si no cabe en el apartado, crea uno nuevo y enlázalo en la tabla del final.
+3. No documentes secretos, claves ni detalles internos irrelevantes para quien usa la app.
+4. Si el cambio es solo técnico (refactor, tests) y no cambia el uso, no toques el manual.

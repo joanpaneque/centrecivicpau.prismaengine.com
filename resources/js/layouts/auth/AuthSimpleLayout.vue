@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import PrismaEngineLogo from '@/components/PrismaEngineLogo.vue';
 import { home } from '@/routes';
 
 defineProps<{
@@ -20,10 +19,10 @@ defineProps<{
                         :href="home()"
                         class="inline-flex w-fit font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                        <PrismaEngineLogo
-                            :size="42 / 150"
-                            product="Engine"
-                            accent-color="#0040c1"
+                        <img
+                            src="/images/logo-centre-civic.png"
+                            alt="Centre Cívic Pau"
+                            class="h-20 w-auto"
                         />
                         <span class="sr-only">{{ title }}</span>
                     </Link>

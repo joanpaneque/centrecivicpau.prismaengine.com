@@ -32,5 +32,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <env name="OPENROUTER_API_KEY" value=""/>
+        <env name="OPENROUTER_MODEL" value="openai/gpt-5.6-luna"/>
     </php>
 </phpunit>

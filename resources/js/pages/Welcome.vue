@@ -23,8 +23,12 @@ const sessionLabel = computed(() =>
         class="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-16 text-foreground"
     >
         <main class="flex max-w-sm flex-col items-center text-center">
-            <h1 class="text-2xl font-semibold tracking-tight">
-                {{ page.props.name }}
+            <h1>
+                <img
+                    src="/images/logo-centre-civic.png"
+                    :alt="page.props.name"
+                    class="h-28 w-auto"
+                />
             </h1>
 
             <Button

@@ -20,8 +20,10 @@ class LoginResponse implements LoginResponseContract
                 : redirect()->route('password.force-change');
         }
 
+        $home = $request->user()?->isAdmin() ? Fortify::redirects('login') : route('tpv');
+
         return $request->wantsJson()
             ? new JsonResponse(['two_factor' => false], 200)
-            : redirect()->intended(Fortify::redirects('login'));
+            : redirect()->intended($home);
     }
 }

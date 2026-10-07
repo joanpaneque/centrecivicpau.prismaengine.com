@@ -1,6 +1,10 @@
 <?php
 
+use App\Models\Ticket;
+use App\Models\User;
+use App\Services\Devices\DeviceManager;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /*
@@ -47,4 +51,61 @@ expect()->extend('toBeOne', function () {
 function something()
 {
     // ..
+}
+
+/**
+ * Register a TPV device for the user and return the raw device cookie value.
+ */
+function registerTpvDevice(TestCase $test, User $user, string $type = 'tablet'): string
+{
+    $response = $test->actingAs($user)->postJson(route('tpv.device'), ['name' => 'Test '.$type, 'type' => $type])->assertOk();
+
+    return (string) $response->getCookie(DeviceManager::COOKIE)?->getValue();
+}
+
+/**
+ * @param  array<string, mixed>  $payload
+ * @return array<string, mixed>
+ */
+function tpvOperation(string $type, array $payload, ?int $operatorId = null): array
+{
+    return [
+        'uuid' => (string) Str::uuid(),
+        'type' => $type,
+        'payload' => $payload,
+        'createdAt' => now()->toIso8601String(),
+        'operatorId' => $operatorId,
+    ];
+}
+
+/**
+ * Issue a 5,00 € ticket through the sync API from a fresh cashier device.
+ */
+function issueTpvTicket(TestCase $test, string $publicToken): Ticket
+{
+    $admin = User::factory()->admin()->create();
+    $cookie = registerTpvDevice($test, $admin, 'cashier');
+    $sessionUuid = (string) Str::uuid();
+    $ticketUuid = (string) Str::uuid();
+    $client = fn () => $test->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie);
+
+    $client()->postJson(route('tpv.push'), ['operations' => [tpvOperation('cash.open', ['sessionUuid' => $sessionUuid], $admin->id)]])->assertOk();
+    $series = $client()->getJson(route('tpv.bootstrap'))->json('cashier.series.code');
+
+    $client()->postJson(route('tpv.push'), ['operations' => [tpvOperation('ticket.issue', [
+        'ticket' => [
+            'uuid' => $ticketUuid,
+            'seriesCode' => $series,
+            'number' => 1,
+            'cashSessionUuid' => $sessionUuid,
+            'issuedAt' => now()->toIso8601String(),
+            'surchargeRate' => 0,
+            'total' => 500,
+            'publicToken' => $publicToken,
+            'lines' => [['name' => ['ca' => 'Entrepà', 'es' => 'Bocadillo'], 'quantity' => 1, 'unitPrice' => 500, 'vatRate' => 10, 'total' => 500]],
+            'payments' => [['method' => 'card', 'amount' => 500]],
+        ],
+    ], $admin->id)]])->assertOk();
+
+    return Ticket::query()->where('uuid', $ticketUuid)->firstOrFail();
 }

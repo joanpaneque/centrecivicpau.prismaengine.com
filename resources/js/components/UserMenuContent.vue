@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link, router } from '@inertiajs/vue3';
-import { LogOut, Settings, Shield } from '@lucide/vue';
+import { Languages, LayoutPanelTop, LogOut, Settings } from '@lucide/vue';
 import {
     DropdownMenuGroup,
     DropdownMenuItem,
@@ -8,8 +8,8 @@ import {
     DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
 import UserInfo from '@/components/UserInfo.vue';
-import { logout } from '@/routes';
-import { users as adminUsers } from '@/routes/admin';
+import { useI18n } from '@/i18n';
+import { logout, tpv } from '@/routes';
 import { edit } from '@/routes/profile';
 import type { User } from '@/types';
 
@@ -17,11 +17,18 @@ type Props = {
     user: User;
 };
 
+defineProps<Props>();
+
+const { t, locale, setLocale } = useI18n();
+
 const handleLogout = () => {
     router.flushAll();
 };
 
-defineProps<Props>();
+async function toggleLocale(): Promise<void> {
+    await setLocale(locale.value === 'ca' ? 'es' : 'ca');
+    router.reload();
+}
 </script>
 
 <template>
@@ -33,20 +40,20 @@ defineProps<Props>();
     <DropdownMenuSeparator />
     <DropdownMenuGroup>
         <DropdownMenuItem :as-child="true">
+            <a class="block w-full cursor-pointer" :href="tpv().url">
+                <LayoutPanelTop class="mr-2 h-4 w-4" />
+                {{ t('nav.backToTpv') }}
+            </a>
+        </DropdownMenuItem>
+        <DropdownMenuItem :as-child="true">
             <Link class="block w-full cursor-pointer" :href="edit()" prefetch>
                 <Settings class="mr-2 h-4 w-4" />
-                Configuración
+                {{ t('nav.profile') }}
             </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem v-if="user.is_admin" :as-child="true">
-            <Link
-                class="block w-full cursor-pointer"
-                :href="adminUsers()"
-                prefetch
-            >
-                <Shield class="mr-2 h-4 w-4" />
-                Administración
-            </Link>
+        <DropdownMenuItem @click="toggleLocale">
+            <Languages class="mr-2 h-4 w-4" />
+            {{ locale === 'ca' ? t('common.spanish') : t('common.catalan') }}
         </DropdownMenuItem>
     </DropdownMenuGroup>
     <DropdownMenuSeparator />
@@ -59,7 +66,7 @@ defineProps<Props>();
             data-test="logout-button"
         >
             <LogOut class="mr-2 h-4 w-4" />
-            Cerrar sesión
+            {{ t('nav.logout') }}
         </Link>
     </DropdownMenuItem>
 </template>

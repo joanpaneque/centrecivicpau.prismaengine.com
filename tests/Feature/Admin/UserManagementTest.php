@@ -26,12 +26,12 @@ test('admins can visit the admin users page', function () {
             ->has('users'));
 });
 
-test('admin index redirects to users', function () {
+test('admin index redirects to the dashboard', function () {
     $admin = User::factory()->admin()->create();
 
     $this->actingAs($admin)
         ->get(route('admin.index'))
-        ->assertRedirect('/admin/usuarios');
+        ->assertRedirect(route('dashboard'));
 });
 
 test('admins can create users that must change password', function () {

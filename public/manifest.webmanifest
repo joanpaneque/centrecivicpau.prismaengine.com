@@ -1,0 +1,16 @@
+{
+    "name": "TPV Centre Cívic Pau",
+    "short_name": "TPV Pau",
+    "description": "TPV i gestió del bar del Centre Cívic Pau",
+    "start_url": "/tpv",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#00056a",
+    "theme_color": "#00056a",
+    "lang": "ca",
+    "icons": [
+        { "src": "/images/logo-centre-civic-icon.png", "sizes": "400x400", "type": "image/png", "purpose": "any" },
+        { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+    ]
+}

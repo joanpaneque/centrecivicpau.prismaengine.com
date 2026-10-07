@@ -28,6 +28,14 @@ return [
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
 
+    'openrouter' => [
+        'key' => env('OPENROUTER_API_KEY'),
+        'url' => env('OPENROUTER_URL', 'https://openrouter.ai/api/v1'),
+        'model' => env('OPENROUTER_MODEL', 'openai/gpt-5.6-luna'),
+        'reasoning' => env('OPENROUTER_REASONING', 'low'),
+        'manual' => env('ASSISTANT_MANUAL_PATH', 'docs/MANUAL.md'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

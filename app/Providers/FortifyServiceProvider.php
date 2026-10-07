@@ -2,14 +2,23 @@
 
 namespace App\Providers;
 
+use App\Actions\Fortify\HandleInitialSetupLogin;
 use App\Http\Responses\LoginResponse;
+use App\Models\User;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Laravel\Fortify\Actions\AttemptToAuthenticate;
+use Laravel\Fortify\Actions\CanonicalizeUsername;
+use Laravel\Fortify\Actions\EnsureLoginIsNotThrottled;
+use Laravel\Fortify\Actions\PrepareAuthenticatedSession;
+use Laravel\Fortify\Actions\RedirectIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
+use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
 class FortifyServiceProvider extends ServiceProvider
@@ -29,6 +38,30 @@ class FortifyServiceProvider extends ServiceProvider
     {
         $this->configureViews();
         $this->configureRateLimiting();
+        $this->configureAuthentication();
+    }
+
+    private function configureAuthentication(): void
+    {
+        Fortify::authenticateThrough(fn (Request $request) => array_filter([
+            config('fortify.limiters.login') ? null : EnsureLoginIsNotThrottled::class,
+            config('fortify.lowercase_usernames') ? CanonicalizeUsername::class : null,
+            HandleInitialSetupLogin::class,
+            Features::enabled(Features::twoFactorAuthentication()) ? RedirectIfTwoFactorAuthenticatable::class : null,
+            AttemptToAuthenticate::class,
+            PrepareAuthenticatedSession::class,
+        ]));
+
+        Fortify::authenticateUsing(function (Request $request): ?User {
+            $user = User::query()
+                ->where('email', mb_strtolower((string) $request->input('email')))
+                ->where('active', true)
+                ->first();
+
+            return $user && $user->password && Hash::check((string) $request->input('password'), $user->password)
+                ? $user
+                : null;
+        });
     }
 
     /**

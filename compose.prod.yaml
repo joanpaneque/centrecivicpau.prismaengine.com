@@ -16,6 +16,20 @@ services:
         restart: unless-stopped
     scheduler:
         restart: unless-stopped
+    reverb:
+        restart: unless-stopped
+        ports: !reset []
+        networks:
+            - sail
+            - traefik
+        labels:
+            - traefik.enable=true
+            - traefik.docker.network=traefik
+            - traefik.http.routers.centrecivicpau-reverb.rule=Host(`centrecivicpau.prismaengine.com`) && PathPrefix(`/app/`)
+            - traefik.http.routers.centrecivicpau-reverb.entrypoints=websecure
+            - traefik.http.routers.centrecivicpau-reverb.tls.certresolver=le
+            - traefik.http.routers.centrecivicpau-reverb.priority=100
+            - traefik.http.services.centrecivicpau-reverb.loadbalancer.server.port=8080
     pgsql:
         restart: unless-stopped
         ports: !reset []
