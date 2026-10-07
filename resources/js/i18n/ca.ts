@@ -169,7 +169,7 @@ const ca = {
         },
         typeHelp: {
             tablet: 'Presa de comandes a sala i terrassa.',
-            cashier: 'Cobra, imprimeix tiquets i fa els tancaments. Té la seva pròpia sèrie de tiquets.',
+            cashier: 'Cobra, imprimeix tiquets i fa els tancaments. També mostra el QR de fitxatge a la mateixa pantalla.',
             kds: 'Mostra les comandes de cuina o barra en temps real.',
             clock: 'Mostra el QR dinàmic perquè el personal fitxi des del mòbil.',
         },
@@ -443,6 +443,9 @@ const ca = {
         myShifts: 'Els meus torns',
         noShifts: 'No tens torns planificats',
         reminderOut: 'Encara no has fitxat la sortida',
+        qrTab: 'QR fitxatge',
+        qrOnCashier: 'El personal hi fitxa amb el mòbil mentre tu cobres.',
+        showFull: 'Pantalla completa',
         qrScreenTitle: 'Fitxa aquí',
         qrScreenHelp: 'Obre el TPV al teu mòbil, ves a «Fitxar» i escaneja aquest codi.',
         qrRefresh: 'Es renova cada {seconds} s',

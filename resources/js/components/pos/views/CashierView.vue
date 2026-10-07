@@ -2,6 +2,7 @@
 import { BellRing, FileText, LockKeyhole, Plus, Printer, Receipt, Unlock } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
+import ClockQrPanel from '@/components/pos/ClockQrPanel.vue';
 import PrintPreview from '@/components/pos/PrintPreview.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -117,19 +118,22 @@ async function confirmClose(): Promise<void> {
             <p>{{ t('cashier.notCashierDevice') }}</p>
         </div>
 
-        <div v-else-if="!session" class="mx-auto mt-16 max-w-sm rounded-2xl bg-white p-8 shadow dark:bg-slate-900">
-            <div class="mb-6 flex items-center gap-3">
-                <LockKeyhole class="size-8 text-[#00056a] dark:text-blue-300" />
-                <div>
-                    <h2 class="text-xl font-semibold">{{ t('cashier.sessionClosed') }}</h2>
-                    <p class="text-sm text-slate-500">{{ state.device?.name }}</p>
+        <div v-else-if="!session" class="mx-auto grid max-w-4xl gap-4 p-4 lg:grid-cols-[1fr_280px]">
+            <div class="rounded-2xl bg-white p-8 shadow dark:bg-slate-900">
+                <div class="mb-6 flex items-center gap-3">
+                    <LockKeyhole class="size-8 text-[#00056a] dark:text-blue-300" />
+                    <div>
+                        <h2 class="text-xl font-semibold">{{ t('cashier.sessionClosed') }}</h2>
+                        <p class="text-sm text-slate-500">{{ state.device?.name }}</p>
+                    </div>
                 </div>
+                <label class="mb-1 block text-sm font-medium">{{ t('cashier.openingFloat') }}</label>
+                <Input v-model="openingFloat" inputmode="decimal" placeholder="0,00" class="mb-4 h-12 text-lg" @keyup.enter="open" />
+                <Button class="h-12 w-full bg-[#00056a] text-base" :disabled="opening" @click="open">
+                    <Unlock class="size-5" /> {{ t('cashier.openSession') }}
+                </Button>
             </div>
-            <label class="mb-1 block text-sm font-medium">{{ t('cashier.openingFloat') }}</label>
-            <Input v-model="openingFloat" inputmode="decimal" placeholder="0,00" class="mb-4 h-12 text-lg" @keyup.enter="open" />
-            <Button class="h-12 w-full bg-[#00056a] text-base" :disabled="opening" @click="open">
-                <Unlock class="size-5" /> {{ t('cashier.openSession') }}
-            </Button>
+            <ClockQrPanel compact />
         </div>
 
         <div v-else class="grid gap-4 p-3 lg:grid-cols-[1fr_380px] lg:p-4">
@@ -161,6 +165,7 @@ async function confirmClose(): Promise<void> {
             </section>
 
             <aside class="space-y-4">
+                <ClockQrPanel compact />
                 <div class="rounded-xl bg-white p-4 shadow-sm dark:bg-slate-900">
                     <div class="mb-3 flex items-center justify-between">
                         <h3 class="font-semibold">{{ state.device?.name }}</h3>

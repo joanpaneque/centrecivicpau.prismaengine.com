@@ -90,7 +90,7 @@ class SnapshotBuilder
             'cashier' => $device?->type === DeviceType::Cashier ? $this->cashier($device) : null,
             'myShifts' => $this->shifts($user),
             'myClock' => $this->workedTime->clockState($user),
-            'clock' => $device?->type === DeviceType::Clock ? [
+            'clock' => $device && ($device->type === DeviceType::Clock || $device->type === DeviceType::Cashier) ? [
                 'secret' => AppSettings::clockSecret(),
                 'seconds' => $this->clockQr->seconds(),
                 'url' => url('/tpv').'#/fitxar',

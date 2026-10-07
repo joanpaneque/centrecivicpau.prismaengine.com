@@ -57,9 +57,9 @@ Cerrar sesión: menú ☰ → **Tanca la sessió / Cerrar la sesión**.
 La primera vez que se abre `/tpv` en un aparato, se registra el dispositivo y se elige el tipo:
 
 - **Tablet:** sala, comandas, reservas, fichaje. **No cobra.**
-- **Caja (`cashier`):** cobra, abre y cierra caja, tiene una **serie de tickets propia**. Solo un administrador puede registrar cajas.
+- **Caja (`cashier`):** cobra, abre y cierra caja, tiene una **serie de tickets propia**. En el mismo ordenador (el de la barra, táctil) **también muestra el QR de fichaje** junto a la caja: el personal ficha con el móvil mientras se cobra. Hay un botón **QR fitxatge / QR fichaje** para verlo a pantalla completa. Solo un administrador puede registrar cajas.
 - **Cocina (`kds`):** pantalla de comandas. La cocina también puede registrar este tipo.
-- **Fichaje (`clock`):** muestra el QR dinámico a pantalla completa. Solo un administrador puede registrarlo.
+- **Fichaje (`clock`):** solo QR a pantalla completa, sin caja. Úsalo si tienes una pantalla extra en la pared; **no hace falta** si el ordenador de caja ya muestra el QR.
 
 Los dispositivos se gestionan en **Gestión → Dispositivos** (nombre, revocar). Si se pierde un aparato, hay que revocarlo.
 
@@ -219,8 +219,8 @@ Cumple el art. 34.9 del Estatuto de los Trabajadores. Los registros **no se modi
 
 ### Cómo fichar
 
-1. En el móvil: **Fitxar** → **Fitxa amb el QR del local / Fichar con el QR del local** (cámara). El QR está en la pantalla de fichaje del local y **cambia cada 30–60 s** (no vale una foto de casa).
-2. En caja y cocina (dispositivos fijos) también se puede fichar **sin QR** (queda como origen `app`).
+1. En el móvil: **Fitxar** → **Fitxa amb el QR del local / Fichar con el QR del local** (cámara). El QR está en el **ordenador de caja** (panel al lado de las cuentas) o en una pantalla de tipo Fichaje, y **cambia cada 30–60 s** (no vale una foto de casa). En caja, **QR fitxatge / QR fichaje** lo pone a pantalla completa.
+2. En caja y cocina (dispositivos fijos) también se puede fichar **sin QR** desde la pestaña Fitxar (queda como origen `app`).
 
 Acciones: **Entrada, Sortida / Salida, Pausa, Torna de la pausa / Vuelve de la pausa**.
 
@@ -228,7 +228,7 @@ Funciona offline: se guarda con la hora del móvil y se marca «sincronizado má
 
 Cada persona ve su historial del día, horas de hoy, próximo turno y **Els meus torns / Mis turnos**.
 
-Pantalla de fichaje (`/tpv#/qr`): QR grande «Fitxa aquí / Ficha aquí».
+Pantalla de QR a tamaño completo: `/tpv#/qr` («Fitxa aquí / Ficha aquí»). En el ordenador de caja se llega desde el panel del QR o la pestaña **QR fitxatge**.
 
 **Conservación mínima 4 años.** Sin geolocalización ni biometría.
 

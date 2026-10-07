@@ -49,7 +49,23 @@ test('bootstrap returns the full snapshot for a registered device', function () 
         ->assertJsonPath('full', true)
         ->assertJsonPath('me.id', $user->id)
         ->assertJsonPath('device.type', 'tablet')
+        ->assertJsonPath('clock', null)
         ->assertJsonStructure(['settings', 'staff', 'zones', 'tables', 'products', 'orders', 'cursor', 'serverTime']);
+});
+
+test('the cashier device also receives the clock-in QR so one screen can do both', function () {
+    $admin = User::factory()->admin()->create();
+    $cookie = registerTpvDevice($this, $admin, 'cashier');
+
+    $clock = $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)
+        ->getJson(route('tpv.bootstrap'))
+        ->assertOk()
+        ->assertJsonPath('device.type', 'cashier')
+        ->json('clock');
+
+    expect($clock)->toHaveKeys(['secret', 'seconds', 'url'])
+        ->and($clock['secret'])->toBeString()->not->toBeEmpty()
+        ->and($clock['seconds'])->toBeGreaterThanOrEqual(30);
 });
 
 test('staff cannot register a cashier device', function () {

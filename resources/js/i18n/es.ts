@@ -171,7 +171,7 @@ const es: Messages = {
         },
         typeHelp: {
             tablet: 'Toma de comandas en sala y terraza.',
-            cashier: 'Cobra, imprime tickets y hace los cierres. Tiene su propia serie de tickets.',
+            cashier: 'Cobra, imprime tickets y hace los cierres. También muestra el QR de fichaje en la misma pantalla.',
             kds: 'Muestra las comandas de cocina o barra en tiempo real.',
             clock: 'Muestra el QR dinámico para que el personal fiche desde el móvil.',
         },
@@ -445,6 +445,9 @@ const es: Messages = {
         myShifts: 'Mis turnos',
         noShifts: 'No tienes turnos planificados',
         reminderOut: 'Todavía no has fichado la salida',
+        qrTab: 'QR fichaje',
+        qrOnCashier: 'El personal ficha con el móvil mientras tú cobras.',
+        showFull: 'Pantalla completa',
         qrScreenTitle: 'Ficha aquí',
         qrScreenHelp: 'Abre el TPV en tu móvil, ve a «Fichar» y escanea este código.',
         qrRefresh: 'Se renueva cada {seconds} s',
