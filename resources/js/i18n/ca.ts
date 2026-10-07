@@ -215,6 +215,8 @@ const ca = {
         tableLabel: 'Número / nom',
         seats: 'Places',
         shape: 'Forma',
+        noZone: 'Tria una zona abans d\'afegir res.',
+        shapesTitle: 'Forma de la taula',
         shapes: { square: 'Quadrada', round: 'Rodona', rect: 'Rectangular', stool: 'Tamboret' },
         auxiliary: 'Auxiliar',
         deleteTable: 'Elimina la taula',

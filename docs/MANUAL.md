@@ -94,7 +94,7 @@ Botón **Edita el plànol / Editar el plano**.
 - Tirador circular de arriba para girar (saltos de 15°). El texto de las mesas queda derecho.
 - Barra del elemento: editar, girar, duplicar, traer al frente / enviar al fondo, borrar.
 - Teclado: flechas mueven, Supr borra, Esc deselecciona.
-- **Afegeix taula / Añadir mesa:** cuadrada, redonda, rectangular, taburete o **taula auxiliar / mesa auxiliar** (las del Ayuntamiento u otras temporales).
+- **Afegeix taula / Añadir mesa:** un toque crea una mesa cuadrada. La flechita del botón sirve para elegir redonda, rectangular, taburete o **taula auxiliar / mesa auxiliar**.
 - **Afegeix element / Añadir elemento:** barra, pared, puerta (con arco de apertura), ventana, columna, planta, cocina, lavabos, escaleras, texto. Se puede cambiar texto, color, tamaño y giro.
 - **Elimina les auxiliars lliures / Eliminar las auxiliares libres:** quita las auxiliares que no tienen cuenta abierta.
 - Al soltar se guarda y el resto de tablets lo ven. Si falla, el elemento vuelve a su sitio.

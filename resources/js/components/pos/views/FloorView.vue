@@ -10,7 +10,7 @@ import { api, HttpError } from '@/lib/http';
 import { formatMoney } from '@/pos/money';
 import { orderTotal, tableStatus } from '@/pos/orders';
 import { go } from '@/pos/router';
-import { operator, sorted, state } from '@/pos/store';
+import { sorted, state } from '@/pos/store';
 import { pull, sync } from '@/pos/sync';
 import type { DiningTable } from '@/pos/types';
 
@@ -28,7 +28,7 @@ const zones = sorted.zones;
 const zone = computed(() => (zoneId.value && state.zones[zoneId.value]) || zones.value[0] || null);
 const tables = computed(() => sorted.tables.value.filter((table) => table.zoneId === zone.value?.id));
 const elements = computed(() => sorted.floorElements.value.filter((element) => element.zoneId === zone.value?.id));
-const isAdmin = computed(() => state.me?.role === 'admin' || (operator() as { role?: string } | null)?.role === 'admin');
+const isAdmin = computed(() => state.me?.role === 'admin');
 
 const statuses = computed(() => {
     void now.value;

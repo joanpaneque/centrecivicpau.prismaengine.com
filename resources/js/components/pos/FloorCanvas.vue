@@ -5,6 +5,7 @@ import {
     BellRing,
     CalendarClock,
     ChefHat,
+    ChevronDown,
     Circle,
     CookingPot,
     Copy,
@@ -414,7 +415,13 @@ function freeSpot(width: number, height: number): { x: number; y: number } {
 }
 
 async function addTable(shape: TableShape, isAuxiliary = false): Promise<void> {
-    if (!props.zoneId || busy.value) {
+    if (busy.value) {
+        return;
+    }
+
+    if (!props.zoneId) {
+        toast.error(t('floor.noZone'));
+
         return;
     }
 
@@ -423,7 +430,14 @@ async function addTable(shape: TableShape, isAuxiliary = false): Promise<void> {
     busy.value = true;
 
     try {
-        const response = await api<{ table: DiningTable }>('POST', '/tpv/api/tables', { zoneId: props.zoneId, shape, isAuxiliary, ...freeSpot(width, height) });
+        const response = await api<{ table: DiningTable }>('POST', '/tpv/api/tables', {
+            zoneId: props.zoneId,
+            shape,
+            isAuxiliary,
+            width,
+            height,
+            ...freeSpot(width, height),
+        });
         upsert('tables', response.table);
         selection.value = { kind: 'table', id: response.table.id };
     } catch (e) {
@@ -447,7 +461,13 @@ const DEFAULT_SIZES: Record<FloorElementType, [number, number]> = {
 };
 
 async function addElement(type: FloorElementType): Promise<void> {
-    if (!props.zoneId || busy.value) {
+    if (busy.value) {
+        return;
+    }
+
+    if (!props.zoneId) {
+        toast.error(t('floor.noZone'));
+
         return;
     }
 
@@ -656,7 +676,7 @@ function elementStyle(element: FloorElement): Record<string, string> {
     return style;
 }
 
-function elementClasses(element: FloorElement): string {
+function elementClasses(element: { type: FloorElementType }): string {
     switch (element.type) {
         case 'bar':
             return 'rounded-lg bg-[#8b5e3c] text-white shadow-md';
@@ -718,27 +738,35 @@ defineExpose({ addTable, addElement });
 <template>
     <div class="flex min-h-0 flex-1 flex-col">
         <div v-if="editing" class="flex shrink-0 flex-wrap items-center gap-2 border-b bg-amber-50 px-3 py-2 text-sm">
-            <DropdownMenu>
-                <DropdownMenuTrigger as-child>
-                    <Button size="sm" class="h-10 bg-[#00056a]" :disabled="busy"><Plus class="size-4" /> {{ t('floor.addTable') }}</Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" class="w-56">
-                    <DropdownMenuItem v-for="item in TABLE_SHAPES" :key="item.shape" class="h-11" @select="addTable(item.shape)">
-                        <component :is="item.icon" class="size-4" :class="item.shape === 'stool' ? 'scale-75' : ''" /> {{ t(`floor.shapes.${item.shape}`) }}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem class="h-11" @select="addTable('square', true)"><Plus class="size-4" /> {{ t('floor.addAuxiliary') }}</DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <div class="flex">
+                <Button size="sm" class="h-10 rounded-r-none bg-[#00056a]" :disabled="busy" @click="addTable('square')">
+                    <Plus class="size-4" /> {{ t('floor.addTable') }}
+                </Button>
+                <DropdownMenu :modal="false">
+                    <DropdownMenuTrigger as-child>
+                        <Button size="sm" class="h-10 rounded-l-none border-l border-white/25 bg-[#00056a] px-2 hover:bg-[#00056a]/90" :disabled="busy" :aria-label="t('floor.shapesTitle')">
+                            <ChevronDown class="size-4" />
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" class="w-56">
+                        <DropdownMenuLabel>{{ t('floor.shapesTitle') }}</DropdownMenuLabel>
+                        <DropdownMenuItem v-for="item in TABLE_SHAPES" :key="item.shape" class="h-11" @click="addTable(item.shape)">
+                            <component :is="item.icon" class="size-4" :class="item.shape === 'stool' ? 'scale-75' : ''" /> {{ t(`floor.shapes.${item.shape}`) }}
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem class="h-11" @click="addTable('square', true)"><Plus class="size-4" /> {{ t('floor.addAuxiliary') }}</DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
 
-            <DropdownMenu>
+            <DropdownMenu :modal="false">
                 <DropdownMenuTrigger as-child>
                     <Button size="sm" variant="outline" class="h-10" :disabled="busy"><Plus class="size-4" /> {{ t('floor.addElement') }}</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" class="w-56">
                     <DropdownMenuLabel>{{ t('floor.elementsTitle') }}</DropdownMenuLabel>
-                    <DropdownMenuItem v-for="type in ELEMENT_TYPES" :key="type" class="h-11" @select="addElement(type)">
-                        <span class="inline-block size-4 rounded-sm" :class="elementClasses({ type } as FloorElement)" />
+                    <DropdownMenuItem v-for="type in ELEMENT_TYPES" :key="type" class="h-11" @click="addElement(type)">
+                        <span class="inline-block size-4 rounded-sm" :class="elementClasses({ type })" />
                         {{ t(`floor.elements.${type}`) }}
                     </DropdownMenuItem>
                 </DropdownMenuContent>

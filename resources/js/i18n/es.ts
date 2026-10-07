@@ -217,6 +217,8 @@ const es: Messages = {
         tableLabel: 'Número / nombre',
         seats: 'Plazas',
         shape: 'Forma',
+        noZone: 'Elige una zona antes de añadir nada.',
+        shapesTitle: 'Forma de la mesa',
         shapes: { square: 'Cuadrada', round: 'Redonda', rect: 'Rectangular', stool: 'Taburete' },
         auxiliary: 'Auxiliar',
         deleteTable: 'Eliminar la mesa',
