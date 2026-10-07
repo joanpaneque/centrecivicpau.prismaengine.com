@@ -29,6 +29,7 @@ type Printer = {
     ip: string | null;
     port: number | null;
     model: string | null;
+    systemName: string | null;
     paperWidth: number;
     isTicketPrinter: boolean;
     active: boolean;
@@ -81,11 +82,12 @@ const printerOpen = ref(false);
 const editingPrinter = ref<Printer | null>(null);
 const printerForm = useForm({
     name: '',
-    type: 'simulated',
+    type: 'system',
     ip: '',
     port: 9100 as number | undefined,
     model: '',
-    paperWidth: 42,
+    systemName: '',
+    paperWidth: 48,
     isTicketPrinter: false,
     active: true,
     destinationIds: [] as number[],
@@ -95,11 +97,12 @@ function openPrinter(printer: Printer | null): void {
     editingPrinter.value = printer;
     printerForm.clearErrors();
     printerForm.name = printer?.name ?? '';
-    printerForm.type = printer?.type ?? 'simulated';
+    printerForm.type = printer?.type ?? 'system';
     printerForm.ip = printer?.ip ?? '';
     printerForm.port = printer?.port ?? 9100;
     printerForm.model = printer?.model ?? '';
-    printerForm.paperWidth = printer?.paperWidth ?? 42;
+    printerForm.systemName = printer?.systemName ?? printer?.name ?? '';
+    printerForm.paperWidth = printer?.paperWidth ?? 48;
     printerForm.isTicketPrinter = printer?.isTicketPrinter ?? false;
     printerForm.active = printer?.active ?? true;
     printerForm.destinationIds = [...(printer?.destinationIds ?? [])];
@@ -107,7 +110,7 @@ function openPrinter(printer: Printer | null): void {
 }
 
 function savePrinter(): void {
-    printerForm.transform((data) => ({ ...data, ip: data.ip || null, model: data.model || null }));
+    printerForm.transform((data) => ({ ...data, ip: data.ip || null, model: data.model || null, systemName: data.systemName || data.name }));
 
     const options = { preserveScroll: true, onSuccess: () => (printerOpen.value = false) };
 
@@ -153,8 +156,9 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
         </Button>
     </PageHeader>
 
-    <div class="mb-6 rounded-lg border border-dashed bg-muted/30 p-3 text-sm text-muted-foreground">
-        {{ t('admin.printing.simulatedNotice') }}
+    <div class="mb-6 space-y-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
+        <p>{{ t('admin.printing.systemNotice') }}</p>
+        <p>{{ t('admin.printing.escposNotice') }}</p>
     </div>
 
     <div class="grid gap-8 lg:grid-cols-2">
@@ -197,6 +201,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                         <div class="mt-1 flex flex-wrap gap-1 text-xs">
                             <Badge variant="secondary">{{ t(`admin.printing.types.${printer.type}`) }}</Badge>
                             <Badge v-if="printer.isTicketPrinter">{{ t('admin.printing.isTicketPrinter') }}</Badge>
+                            <span v-if="printer.type === 'system' && printer.systemName" class="text-muted-foreground">{{ printer.systemName }}</span>
                             <span v-if="printer.ip" class="text-muted-foreground">{{ printer.ip }}:{{ printer.port }}</span>
                             <span class="text-muted-foreground">{{ printer.paperWidth }} col.</span>
                         </div>
@@ -262,6 +267,15 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     </Field>
                     <Field :label="t('admin.printing.paperWidth')">
                         <SelectInput v-model="printerForm.paperWidth" :options="widthOptions" />
+                    </Field>
+                    <Field
+                        v-if="printerForm.type === 'system'"
+                        :label="t('admin.printing.systemName')"
+                        :error="printerForm.errors.systemName"
+                        :help="t('admin.printing.systemNameHelp')"
+                        class="sm:col-span-2"
+                    >
+                        <Input v-model="printerForm.systemName" :placeholder="printerForm.name || t('admin.printing.systemNamePlaceholder')" />
                     </Field>
                     <template v-if="printerForm.type === 'escpos_network'">
                         <Field :label="t('admin.printing.host')" :error="printerForm.errors.ip">

@@ -3,6 +3,7 @@ import { Head } from '@inertiajs/vue3';
 import { computed, onMounted, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import DeviceSetup from '@/components/pos/DeviceSetup.vue';
+import PrintStation from '@/components/pos/PrintStation.vue';
 import TopBar from '@/components/pos/TopBar.vue';
 import AssistantView from '@/components/pos/views/AssistantView.vue';
 import CashierView from '@/components/pos/views/CashierView.vue';
@@ -128,5 +129,6 @@ function onRegistered(): void {
         <main class="relative min-h-0 flex-1">
             <component :is="view" :key="route.name + (route.params[0] ?? '')" />
         </main>
+        <PrintStation />
     </div>
 </template>

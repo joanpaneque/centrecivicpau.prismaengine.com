@@ -2,9 +2,7 @@
 
 namespace App\Providers;
 
-use App\Services\Printing\PrinterDriver;
 use App\Services\Printing\PrintService;
-use App\Services\Printing\SimulatedPrinterDriver;
 use App\Services\Sync\Handlers\CashierOperations;
 use App\Services\Sync\Handlers\KitchenOperations;
 use App\Services\Sync\Handlers\OrderOperations;
@@ -24,8 +22,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(PrinterDriver::class, SimulatedPrinterDriver::class);
-
         $this->app->singleton(OperationProcessor::class, fn ($app) => new OperationProcessor([
             $app->make(OrderOperations::class),
             $app->make(KitchenOperations::class),

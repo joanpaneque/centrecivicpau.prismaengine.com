@@ -24,6 +24,7 @@ return [
     'correction_saved' => 'Correcció registrada.',
     'category_not_empty' => 'La categoria té productes o subcategories. Mou-los o elimina\'ls abans.',
     'test_printed' => 'S\'ha enviat la impressió de prova.',
+    'test_print_queued' => 'Prova enviada. Obre el TPV de caixa al PC de les impressores i confirma el diàleg d\'imprimir.',
     'shifts_copied' => 'S\'han copiat :count torns.',
     'roles' => ['admin' => 'Administrador', 'staff' => 'Cambrer / treballador', 'kitchen' => 'Pantalla de cuina'],
     'time_types' => ['clock_in' => 'Entrada', 'clock_out' => 'Sortida', 'break_start' => 'Inici pausa', 'break_end' => 'Fi pausa'],

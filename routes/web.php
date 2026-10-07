@@ -20,6 +20,7 @@ use App\Http\Controllers\Auth\InitialSetupController;
 use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\InvoiceRequestController;
 use App\Http\Controllers\Tpv\FloorController;
+use App\Http\Controllers\Tpv\PrintJobController;
 use App\Http\Controllers\Tpv\SessionController;
 use App\Http\Controllers\Tpv\ShellController;
 use App\Http\Controllers\Tpv\SyncController;
@@ -54,6 +55,8 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
         Route::get('bootstrap', [SyncController::class, 'bootstrap'])->name('bootstrap');
         Route::get('pull', [SyncController::class, 'pull'])->name('pull');
         Route::post('push', [SyncController::class, 'push'])->name('push');
+        Route::post('print-jobs/{printJob:uuid}/claim', [PrintJobController::class, 'claim'])->name('print-jobs.claim');
+        Route::post('print-jobs/{printJob:uuid}/ack', [PrintJobController::class, 'ack'])->name('print-jobs.ack');
         Route::post('device', [ShellController::class, 'registerDevice'])->name('device');
         Route::post('switch-user', [SessionController::class, 'switchUser'])->middleware('throttle:30,1')->name('switch-user');
 

@@ -5,6 +5,7 @@ import { api, HttpError, isNetworkError } from '@/lib/http';
 import { uuid } from './crypto';
 import type { ID_COLLECTIONS} from './db';
 import { db, UUID_COLLECTIONS } from './db';
+import { setPrintJobs } from './printQueue';
 import { applyOperation } from './reducers';
 import { flush, loadFromDisk, operatorId, remove, setKv, state, upsert } from './store';
 import type { Operation, PrintJobPayload, Snapshot } from './types';
@@ -215,6 +216,10 @@ async function applySnapshot(snapshot: Snapshot): Promise<void> {
     replaceAll('staff', snapshot.staff);
     replaceAll('destinations', snapshot.destinations);
     replaceAll('printers', snapshot.printers);
+
+    if (snapshot.printJobs !== undefined && snapshot.printJobs !== null) {
+        setPrintJobs(snapshot.printJobs);
+    }
 
     for (const key of ['zones', 'tables', 'floorElements', 'categories', 'products', 'modifierGroups', 'setMenus'] as const) {
         const items = snapshot[key] ?? [];

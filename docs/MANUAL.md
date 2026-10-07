@@ -270,7 +270,15 @@ En la tablet, el camarero recorre las secciones paso a paso.
 
 Destinos de producción (cocina, barra…): modo **impresora**, **pantalla** o ambos.
 
-Impresoras: nombre, tipo, IP/puerto/modelo (campos preparados). **Hoy la impresión es simulada:** se guarda el envío y se ve en **Registre d'impressions / Registro de impresiones** con vista previa de 80 mm. Hay un botón de prueba. El driver ESC/POS está preparado pero no conectado a impresoras reales.
+Impresoras: nombre, tipo y destinos asignados. Marca una como **Imprimeix tiquets de caixa / Imprime tickets de caja**.
+
+Tipos:
+
+- **Del PC (Windows)** (el habitual): el ticket sale por el TPV de **caja**, en el PC donde ya están los drivers. Deja ese TPV abierto. Aparece el diálogo de imprimir de Windows: elige la impresora con el mismo nombre que en Gestión (campo **Nom a Windows / Nombre en Windows**). La primera vez, papel de 80 mm y sin cabeceras ni pies del navegador. El Chrome no puede elegir solo la impresora: hay que seleccionarla en el diálogo (luego Windows suele recordar la última).
+- **ESC/POS en red**: IP y puerto (9100). Solo si el servidor puede alcanzar esa IP (en la nube del local, no).
+- **Simulada**: no sale papel; queda en el registro.
+
+Botón **Imprimeix una prova / Imprimir una prueba**. El historial está en **Registre d'impressions / Registro de impresiones**.
 
 ---
 
@@ -388,4 +396,6 @@ Responde cómo usar la aplicación. **No consulta ventas, comandas ni fichajes r
 | Cierres y tickets | Gestión → Tiquets / Tancaments |
 | Factura de un proveedor | Gestión → Facturas de proveedores |
 | Logo y datos fiscales | Gestión → Ajustes |
+| Configurar impresoras | Gestión → Impresión |
+| Imprimir tickets reales | TPV de caja abierto en el PC con los drivers |
 | Preguntar dudas | Asistente IA (Gestión o TPV) |

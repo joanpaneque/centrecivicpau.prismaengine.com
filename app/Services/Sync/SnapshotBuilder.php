@@ -14,6 +14,7 @@ use App\Models\ModifierGroup;
 use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\Printer;
+use App\Models\PrintJob;
 use App\Models\Product;
 use App\Models\ProductionDestination;
 use App\Models\Reservation;
@@ -78,8 +79,10 @@ class SnapshotBuilder
                 'active' => $p->active,
                 'isTicketPrinter' => $p->is_ticket_printer,
                 'paperWidth' => $p->paper_width,
+                'systemName' => $p->system_name,
                 'destinationIds' => $p->destinations->pluck('id')->all(),
             ])->all(),
+            'printJobs' => $device?->type === DeviceType::Cashier ? $this->pendingPrintJobs($device) : null,
             'categories' => $this->changed(Category::withTrashed()->with('modifierGroups:id'), $from)->orderBy('sort')->get()->map(fn (Category $c) => $this->category($c))->all(),
             'products' => $this->changed(Product::withTrashed()->with('modifierGroups:id'), $from)->orderBy('sort')->get()->map(fn (Product $p) => $this->product($p))->all(),
             'modifierGroups' => $this->changed(ModifierGroup::withTrashed()->with('modifiers'), $from)->orderBy('sort')->get()->map(fn (ModifierGroup $g) => $this->modifierGroup($g))->all(),
@@ -96,6 +99,47 @@ class SnapshotBuilder
                 'url' => url('/tpv').'#/fitxar',
             ] : null,
         ];
+    }
+
+    /**
+     * Pending (and this device's in-progress) jobs for the cashier print station.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pendingPrintJobs(Device $device): array
+    {
+        $stale = now()->subMinutes(PrintJob::STALE_CLAIM_MINUTES);
+
+        $jobs = PrintJob::query()
+            ->with('printer:id,system_name,paper_width')
+            ->where(function ($query) use ($device, $stale) {
+                $query->where('status', 'pending')
+                    ->orWhere(function ($query) use ($device, $stale) {
+                        $query->where('status', 'printing')
+                            ->where(function ($query) use ($device, $stale) {
+                                $query->where('claimed_by_device_id', $device->id)
+                                    ->orWhere('updated_at', '<', $stale);
+                            });
+                    });
+            })
+            ->orderBy('id')
+            ->limit(50)
+            ->get()
+            ->map(fn (PrintJob $job): array => [
+                'uuid' => $job->uuid,
+                'printerId' => $job->printer_id,
+                'printerName' => $job->printer_name,
+                'systemName' => $job->printer?->system_name,
+                'kind' => $job->kind,
+                'title' => $job->title,
+                'document' => $job->document,
+                'paperWidth' => $job->printer?->paper_width,
+                'createdAt' => $job->created_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+
+        return array_values($jobs);
     }
 
     /**

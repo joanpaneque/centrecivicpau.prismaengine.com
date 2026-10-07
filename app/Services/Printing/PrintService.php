@@ -8,7 +8,11 @@ use App\Services\Sync\OperationContext;
 
 class PrintService
 {
-    public function __construct(private readonly PrinterDriver $driver) {}
+    public function __construct(
+        private readonly SimulatedPrinterDriver $simulated,
+        private readonly EscPosPrinterDriver $escpos,
+        private readonly SystemPrinterDriver $system,
+    ) {}
 
     /**
      * @param  array<int, mixed>  $jobs
@@ -68,7 +72,7 @@ class PrintService
         ]);
 
         try {
-            $status = $this->driver->send($job, $printer);
+            $status = $this->driverFor($printer)->send($job, $printer);
         } catch (\Throwable $e) {
             report($e);
             $status = 'failed';
@@ -77,5 +81,14 @@ class PrintService
         $job->forceFill(['status' => $status])->save();
 
         return $job;
+    }
+
+    private function driverFor(?Printer $printer): PrinterDriver
+    {
+        return match ($printer?->type) {
+            'escpos_network' => $this->escpos,
+            'system' => $this->system,
+            default => $this->simulated,
+        };
     }
 }

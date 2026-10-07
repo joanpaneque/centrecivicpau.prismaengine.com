@@ -69,7 +69,16 @@ export type FloorElement = {
 };
 
 export type Destination = { id: number; name: T9n; code: string; mode: 'printer' | 'screen' | 'both'; printerIds: number[] };
-export type Printer = { id: number; name: string; type: string; active: boolean; destinationIds: number[]; isTicketPrinter?: boolean; paperWidth?: number };
+export type Printer = {
+    id: number;
+    name: string;
+    type: string;
+    active: boolean;
+    destinationIds: number[];
+    isTicketPrinter?: boolean;
+    paperWidth?: number;
+    systemName?: string | null;
+};
 
 export type Category = {
     id: number;
@@ -244,6 +253,7 @@ export type Snapshot = {
     floorElements?: FloorElement[];
     destinations: Destination[];
     printers: Printer[];
+    printJobs?: PendingPrintJob[] | null;
     categories: Category[];
     products: Product[];
     modifierGroups: ModifierGroup[];
@@ -283,3 +293,15 @@ export type PrintLine =
 export type PrintDocument = { width: number; lines: PrintLine[] };
 
 export type PrintJobPayload = { uuid: string; kind: string; title: string; printerId: number | null; document: PrintDocument };
+
+export type PendingPrintJob = {
+    uuid: string;
+    printerId: number | null;
+    printerName: string | null;
+    systemName: string | null;
+    kind: string;
+    title: string;
+    document: PrintDocument;
+    paperWidth?: number | null;
+    createdAt: string | null;
+};

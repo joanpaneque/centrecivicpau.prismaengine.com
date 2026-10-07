@@ -4,23 +4,34 @@ namespace App\Services\Printing;
 
 use App\Models\Printer;
 use App\Models\PrintJob;
-use RuntimeException;
 
 /**
- * Placeholder for network ESC/POS printers (IP + port 9100). It already converts the
- * document into ESC/POS bytes; only the socket transport remains to be enabled.
+ * Sends ESC/POS bytes to a network thermal printer (usually TCP 9100).
+ * The server must be able to reach the printer IP; a cloud host cannot print to a venue LAN.
  */
 class EscPosPrinterDriver implements PrinterDriver
 {
     public function send(PrintJob $job, ?Printer $printer): string
     {
-        if ($printer === null || $printer->ip === null) {
+        if ($printer === null || $printer->ip === null || $printer->ip === '') {
             return 'failed';
         }
 
         $bytes = $this->encode($job->document);
+        $port = $printer->port ?? 9100;
+        $errno = 0;
+        $errstr = '';
+        $socket = @fsockopen($printer->ip, $port, $errno, $errstr, 3);
 
-        throw new RuntimeException(sprintf('ESC/POS transport not enabled (%d bytes for %s:%d).', strlen($bytes), $printer->ip, $printer->port ?? 9100));
+        if ($socket === false) {
+            return 'failed';
+        }
+
+        stream_set_timeout($socket, 3);
+        $written = fwrite($socket, $bytes);
+        fclose($socket);
+
+        return $written === false || $written < 1 ? 'failed' : 'printed';
     }
 
     /**

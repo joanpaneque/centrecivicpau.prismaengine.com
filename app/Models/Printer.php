@@ -9,10 +9,11 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string $name
- * @property string $type simulated|escpos_network
+ * @property string $type simulated|escpos_network|system
  * @property string|null $ip
  * @property int|null $port
  * @property string|null $model
+ * @property string|null $system_name Windows printer name shown in the OS dialog
  * @property int $paper_width characters per line
  * @property bool $is_ticket_printer
  * @property bool $active
@@ -21,7 +22,7 @@ use Illuminate\Support\Carbon;
  */
 class Printer extends Model
 {
-    public const TYPES = ['simulated', 'escpos_network'];
+    public const TYPES = ['system', 'escpos_network', 'simulated'];
 
     protected $guarded = ['id'];
 

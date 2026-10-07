@@ -23,21 +23,24 @@ class PrintingSeeder extends Seeder
         ]);
 
         $barPrinter = Printer::query()->updateOrCreate(['name' => 'Impressora barra'], [
-            'type' => 'simulated',
+            'type' => 'system',
+            'system_name' => 'Impressora barra',
             'paper_width' => 48,
             'is_ticket_printer' => false,
         ]);
         $barPrinter->destinations()->sync([$bar->id]);
 
         $kitchenPrinter = Printer::query()->updateOrCreate(['name' => 'Impressora cuina'], [
-            'type' => 'simulated',
+            'type' => 'system',
+            'system_name' => 'Impressora cuina',
             'paper_width' => 48,
             'is_ticket_printer' => false,
         ]);
         $kitchenPrinter->destinations()->sync([$kitchen->id]);
 
         Printer::query()->updateOrCreate(['name' => 'Impressora tiquets'], [
-            'type' => 'simulated',
+            'type' => 'system',
+            'system_name' => 'Impressora tiquets',
             'paper_width' => 48,
             'is_ticket_printer' => true,
         ]);

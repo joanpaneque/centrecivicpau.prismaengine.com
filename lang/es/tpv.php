@@ -24,6 +24,7 @@ return [
     'correction_saved' => 'Corrección registrada.',
     'category_not_empty' => 'La categoría tiene productos o subcategorías. Muévelos o elimínalos antes.',
     'test_printed' => 'Se ha enviado la impresión de prueba.',
+    'test_print_queued' => 'Prueba enviada. Abre el TPV de caja en el PC de las impresoras y confirma el diálogo de imprimir.',
     'shifts_copied' => 'Se han copiado :count turnos.',
     'roles' => ['admin' => 'Administrador', 'staff' => 'Camarero / trabajador', 'kitchen' => 'Pantalla de cocina'],
     'time_types' => ['clock_in' => 'Entrada', 'clock_out' => 'Salida', 'break_start' => 'Inicio pausa', 'break_end' => 'Fin pausa'],

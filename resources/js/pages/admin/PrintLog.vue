@@ -62,7 +62,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: "Registre d'impressions", href:
 
 <template>
     <Head :title="t('admin.printing.log')" />
-    <PageHeader :title="t('admin.printing.log')" :description="t('admin.printing.simulatedNotice')" />
+    <PageHeader :title="t('admin.printing.log')" :description="t('admin.printing.logDescription')" />
 
     <div class="mb-4 flex flex-wrap gap-2">
         <SelectInput

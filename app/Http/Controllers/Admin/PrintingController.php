@@ -35,6 +35,7 @@ class PrintingController extends Controller
                 'ip' => $p->ip,
                 'port' => $p->port,
                 'model' => $p->model,
+                'systemName' => $p->system_name,
                 'paperWidth' => $p->paper_width,
                 'isTicketPrinter' => $p->is_ticket_printer,
                 'active' => $p->active,
@@ -148,7 +149,8 @@ class PrintingController extends Controller
             ],
         ], $printer->id, $request->user()?->id, null);
 
-        $this->toast(__('tpv.test_printed'));
+        TpvChanged::notify(['prints', 'printing']);
+        $this->toast($printer->type === 'system' ? __('tpv.test_print_queued') : __('tpv.test_printed'));
 
         return back();
     }
@@ -196,6 +198,7 @@ class PrintingController extends Controller
             'ip' => ['nullable', 'required_if:type,escpos_network', 'ip'],
             'port' => ['nullable', 'integer', 'between:1,65535'],
             'model' => ['nullable', 'string', 'max:60'],
+            'systemName' => ['nullable', 'string', 'max:80'],
             'paperWidth' => ['required', 'integer', Rule::in([32, 42, 48])],
             'isTicketPrinter' => ['boolean'],
             'active' => ['boolean'],
@@ -210,6 +213,7 @@ class PrintingController extends Controller
                 'ip' => $data['ip'] ?? null,
                 'port' => $data['port'] ?? ($data['type'] === 'escpos_network' ? 9100 : null),
                 'model' => $data['model'] ?? null,
+                'system_name' => $data['type'] === 'system' ? ($data['systemName'] ?: $data['name']) : null,
                 'paper_width' => (int) $data['paperWidth'],
                 'is_ticket_printer' => $data['isTicketPrinter'] ?? false,
                 'active' => $data['active'] ?? true,

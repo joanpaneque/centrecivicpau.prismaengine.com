@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { ref, watchEffect } from 'vue';
 import type { PrintDocument, PrintLine } from '@/pos/types';
 
-const props = defineProps<{ document: PrintDocument }>();
+const props = defineProps<{ document: PrintDocument; plain?: boolean }>();
 
 const qrImages = ref<Record<string, string>>({});
 
@@ -33,7 +33,11 @@ function divider(line: Extract<PrintLine, { type: 'divider' }>): string {
 </script>
 
 <template>
-    <div class="mx-auto w-[80mm] max-w-full overflow-hidden rounded-sm bg-white p-3 font-mono text-[11px] leading-4 text-black shadow-md ring-1 ring-black/10" :style="{ '--chars': document.width }">
+    <div
+        class="mx-auto max-w-full overflow-hidden bg-white p-3 font-mono text-[11px] leading-4 text-black"
+        :class="plain ? '' : 'rounded-sm shadow-md ring-1 ring-black/10'"
+        :style="{ width: document.width <= 32 ? '58mm' : '80mm', '--chars': document.width }"
+    >
         <template v-for="(line, index) in document.lines" :key="index">
             <div v-if="line.type === 'text'" :class="[textClass(line), line.align === 'center' ? 'text-center' : line.align === 'right' ? 'text-right' : '']" class="break-words whitespace-pre-wrap">
                 {{ line.text }}

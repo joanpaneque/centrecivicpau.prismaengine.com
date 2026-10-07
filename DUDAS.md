@@ -42,5 +42,5 @@ Decisiones tomadas durante el desarrollo sin poder consultarlas. Todas se pueden
 
 ## Otros
 
-21. **Impresoras reales.** Solo hay driver simulado; el esqueleto `EscPosPrinterDriver` está preparado para impresoras de red ESC/POS (puerto 9100).
+21. **Impresoras reales.** Tipo **Del PC (Windows)**: el TPV de caja abre el diálogo de imprimir del sistema (drivers ya instalados). Chrome no permite elegir la impresora en silencio; hay que seleccionarla en el diálogo. ESC/POS TCP 9100 queda como opción si el servidor está en la misma red.
 22. **Datáfono.** El cobro con tarjeta solo registra el importe; no hay integración con el TPV bancario.
