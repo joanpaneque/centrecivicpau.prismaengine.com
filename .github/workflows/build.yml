@@ -22,23 +22,25 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           command_timeout: 30m
+          script_stop: true
           script: |
+            set -eu
             DIR=/root/centrecivicpau.prismaengine.com
+            REPO=git@github.com:joanpaneque/centrecivicpau.prismaengine.com.git
             SERVICE=centrecivicpau.prismaengine.com
 
-            if [ ! -d "$DIR" ]; then
-              mkdir -p "$DIR"
-            fi
-
-            if [ -z "$(ls -A "$DIR")" ]; then
-              git clone git@github.com:joanpaneque/centrecivicpau.prismaengine.com.git "$DIR"
-            else
-              cd "$DIR"
-              git fetch origin
-              git reset --hard origin/main
-            fi
-
+            mkdir -p "$DIR"
             cd "$DIR"
+
+            if [ ! -d .git ]; then
+              git init
+              git checkout -B main
+              git remote add origin "$REPO" 2>/dev/null || git remote set-url origin "$REPO"
+            fi
+
+            git fetch origin
+            git reset --hard origin/main
+
             mkdir -p storage/framework/{sessions,views,cache/data,testing} storage/logs storage/app/public storage/app/private bootstrap/cache
             chown -R 1000:1000 storage bootstrap/cache
             chmod -R ug+rwx storage bootstrap/cache
@@ -48,7 +50,6 @@ jobs:
               exit 0
             fi
 
-            set -e
             COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
 
             $COMPOSE up -d --build
