@@ -1,0 +1,24 @@
+services:
+    centrecivicpau.prismaengine.com:
+        restart: unless-stopped
+        ports: !reset []
+        networks:
+            - sail
+            - traefik
+        labels:
+            - traefik.enable=true
+            - traefik.docker.network=traefik
+            - traefik.http.routers.centrecivicpau.rule=Host(`centrecivicpau.prismaengine.com`)
+            - traefik.http.routers.centrecivicpau.entrypoints=websecure
+            - traefik.http.routers.centrecivicpau.tls.certresolver=le
+            - traefik.http.services.centrecivicpau.loadbalancer.server.port=80
+    queue:
+        restart: unless-stopped
+    scheduler:
+        restart: unless-stopped
+    pgsql:
+        restart: unless-stopped
+        ports: !reset []
+networks:
+    traefik:
+        external: true

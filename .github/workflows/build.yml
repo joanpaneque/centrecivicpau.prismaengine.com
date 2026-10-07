@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          command_timeout: 30m
+          script: |
+            DIR=/root/centrecivicpau.prismaengine.com
+            SERVICE=centrecivicpau.prismaengine.com
+
+            if [ ! -d "$DIR" ]; then
+              mkdir -p "$DIR"
+            fi
+
+            if [ -z "$(ls -A "$DIR")" ]; then
+              git clone git@github.com:joanpaneque/centrecivicpau.prismaengine.com.git "$DIR"
+            else
+              cd "$DIR"
+              git fetch origin
+              git reset --hard origin/main
+            fi
+
+            cd "$DIR"
+            mkdir -p storage/framework/{sessions,views,cache/data,testing} storage/logs storage/app/public storage/app/private bootstrap/cache
+            chown -R 1000:1000 storage bootstrap/cache
+            chmod -R ug+rwx storage bootstrap/cache
+
+            if [ ! -f .env ]; then
+              echo ".env no encontrado; omitiendo arranque de contenedores."
+              exit 0
+            fi
+
+            set -e
+            COMPOSE="docker compose -f compose.yaml -f compose.prod.yaml"
+
+            $COMPOSE up -d --build
+            $COMPOSE exec -T $SERVICE composer install --no-interaction --prefer-dist --optimize-autoloader
+            $COMPOSE exec -T $SERVICE npm ci
+            $COMPOSE exec -T $SERVICE npm run build:ssr
+            $COMPOSE exec -T $SERVICE php artisan migrate --force
+            $COMPOSE exec -T $SERVICE php artisan storage:link --force
+            $COMPOSE exec -T $SERVICE php artisan optimize:clear
+            $COMPOSE exec -T $SERVICE php artisan queue:restart
+            $COMPOSE restart $SERVICE queue scheduler
