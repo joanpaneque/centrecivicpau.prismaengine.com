@@ -188,6 +188,7 @@ export type TicketView = {
     verifactuUrl?: string | null;
     partLabel?: string | null;
     isBill?: boolean;
+    tip?: number | null;
 };
 
 function ticketBody(out: PrintLine[], ticket: TicketView, width: number): void {
@@ -261,6 +262,10 @@ export function ticketDocument(ticket: TicketView, width = DEFAULT_WIDTH): Print
             out.push({ type: 'row', left: `  ${t('cashier.tendered')}`, right: formatMoney(payment.tendered, false) });
             out.push({ type: 'row', left: `  ${t('cashier.change')}`, right: formatMoney(payment.change ?? 0, false) });
         }
+    }
+
+    if (ticket.tip && ticket.tip > 0) {
+        out.push({ type: 'text', text: t('cashier.extraTip', { amount: formatMoney(ticket.tip) }), align: 'center', bold: true });
     }
 
     out.push({ type: 'feed' });

@@ -389,6 +389,12 @@ const es: Messages = {
         printedOn: 'Impreso en {printer}',
         remaining: 'Queda por cobrar',
         notes: 'Observaciones',
+        paidMore: 'Ha pagado de más',
+        paidMoreClear: 'Quitar el importe extra',
+        paidMoreMin: 'Tiene que ser más que la parte ({amount})',
+        partShare: 'Parte igual',
+        surplus: 'Sobran {amount}',
+        extraTip: '{amount} de más — Propina',
     },
     reservations: {
         missingFields: 'Se necesitan el nombre y la hora',

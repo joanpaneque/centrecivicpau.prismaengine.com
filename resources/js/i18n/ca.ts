@@ -387,6 +387,12 @@ const ca = {
         printedOn: 'Imprès a {printer}',
         remaining: 'Queda per cobrar',
         notes: 'Observacions',
+        paidMore: 'Ha pagat de més',
+        paidMoreClear: 'Treu l\'import extra',
+        paidMoreMin: 'Ha de ser més que la part ({amount})',
+        partShare: 'Part igual',
+        surplus: 'Sobren {amount}',
+        extraTip: '{amount} de més — Propina',
     },
     reservations: {
         missingFields: "Cal el nom i l'hora",

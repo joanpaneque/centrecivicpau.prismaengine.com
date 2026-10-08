@@ -2,6 +2,7 @@
 import { ArrowLeft, Banknote, CheckCircle2, CreditCard, Minus, Plus, Split, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
 import PrintPreview from '@/components/pos/PrintPreview.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,9 +37,12 @@ const mode = ref<Mode>('all');
 const method = ref<Method>('cash');
 const tendered = ref('');
 const cardAmount = ref('');
+const customCents = ref<number | null>(null);
+const keypadOpen = ref(false);
+const keypadValue = ref('');
 const chosen = reactive<Record<string, number>>({});
 const charging = ref(false);
-const result = ref<{ fullNumber: string; document: PrintDocument; change: number; closed: boolean } | null>(null);
+const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
 const split = computed(() => (order.value ? (splits[order.value.uuid] ?? null) : null));
@@ -66,12 +70,32 @@ const selection = computed<Selection>(() => {
     return pending.value;
 });
 
-const factor = computed(() => (mode.value === 'equal' ? (partsLeft.value === 1 ? 1 - paidParts.value / parts.value : 1 / parts.value) : 1));
-const due = computed(() => (order.value && selection.value.length ? selectionTotal(order.value, selection.value, factor.value).total : 0));
 const full = computed(() => (order.value ? selectionTotal(order.value, pending.value).total : 0));
+const remainingBill = computed(() => Math.max(0, full.value - (split.value?.paidAmount ?? 0)));
+const equalShare = computed(() => {
+    if (mode.value !== 'equal') {
+        return 0;
+    }
+
+    return partsLeft.value === 1 ? remainingBill.value : Math.round(remainingBill.value / partsLeft.value);
+});
+const factor = computed(() => {
+    if (mode.value !== 'equal') {
+        return 1;
+    }
+
+    if (!full.value) {
+        return 0;
+    }
+
+    const consumption = customCents.value !== null ? Math.min(customCents.value, remainingBill.value) : equalShare.value;
+
+    return consumption / full.value;
+});
+const due = computed(() => (order.value && selection.value.length ? selectionTotal(order.value, selection.value, factor.value).total : 0));
 const remainingAfter = computed(() => {
     if (mode.value === 'equal') {
-        return Math.max(0, full.value - (split.value?.paidAmount ?? 0) - due.value);
+        return Math.max(0, remainingBill.value - due.value);
     }
 
     return Math.max(0, full.value - due.value);
@@ -82,6 +106,14 @@ const cashCents = computed(() => due.value - cardCents.value);
 const tenderedCents = computed(() => (tendered.value ? parseMoney(tendered.value) : cashCents.value));
 const change = computed(() => Math.max(0, tenderedCents.value - cashCents.value));
 const insufficient = computed(() => cashCents.value > 0 && tenderedCents.value < cashCents.value);
+const tipCents = computed(() => {
+    if (method.value !== 'card' || customCents.value === null) {
+        return 0;
+    }
+
+    return Math.max(0, customCents.value - due.value);
+});
+const surplus = computed(() => (tipCents.value > 0 ? tipCents.value : change.value));
 const quickAmounts = computed(() => {
     const amounts = new Set<number>();
 
@@ -134,6 +166,10 @@ function setMode(value: Mode): void {
     }
 
     mode.value = value;
+
+    if (value !== 'equal') {
+        customCents.value = null;
+    }
 }
 
 function setParts(delta: number): void {
@@ -142,6 +178,25 @@ function setParts(delta: number): void {
     }
 
     parts.value = Math.min(20, Math.max(2, parts.value + delta));
+    customCents.value = null;
+}
+
+function openPaidMore(): void {
+    keypadValue.value = customCents.value ? formatMoney(customCents.value, false) : '';
+    keypadOpen.value = true;
+}
+
+function confirmPaidMore(cents: number): void {
+    customCents.value = cents;
+    keypadOpen.value = false;
+
+    if (method.value === 'cash' || method.value === 'mixed') {
+        tendered.value = formatMoney(cents, false);
+    }
+}
+
+function clearPaidMore(): void {
+    customCents.value = null;
 }
 
 async function charge(): Promise<void> {
@@ -156,13 +211,17 @@ async function charge(): Promise<void> {
     }
 
     const payments: PaymentInput[] = [];
+    const cardPay = cardCents.value + tipCents.value;
+    const cashTendered = customCents.value !== null && (method.value === 'cash' || method.value === 'mixed')
+        ? Math.max(tenderedCents.value, customCents.value)
+        : tenderedCents.value;
 
-    if (cardCents.value > 0) {
-        payments.push({ method: 'card', amount: cardCents.value });
+    if (cardPay > 0) {
+        payments.push({ method: 'card', amount: cardPay });
     }
 
     if (cashCents.value > 0) {
-        payments.push({ method: 'cash', amount: cashCents.value, tendered: tenderedCents.value });
+        payments.push({ method: 'cash', amount: cashCents.value, tendered: cashTendered });
     }
 
     charging.value = true;
@@ -170,12 +229,14 @@ async function charge(): Promise<void> {
     try {
         const current = order.value;
         const isEqual = mode.value === 'equal';
-        const finalPart = isEqual && partsLeft.value === 1;
+        const coversRest = isEqual && remainingAfter.value <= 0;
+        const finalPart = isEqual && (partsLeft.value === 1 || coversRest);
         const issued = await issueTicket(current, selection.value, payments, {
             factor: factor.value,
             partLabel: isEqual ? t('cashier.partOf', { n: paidParts.value + 1, total: parts.value }) : null,
             markPaid: !isEqual || finalPart,
             closeOrder: mode.value === 'all' || finalPart,
+            tip: tipCents.value,
         });
 
         if (isEqual) {
@@ -192,7 +253,8 @@ async function charge(): Promise<void> {
 
         tendered.value = '';
         cardAmount.value = '';
-        result.value = { ...issued, closed: !isActive(followOrder(current.uuid)) };
+        customCents.value = null;
+        result.value = { ...issued, surplus: issued.change + issued.tip, closed: !isActive(followOrder(current.uuid)) };
         toast.success(t('cashier.ticketIssued', { number: issued.fullNumber }));
     } catch (error) {
         toast.error(error instanceof Error && error.message === 'cashier_not_ready' ? t('cashier.notCashierDevice') : t('common.error'));
@@ -290,8 +352,14 @@ function finish(): void {
         <section class="flex min-h-0 flex-col gap-4 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-950">
             <div class="rounded-2xl bg-[#00056a] p-5 text-white">
                 <p class="text-sm opacity-80">{{ t('cashier.charge') }}</p>
-                <p class="text-4xl font-bold tabular-nums">{{ formatMoney(due) }}</p>
+                <p class="text-4xl font-bold tabular-nums">{{ formatMoney(customCents && method === 'card' ? customCents : due) }}</p>
                 <p v-if="remainingAfter" class="mt-1 text-sm opacity-80">{{ t('cashier.remaining') }}: {{ formatMoney(remainingAfter) }}</p>
+                <p v-if="customCents" class="mt-1 text-sm opacity-80">{{ t('cashier.partShare') }}: {{ formatMoney(equalShare) }}</p>
+            </div>
+
+            <div v-if="mode === 'equal'" class="space-y-2">
+                <Button variant="outline" class="h-14 w-full text-base" @click="openPaidMore">{{ t('cashier.paidMore') }}</Button>
+                <button v-if="customCents" type="button" class="w-full text-sm text-slate-500 underline" @click="clearPaidMore">{{ t('cashier.paidMoreClear') }}</button>
             </div>
 
             <div class="grid grid-cols-3 gap-2">
@@ -328,8 +396,11 @@ function finish(): void {
             </div>
 
             <Button class="mt-auto h-16 bg-emerald-600 text-xl hover:bg-emerald-700" :disabled="due <= 0 || insufficient || charging" @click="charge">
-                <Wallet class="size-6" /> {{ charging ? t('cashier.charging') : `${t('cashier.charge')} ${formatMoney(due)}` }}
+                <Wallet class="size-6" /> {{ charging ? t('cashier.charging') : `${t('cashier.charge')} ${formatMoney(customCents && method === 'card' ? customCents : due)}` }}
             </Button>
+            <p v-if="surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">
+                {{ t('cashier.surplus', { amount: formatMoney(surplus) }) }}
+            </p>
         </section>
 
         <Dialog :open="!!result" @update:open="(v) => !v && finish()">
@@ -342,10 +413,24 @@ function finish(): void {
                     <p class="text-4xl font-bold tabular-nums">{{ formatMoney(result.change) }}</p>
                 </div>
                 <div class="flex justify-center"><PrintPreview v-if="result" :document="result.document" /></div>
+                <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
+                    {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
+                </p>
                 <DialogFooter>
                     <Button class="h-12 w-full bg-[#00056a]" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+
+        <Teleport to="body">
+            <MoneyKeypad
+                v-if="keypadOpen"
+                v-model="keypadValue"
+                :title="t('cashier.paidMore')"
+                :min-cents="equalShare + 1"
+                @confirm="confirmPaidMore"
+                @cancel="keypadOpen = false"
+            />
+        </Teleport>
     </div>
 </template>

@@ -104,8 +104,8 @@ export async function issueTicket(
     order: Order,
     selection: Selection,
     payments: PaymentInput[],
-    opts: { factor?: number; partLabel?: string | null; closeOrder?: boolean; markPaid?: boolean } = {},
-): Promise<{ fullNumber: string; document: PrintDocument; change: number }> {
+    opts: { factor?: number; partLabel?: string | null; closeOrder?: boolean; markPaid?: boolean; tip?: number } = {},
+): Promise<{ fullNumber: string; document: PrintDocument; change: number; tip: number }> {
     const series = state.cashier?.series;
     const session = state.cashier?.session;
 
@@ -125,12 +125,17 @@ export async function issueTicket(
 
     let remaining = tax.total;
     const paymentRows = payments.map((p, index) => {
-        const amount = index === payments.length - 1 ? remaining : Math.min(remaining, p.amount);
-        remaining -= amount;
+        const isLast = index === payments.length - 1;
+        const amount = p.method === 'card' ? p.amount : isLast ? remaining : Math.min(remaining, p.amount);
+        remaining = Math.max(0, remaining - Math.min(remaining, amount));
         const tendered = p.method === 'cash' && p.tendered ? Math.max(p.tendered, amount) : null;
 
         return { uuid: uuid(), method: p.method, amount, tendered, change: tendered !== null ? tendered - amount : null };
     });
+
+    const cardPaid = paymentRows.filter((p) => p.method === 'card').reduce((sum, p) => sum + p.amount, 0);
+    const cashPaid = paymentRows.filter((p) => p.method === 'cash').reduce((sum, p) => sum + p.amount, 0);
+    const tip = Math.max(0, opts.tip ?? cardPaid + cashPaid - tax.total);
 
     const base = ticketViewFor(order, selection);
     const view: TicketView = {
@@ -146,6 +151,7 @@ export async function issueTicket(
         invoiceUrl: `${window.location.origin}/factura/${publicToken}`,
         verifactuUrl: verifactuUrl(fullNumber, issuedAt, tax.total),
         partLabel: opts.partLabel ?? null,
+        tip: tip > 0 ? tip : null,
     };
 
     const printerId = ticketPrinterId();
@@ -182,7 +188,7 @@ export async function issueTicket(
 
     setKv('seriesNext', number + 1);
 
-    return { fullNumber, document, change: paymentRows.reduce((sum, p) => sum + (p.change ?? 0), 0) };
+    return { fullNumber, document, change: paymentRows.reduce((sum, p) => sum + (p.change ?? 0), 0), tip };
 }
 
 export async function reprint(title: string, document: PrintDocument): Promise<void> {

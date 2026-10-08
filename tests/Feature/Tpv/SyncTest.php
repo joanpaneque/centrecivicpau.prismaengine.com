@@ -180,6 +180,48 @@ test('a cashier opens a session, issues a ticket and closes with a Z report', fu
         ->and($close->json('results.0.result.zNumber'))->toBe(1);
 });
 
+test('a card payment can exceed the ticket total so the extra is stored as charged', function () {
+    $admin = User::factory()->admin()->create();
+    $cookie = registerTpvDevice($this, $admin, 'cashier');
+    $orderUuid = (string) Str::uuid();
+    $sessionUuid = (string) Str::uuid();
+    $ticketUuid = (string) Str::uuid();
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)->postJson(route('tpv.push'), ['operations' => [
+        tpvOperation('order.send', orderSendPayload($orderUuid), $admin->id),
+        tpvOperation('cash.open', ['sessionUuid' => $sessionUuid, 'openingFloat' => 0], $admin->id),
+    ]])->assertOk();
+
+    $series = $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)->getJson(route('tpv.bootstrap'))->json('cashier.series.code');
+    $lineUuid = Order::query()->where('uuid', $orderUuid)->firstOrFail()->lines()->value('uuid');
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)->postJson(route('tpv.push'), ['operations' => [
+        tpvOperation('ticket.issue', [
+            'ticket' => [
+                'uuid' => $ticketUuid,
+                'seriesCode' => $series,
+                'number' => 1,
+                'orderUuid' => $orderUuid,
+                'cashSessionUuid' => $sessionUuid,
+                'issuedAt' => now()->toIso8601String(),
+                'surchargeRate' => 0,
+                'total' => 500,
+                'publicToken' => str_repeat('b', 32),
+                'lines' => [['orderLineUuid' => $lineUuid, 'name' => ['ca' => 'Cafè', 'es' => 'Café'], 'quantity' => 2, 'unitPrice' => 250, 'vatRate' => 10, 'discountAmount' => 0, 'total' => 500]],
+                'payments' => [['uuid' => (string) Str::uuid(), 'method' => 'card', 'amount' => 700]],
+            ],
+            'paidLines' => [['lineUuid' => $lineUuid, 'quantity' => 2]],
+            'closeOrder' => true,
+        ], $admin->id),
+    ]])->assertOk();
+
+    $ticket = Ticket::query()->where('uuid', $ticketUuid)->firstOrFail();
+
+    expect($ticket->total)->toBe(500)
+        ->and($ticket->payments()->first()?->amount)->toBe(700)
+        ->and($ticket->payments()->first()?->method)->toBe('card');
+});
+
 test('tickets can only be issued from cashier devices', function () {
     $user = User::factory()->create();
     $cookie = registerTpvDevice($this, $user);
