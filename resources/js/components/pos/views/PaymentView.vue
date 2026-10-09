@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, Minus, Plus, Split, Wallet } from '@lucide/vue';
+import { ArrowLeft, Banknote, CheckCircle2, CreditCard, Minus, Plus, Printer, Split, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
-import { issueTicket, orderLabel, pendingSelection, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
+import { issueTicket, orderLabel, pendingSelection, reprint, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { formatMoney, parseMoney } from '@/pos/money';
 import { childLines } from '@/pos/orders';
@@ -42,6 +42,7 @@ const keypadOpen = ref(false);
 const keypadValue = ref('');
 const chosen = reactive<Record<string, number>>({});
 const charging = ref(false);
+const printing = ref(false);
 const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
@@ -269,6 +270,23 @@ async function charge(): Promise<void> {
     }
 }
 
+async function printTicket(): Promise<void> {
+    if (!result.value || printing.value) {
+        return;
+    }
+
+    printing.value = true;
+
+    try {
+        await reprint(result.value.fullNumber, result.value.document);
+        toast.success(t('cashier.sentToPrinter'));
+    } catch {
+        toast.error(t('common.error'));
+    } finally {
+        printing.value = false;
+    }
+}
+
 function finish(): void {
     const closed = result.value?.closed;
     result.value = null;
@@ -422,8 +440,11 @@ function finish(): void {
                 <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
                     {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
                 </p>
-                <DialogFooter>
-                    <Button class="h-12 w-full bg-[#00056a]" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
+                <DialogFooter class="flex-col sm:flex-col">
+                    <Button class="h-12 w-full bg-[#00056a]" :disabled="printing" @click="printTicket">
+                        <Printer class="size-5" /> {{ t('common.print') }}
+                    </Button>
+                    <Button variant="outline" class="h-12 w-full" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
