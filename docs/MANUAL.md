@@ -172,7 +172,7 @@ Registrar el aparato como **Caja**. Si no lo es, sale el aviso «Este dispositiv
    - **Divideix per productes / Dividir por productos**
    - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). Si alguien paga más que su parte, el extra se resta de lo que queda.
 4. En los tres modos, **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema) para marcar un importe superior al que toca. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera lo cobrado, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el extra es propina y el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
-5. Se emite el **tiquet** (factura simplificada). En esa misma pantalla, **Imprimeix / Imprimir** lo manda a la impresora de tickets (se abre el diálogo de imprimir de Windows). **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra la pantalla sin imprimir otra copia. El ticket también se envía solo a la impresora al cobrar.
+5. Se emite el **tiquet** (factura simplificada). Sale un recuadro con el número y la vista previa. **Obre el PDF / Abrir PDF** abre el ticket en una pestaña nueva; desde ahí se imprime con el diálogo de Windows. **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra sin abrir el PDF.
 
 ### Qué lleva el ticket
 

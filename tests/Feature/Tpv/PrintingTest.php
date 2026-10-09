@@ -102,6 +102,31 @@ test('the cashier can claim and ack a print job', function () {
     expect($job->fresh()?->status)->toBe('printed');
 });
 
+test('the cashier can open a ticket pdf', function () {
+    $admin = User::factory()->admin()->create();
+    $cookie = registerTpvDevice($this, $admin, 'cashier');
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)
+        ->post(route('tpv.tickets.pdf'), [
+            'title' => 'CAIXA-000001',
+            'document' => sampleDocument(),
+        ])
+        ->assertOk()
+        ->assertHeader('Content-Type', 'application/pdf');
+});
+
+test('a tablet cannot open a ticket pdf', function () {
+    $user = User::factory()->create();
+    $cookie = registerTpvDevice($this, $user, 'tablet');
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)
+        ->post(route('tpv.tickets.pdf'), [
+            'title' => 'CAIXA-000001',
+            'document' => sampleDocument(),
+        ])
+        ->assertForbidden();
+});
+
 test('a tablet cannot claim print jobs', function () {
     $printer = makePrinter();
     $job = app(PrintService::class)->store((string) Str::uuid(), 'test', 'Prova', sampleDocument(), $printer->id, null, null);

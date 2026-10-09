@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, Minus, Plus, Printer, Split, Wallet } from '@lucide/vue';
+import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
@@ -8,13 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
-import { issueTicket, orderLabel, pendingSelection, reprint, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
+import { issueTicket, orderLabel, pendingSelection, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { formatMoney, parseMoney } from '@/pos/money';
 import { childLines } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { followOrder, isActive, state } from '@/pos/store';
+import { openTicketPdf } from '@/pos/ticketPdf';
 import type { PrintDocument } from '@/pos/types';
 
 type Mode = 'all' | 'items' | 'equal';
@@ -278,8 +279,7 @@ async function printTicket(): Promise<void> {
     printing.value = true;
 
     try {
-        await reprint(result.value.fullNumber, result.value.document);
-        toast.success(t('cashier.sentToPrinter'));
+        await openTicketPdf(result.value.fullNumber, result.value.document);
     } catch {
         toast.error(t('common.error'));
     } finally {
@@ -440,11 +440,13 @@ function finish(): void {
                 <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
                     {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
                 </p>
-                <DialogFooter class="flex-col sm:flex-col">
-                    <Button class="h-12 w-full bg-[#00056a]" :disabled="printing" @click="printTicket">
-                        <Printer class="size-5" /> {{ t('common.print') }}
+                <p class="text-center text-sm text-slate-600">{{ t('cashier.printTicketQuestion') }}</p>
+                <p class="text-center text-xs text-slate-500">{{ t('cashier.openPdfHint') }}</p>
+                <DialogFooter>
+                    <Button variant="outline" class="h-12 w-full sm:w-auto" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
+                    <Button class="h-12 w-full bg-[#00056a] sm:flex-1" :disabled="printing" @click="printTicket">
+                        <FileText class="size-5" /> {{ printing ? t('cashier.openingPdf') : t('cashier.openPdf') }}
                     </Button>
-                    <Button variant="outline" class="h-12 w-full" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
