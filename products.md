@@ -46,7 +46,7 @@ Tinto de verano (2,50€)
 Moscatell / Garnatxa de l'Empordà (2,50€)
 
 ---- LICORS I COMBINATS
-Xupito (2,00€)
+Xupito (1,50€)
 Copa de licor (ratafia, herbes, whisky...) (3,50€)
 Combinat (6,00€)
 Gintònic (7,00€)
@@ -54,13 +54,9 @@ Gintònic (7,00€)
 ---- ESMORZARS
 Pa amb tomàquet (1,50€)
 Torrada (2,00€)
-Entrepà petit (3,50€)
-Entrepà gran (5,00€)
-Entrepà de truita (4,50€)
 Bikini (3,50€)
 Croissant (1,50€)
 Magdalena / Ensaïmada (1,50€)
-Menú esmorzar: entrepà + beguda + cafè (6,50€)
 
 ---- PER PICAR
 Patates xips (1,50€)
@@ -70,3 +66,15 @@ Pinxo de truita (2,50€)
 Patates braves (5,00€)
 Croquetes (6,00€)
 Plat d'embotit (7,00€)
+
+---- ENTREPANS
+Entrepà Pernil Salat (4,00€)
+Entrepà de formatge (5,00€)
+Entrepà de tonyina (4,00€)
+Entrepà de bull (4,00€)
+Entrepà de llom (4,50€)
+Entrepà de bacon (4,50€)
+Entrepà de butifarra (5,00€)
+Bikini (4,00€)
+Entrepà de frankfurt (4,00€)
+Suplement Entrepà (1,00€)

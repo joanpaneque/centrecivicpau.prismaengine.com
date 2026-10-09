@@ -170,8 +170,8 @@ Registrar el aparato como **Caja**. Si no lo es, sale el aviso «Este dispositiv
 3. **Cobra / Cobrar** un cuenta:
    - **Cobra-ho tot / Cobrarlo todo**
    - **Divideix per productes / Dividir por productos**
-   - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema): esa persona paga más que su parte y el extra se resta de lo que queda. Si al final se ha cobrado más que el total, en tarjeta es propina; en efectivo es cambio.
-4. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera el total, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
+   - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). Si alguien paga más que su parte, el extra se resta de lo que queda.
+4. En los tres modos, **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema) para marcar un importe superior al que toca. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera lo cobrado, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el extra es propina y el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
 5. Se emite el **tiquet** (factura simplificada) y se imprime.
 
 ### Qué lleva el ticket

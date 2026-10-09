@@ -62,6 +62,12 @@ watch(
     { immediate: true },
 );
 
+watch(method, (value) => {
+    if (customCents.value !== null && (value === 'cash' || value === 'mixed')) {
+        tendered.value = formatMoney(customCents.value, false);
+    }
+});
+
 const selection = computed<Selection>(() => {
     if (mode.value === 'items') {
         return pending.value.filter(({ line }) => (chosen[line.uuid] ?? 0) > 0).map(({ line }) => ({ line, quantity: chosen[line.uuid] }));
@@ -93,6 +99,7 @@ const factor = computed(() => {
     return consumption / full.value;
 });
 const due = computed(() => (order.value && selection.value.length ? selectionTotal(order.value, selection.value, factor.value).total : 0));
+const baseDue = computed(() => (mode.value === 'equal' ? equalShare.value : due.value));
 const remainingAfter = computed(() => {
     if (mode.value === 'equal') {
         return Math.max(0, remainingBill.value - due.value);
@@ -152,10 +159,12 @@ function unitAmount(uuid: string): number {
 
 function adjust(uuid: string, available: number, delta: number): void {
     chosen[uuid] = Math.min(available, Math.max(0, (chosen[uuid] ?? 0) + delta));
+    customCents.value = null;
 }
 
 function toggleLine(uuid: string, available: number): void {
     chosen[uuid] = (chosen[uuid] ?? 0) === available ? 0 : available;
+    customCents.value = null;
 }
 
 function setMode(value: Mode): void {
@@ -166,10 +175,7 @@ function setMode(value: Mode): void {
     }
 
     mode.value = value;
-
-    if (value !== 'equal') {
-        customCents.value = null;
-    }
+    customCents.value = null;
 }
 
 function setParts(delta: number): void {
@@ -354,10 +360,10 @@ function finish(): void {
                 <p class="text-sm opacity-80">{{ t('cashier.charge') }}</p>
                 <p class="text-4xl font-bold tabular-nums">{{ formatMoney(customCents && method === 'card' ? customCents : due) }}</p>
                 <p v-if="remainingAfter" class="mt-1 text-sm opacity-80">{{ t('cashier.remaining') }}: {{ formatMoney(remainingAfter) }}</p>
-                <p v-if="customCents" class="mt-1 text-sm opacity-80">{{ t('cashier.partShare') }}: {{ formatMoney(equalShare) }}</p>
+                <p v-if="customCents" class="mt-1 text-sm opacity-80">{{ mode === 'equal' ? t('cashier.partShare') : t('cashier.dueAmount') }}: {{ formatMoney(baseDue) }}</p>
             </div>
 
-            <div v-if="mode === 'equal'" class="space-y-2">
+            <div v-if="due > 0" class="space-y-2">
                 <Button variant="outline" class="h-14 w-full text-base" @click="openPaidMore">{{ t('cashier.paidMore') }}</Button>
                 <button v-if="customCents" type="button" class="w-full text-sm text-slate-500 underline" @click="clearPaidMore">{{ t('cashier.paidMoreClear') }}</button>
             </div>
@@ -427,7 +433,7 @@ function finish(): void {
                 v-if="keypadOpen"
                 v-model="keypadValue"
                 :title="t('cashier.paidMore')"
-                :min-cents="equalShare + 1"
+                :min-cents="baseDue + 1"
                 @confirm="confirmPaidMore"
                 @cancel="keypadOpen = false"
             />
