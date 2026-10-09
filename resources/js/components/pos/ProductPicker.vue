@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import { Ban, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
+import { Ban, PencilLine, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import AllergenIcons from '@/components/pos/AllergenIcons.vue';
+import InventProductDialog from '@/components/pos/InventProductDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { t, tr } from '@/i18n';
 import { categoryProducts, frequentProducts, menusToday, productColor, searchProducts } from '@/pos/catalog';
 import { formatMoney } from '@/pos/money';
+import type { InventedProduct } from '@/pos/orders';
 import { sorted } from '@/pos/store';
 import { enqueue } from '@/pos/sync';
 import type { Product } from '@/pos/types';
 
-const emit = defineEmits<{ pick: [product: Product]; menu: [] }>();
+const emit = defineEmits<{ pick: [product: Product]; menu: []; invent: [product: InventedProduct] }>();
 
 const query = ref('');
 const tab = ref<string>(frequentProducts.value.length ? 'frequent' : '');
 const subCategory = ref<number | null>(null);
 const info = ref<Product | null>(null);
+const inventing = ref(false);
 
 const roots = computed(() => sorted.categories.value.filter((c) => !c.parentId));
 const currentRoot = computed(() => (tab.value.startsWith('c') ? Number(tab.value.slice(1)) : null));
@@ -125,6 +128,13 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 <UtensilsCrossed class="size-4" /> {{ t('order.setMenu') }}
             </button>
             <button
+                type="button"
+                class="flex h-10 shrink-0 items-center gap-1 rounded-lg bg-amber-500 px-3 text-sm font-semibold text-amber-950"
+                @click="inventing = true"
+            >
+                <PencilLine class="size-4" /> {{ t('order.invent') }}
+            </button>
+            <button
                 v-for="category in roots"
                 :key="category.id"
                 type="button"
@@ -207,5 +217,6 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        <InventProductDialog v-if="inventing" @add="emit('invent', $event)" @close="inventing = false" />
     </div>
 </template>

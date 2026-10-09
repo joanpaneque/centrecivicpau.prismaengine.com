@@ -18,6 +18,7 @@ import {
     childLines,
     discardDraft,
     draftFor,
+    draftFromCustom,
     draftFromProduct,
     draftLineTotal,
     marchCourse,
@@ -27,7 +28,7 @@ import {
     ticketViewFor,
     topLines,
 } from '@/pos/orders';
-import type { Draft, DraftLine } from '@/pos/orders';
+import type { Draft, DraftLine, InventedProduct } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { activeOrderForTable, followOrder, isActive, state } from '@/pos/store';
@@ -106,6 +107,10 @@ function pickProduct(product: Product): void {
     }
 
     addToDraft(draft.value, draftFromProduct(product, [], '', course.value));
+}
+
+function inventProduct(product: InventedProduct): void {
+    addToDraft(draft.value, draftFromCustom(product.name, product.unitPrice, product.destinationId, course.value));
 }
 
 function editDraftLine(line: DraftLine): void {
@@ -402,7 +407,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
         </section>
 
         <section v-show="showPicker" class="min-h-0 flex-1 bg-slate-100">
-            <ProductPicker @pick="pickProduct" @menu="menuWizard = true" />
+            <ProductPicker @pick="pickProduct" @menu="menuWizard = true" @invent="inventProduct" />
         </section>
 
         <ModifierDialog

@@ -84,6 +84,27 @@ export function draftLineTotal(line: DraftLine): number {
     return unit * line.quantity + children * line.quantity;
 }
 
+export type InventedProduct = { name: string; unitPrice: number; destinationId: number | null };
+
+export function draftFromCustom(name: string, unitPrice: number, destinationId: number | null, course: number | null = null): DraftLine {
+    const label = name.trim();
+
+    return {
+        key: uuid(),
+        productId: null,
+        setMenuId: null,
+        name: { ca: label, es: label },
+        unitPrice,
+        vatRate: Number(state.settings?.default_vat_rate ?? 10),
+        modifiers: [],
+        note: '',
+        course,
+        quantity: 1,
+        destinationId,
+        children: [],
+    };
+}
+
 export function draftFromProduct(product: Product, modifiers: LineModifier[] = [], note = '', course: number | null = null, quantity = 1): DraftLine {
     return {
         key: uuid(),
@@ -132,16 +153,17 @@ export function draftFromMenu(menu: SetMenu, choices: { name: T9n; productId: nu
 }
 
 export function addToDraft(draft: Draft, line: DraftLine): void {
-    const same = draft.lines.find(
-        (l) =>
-            l.productId !== null &&
-            l.productId === line.productId &&
-            !l.children.length &&
-            !line.children.length &&
-            l.note === line.note &&
-            l.course === line.course &&
-            JSON.stringify(l.modifiers) === JSON.stringify(line.modifiers),
-    );
+    const same = draft.lines.find((l) => {
+        if (l.children.length || line.children.length || l.note !== line.note || l.course !== line.course) {
+            return false;
+        }
+
+        if (line.productId !== null) {
+            return l.productId === line.productId && JSON.stringify(l.modifiers) === JSON.stringify(line.modifiers);
+        }
+
+        return l.productId === null && l.unitPrice === line.unitPrice && l.destinationId === line.destinationId && l.name.ca === line.name.ca && l.name.es === line.name.es;
+    });
 
     if (same) {
         same.quantity += line.quantity;

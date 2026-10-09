@@ -114,6 +114,7 @@ Objetivo: el mínimo de toques.
 - Pestaña **Més demanats / Más pedidos**: los más vendidos primero.
 - Tocar varias veces suma unidades; hay botón para restar.
 - Toque largo: marcar **Esgotat / Agotado** (se desactiva en todos los dispositivos) o volver a disponible.
+- **Inventa producte / Inventar producto:** nombre libre, precio con teclado en pantalla y destino (cocina, barra o sin destino, si no hay que imprimir). El IVA es el de Ajustes. No entra en la carta.
 
 ### Modificadores, notas y pases
 

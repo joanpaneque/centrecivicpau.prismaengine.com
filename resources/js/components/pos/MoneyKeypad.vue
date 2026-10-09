@@ -9,8 +9,9 @@ const props = withDefaults(
     defineProps<{
         title?: string;
         minCents?: number;
+        embedded?: boolean;
     }>(),
-    { minCents: 1 },
+    { minCents: 1, embedded: false },
 );
 
 const emit = defineEmits<{
@@ -22,8 +23,8 @@ const digits = ['1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const raw = defineModel<string>({ default: '' });
 
 const cents = computed(() => parseMoney(raw.value));
-const tooSmall = computed(() => cents.value < props.minCents);
-const canConfirm = computed(() => cents.value > 0 && !tooSmall.value);
+const tooSmall = computed(() => raw.value !== '' && cents.value < props.minCents);
+const canConfirm = computed(() => cents.value >= props.minCents);
 
 function press(token: string): void {
     if (token === ',') {
@@ -73,13 +74,13 @@ function confirm(): void {
 </script>
 
 <template>
-    <div class="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center" @click.self="emit('cancel')">
-        <div class="w-full max-w-md rounded-3xl bg-white p-4 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100">
-            <p class="text-center text-sm font-medium text-slate-500">{{ title || t('cashier.paidMore') }}</p>
-            <p class="mt-2 mb-4 min-h-16 text-center text-5xl font-bold tabular-nums tracking-tight">
+    <div :class="embedded ? '' : 'fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-3 sm:items-center'" @click.self="!embedded && emit('cancel')">
+        <div :class="embedded ? '' : 'w-full max-w-md rounded-3xl bg-white p-4 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-slate-100'">
+            <p v-if="!embedded" class="text-center text-sm font-medium text-slate-500">{{ title || t('cashier.paidMore') }}</p>
+            <p class="mt-2 mb-4 min-h-14 text-center font-bold tabular-nums tracking-tight" :class="embedded ? 'text-4xl' : 'text-5xl'">
                 {{ raw ? `${raw} €` : formatMoney(0) }}
             </p>
-            <p v-if="tooSmall && cents > 0" class="mb-3 text-center text-sm text-red-600">{{ t('cashier.paidMoreMin', { amount: formatMoney(minCents) }) }}</p>
+            <p v-if="tooSmall" class="mb-3 text-center text-sm text-red-600">{{ t('cashier.paidMoreMin', { amount: formatMoney(minCents) }) }}</p>
             <div class="grid grid-cols-3 gap-2">
                 <button
                     v-for="digit in digits"
@@ -96,7 +97,7 @@ function confirm(): void {
                     <Delete class="size-8" />
                 </button>
             </div>
-            <div class="mt-3 grid grid-cols-2 gap-2">
+            <div v-if="!embedded" class="mt-3 grid grid-cols-2 gap-2">
                 <Button variant="outline" class="h-14 text-lg" @click="emit('cancel')">{{ t('common.cancel') }}</Button>
                 <Button class="h-14 bg-[#00056a] text-lg" :disabled="!canConfirm" @click="confirm">{{ t('common.confirm') }}</Button>
             </div>

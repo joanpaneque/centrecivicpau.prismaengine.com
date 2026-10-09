@@ -180,6 +180,45 @@ test('a cashier opens a session, issues a ticket and closes with a Z report', fu
         ->and($close->json('results.0.result.zNumber'))->toBe(1);
 });
 
+test('an invented product can be sent without a catalog product', function () {
+    $user = User::factory()->create();
+    $cookie = registerTpvDevice($this, $user);
+    $orderUuid = (string) Str::uuid();
+    $lineUuid = (string) Str::uuid();
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)->postJson(route('tpv.push'), ['operations' => [
+        tpvOperation('order.send', [
+            'orderUuid' => $orderUuid,
+            'tableId' => null,
+            'guests' => 1,
+            'label' => 'Barra',
+            'openedAt' => now()->toIso8601String(),
+            'sentAt' => now()->toIso8601String(),
+            'lines' => [[
+                'uuid' => $lineUuid,
+                'productId' => null,
+                'setMenuId' => null,
+                'destinationId' => null,
+                'name' => ['ca' => 'Torrada especial', 'es' => 'Torrada especial'],
+                'quantity' => 1,
+                'unitPrice' => 375,
+                'vatRate' => 10,
+                'modifiers' => [],
+                'note' => null,
+                'course' => null,
+                'children' => [],
+            ]],
+            'kitchenTickets' => [],
+        ], $user->id),
+    ]])->assertOk()->assertJsonPath('results.0.status', 'ok');
+
+    $line = Order::query()->where('uuid', $orderUuid)->firstOrFail()->lines()->first();
+
+    expect($line?->product_id)->toBeNull()
+        ->and($line?->name)->toBe(['ca' => 'Torrada especial', 'es' => 'Torrada especial'])
+        ->and($line?->unit_price)->toBe(375);
+});
+
 test('a card payment can exceed the ticket total so the extra is stored as charged', function () {
     $admin = User::factory()->admin()->create();
     $cookie = registerTpvDevice($this, $admin, 'cashier');
