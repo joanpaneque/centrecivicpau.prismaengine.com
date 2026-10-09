@@ -236,7 +236,7 @@ export function billDocument(ticket: TicketView, width = DEFAULT_WIDTH): PrintDo
     const out: PrintLine[] = [];
     businessHeader(out);
     out.push({ type: 'divider' });
-    out.push({ type: 'text', text: t('order.printBill').toUpperCase(), align: 'center', bold: true });
+    out.push({ type: 'text', text: t('order.proforma').toUpperCase(), align: 'center', bold: true });
     out.push({ type: 'text', text: time(ticket.issuedAt), align: 'center' });
     ticketBody(out, ticket, width);
     out.push({ type: 'feed' });

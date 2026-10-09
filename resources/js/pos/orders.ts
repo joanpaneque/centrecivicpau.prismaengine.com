@@ -2,12 +2,12 @@ import { reactive, watch } from 'vue';
 import { t, tr } from '@/i18n';
 import { productDestination } from './catalog';
 import { uuid } from './crypto';
-import { grossTotal, netTotal } from './money';
+import { computeTax, grossTotal, netTotal } from './money';
 import { billDocument, job, kitchenDocument, lineAmount, marchDocument, printersFor, ticketPrinterId, voidDocument, widthFor } from './print';
 import type { TicketView } from './print';
 import { activeOrderForTable, followOrder, operatorId, state } from './store';
 import { enqueue } from './sync';
-import type { LineModifier, Order, OrderLine, PrintJobPayload, Product, SetMenu, T9n } from './types';
+import type { LineModifier, Order, OrderLine, PrintDocument, PrintJobPayload, Product, SetMenu, T9n } from './types';
 
 export type DraftLine = {
     key: string;
@@ -438,9 +438,31 @@ export function ticketViewFor(order: Order, lines?: { line: OrderLine; quantity:
     };
 }
 
-export async function requestBill(order: Order, view: TicketView): Promise<void> {
+export function billViewFor(order: Order, lines?: { line: OrderLine; quantity: number }[]): TicketView {
+    const view = ticketViewFor(order, lines);
+    const tax = computeTax(view.lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), view.surchargeRate);
+    view.surchargeAmount = tax.surchargeAmount;
+    view.total = tax.total;
+    view.vatBreakdown = tax.vatBreakdown;
+
+    return view;
+}
+
+export function proformaDocument(order: Order, lines?: { line: OrderLine; quantity: number }[]): PrintDocument {
+    const view = billViewFor(order, lines);
+
+    return billDocument(view, widthFor(ticketPrinterId()));
+}
+
+export function proformaTitle(order: Order): string {
+    const label = order.tableId ? (state.tables[order.tableId]?.label ?? '') : (order.label ?? '');
+
+    return `${t('order.proforma')}${label ? ` · ${label}` : ''}`;
+}
+
+export async function requestBill(order: Order, view: TicketView, opts: { print?: boolean } = {}): Promise<void> {
     const printerId = ticketPrinterId();
-    const printJobs = [job('bill', `${t('order.printBill')} · ${view.tableLabel ?? ''}`, printerId, billDocument(view, widthFor(printerId)))];
+    const printJobs = opts.print === false ? [] : [job('bill', `${t('order.printBill')} · ${view.tableLabel ?? ''}`, printerId, billDocument(view, widthFor(printerId)))];
     await enqueue('order.requestBill', { orderUuid: order.uuid }, printJobs);
 }
 

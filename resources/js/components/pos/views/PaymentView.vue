@@ -11,7 +11,7 @@ import { t, tr } from '@/i18n';
 import { issueTicket, orderLabel, pendingSelection, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { formatMoney, parseMoney } from '@/pos/money';
-import { childLines } from '@/pos/orders';
+import { childLines, proformaDocument, proformaTitle } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { followOrder, isActive, state } from '@/pos/store';
@@ -44,6 +44,7 @@ const keypadValue = ref('');
 const chosen = reactive<Record<string, number>>({});
 const charging = ref(false);
 const printing = ref(false);
+const printingProforma = ref(false);
 const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
@@ -271,6 +272,22 @@ async function charge(): Promise<void> {
     }
 }
 
+async function printProforma(): Promise<void> {
+    if (!order.value || printingProforma.value) {
+        return;
+    }
+
+    printingProforma.value = true;
+
+    try {
+        await openTicketPdf(proformaTitle(order.value), proformaDocument(order.value, pending.value));
+    } catch {
+        toast.error(t('common.error'));
+    } finally {
+        printingProforma.value = false;
+    }
+}
+
 async function printTicket(): Promise<void> {
     if (!result.value || printing.value) {
         return;
@@ -380,6 +397,10 @@ function finish(): void {
                 <p v-if="remainingAfter" class="mt-1 text-sm opacity-80">{{ t('cashier.remaining') }}: {{ formatMoney(remainingAfter) }}</p>
                 <p v-if="customCents" class="mt-1 text-sm opacity-80">{{ mode === 'equal' ? t('cashier.partShare') : t('cashier.dueAmount') }}: {{ formatMoney(baseDue) }}</p>
             </div>
+
+            <Button variant="outline" class="h-14 w-full text-base" :disabled="full <= 0 || printingProforma" @click="printProforma">
+                <FileText class="size-5" /> {{ printingProforma ? t('cashier.openingPdf') : t('cashier.printProforma') }}
+            </Button>
 
             <div v-if="due > 0" class="space-y-2">
                 <Button variant="outline" class="h-14 w-full text-base" @click="openPaidMore">{{ t('cashier.paidMore') }}</Button>

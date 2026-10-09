@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRightLeft, BellRing, Ban, ChefHat, Combine, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Timer, Trash2, Undo2, Users } from '@lucide/vue';
+import { ArrowLeft, ArrowRightLeft, BellRing, Ban, ChefHat, Combine, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Timer, Trash2, Undo2, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import LineActions from '@/components/pos/LineActions.vue';
@@ -12,7 +12,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { t, tr } from '@/i18n';
 import { productModifierGroups } from '@/pos/catalog';
 import { formatMoney } from '@/pos/money';
-import { computeTax } from '@/pos/money';
 import {
     addToDraft,
     childLines,
@@ -22,16 +21,19 @@ import {
     draftFromProduct,
     draftLineTotal,
     marchCourse,
+    billViewFor,
     orderTotal,
+    proformaDocument,
+    proformaTitle,
     requestBill,
     sendDraft,
-    ticketViewFor,
     topLines,
 } from '@/pos/orders';
 import type { Draft, DraftLine, InventedProduct } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { activeOrderForTable, followOrder, isActive, state } from '@/pos/store';
+import { openTicketPdf } from '@/pos/ticketPdf';
 import { enqueue } from '@/pos/sync';
 import type { DiningTable, OrderLine, Product } from '@/pos/types';
 
@@ -68,6 +70,7 @@ const menuWizard = ref(false);
 const lineAction = ref<OrderLine | null | undefined>(undefined);
 const picker = ref<'move' | 'merge' | null>(null);
 const sending = ref(false);
+const printingProforma = ref(false);
 const showPicker = ref(true);
 
 const sentLines = computed(() => topLines(order.value));
@@ -184,13 +187,31 @@ async function bill(): Promise<void> {
         return;
     }
 
-    const view = ticketViewFor(order.value);
-    const tax = computeTax(view.lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), view.surchargeRate);
-    view.surchargeAmount = tax.surchargeAmount;
-    view.total = tax.total;
-    view.vatBreakdown = tax.vatBreakdown;
-    await requestBill(order.value, view);
+    const view = billViewFor(order.value);
+    const isCashier = state.device?.type === 'cashier';
+    await requestBill(order.value, view, { print: !isCashier });
+
+    if (isCashier) {
+        await printProforma();
+    }
+
     toast.success(t('order.billRequested'));
+}
+
+async function printProforma(): Promise<void> {
+    if (!order.value || printingProforma.value) {
+        return;
+    }
+
+    printingProforma.value = true;
+
+    try {
+        await openTicketPdf(proformaTitle(order.value), proformaDocument(order.value));
+    } catch {
+        toast.error(t('common.error'));
+    } finally {
+        printingProforma.value = false;
+    }
 }
 
 async function reopen(): Promise<void> {
@@ -394,6 +415,10 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                     <Button v-if="order && !draft.lines.length" variant="outline" class="h-12" @click="bill">
                         <BellRing class="size-5" />
                         {{ t('order.requestBill') }}
+                    </Button>
+                    <Button v-if="canCharge && !draft.lines.length" variant="outline" class="h-12" :disabled="printingProforma" @click="printProforma">
+                        <FileText class="size-5" />
+                        {{ printingProforma ? t('cashier.openingPdf') : t('order.printProforma') }}
                     </Button>
                     <Button v-if="canCharge && !draft.lines.length" class="h-12 bg-[#00056a]" @click="go(`/caixa/${order!.uuid}`)">
                         <Receipt class="size-5" />
