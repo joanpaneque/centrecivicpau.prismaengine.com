@@ -298,12 +298,12 @@ function finish(): void {
 </script>
 
 <template>
-    <div v-if="!order" class="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
+    <div v-if="!order && !result" class="flex h-full flex-col items-center justify-center gap-4 p-6 text-center">
         <p class="text-slate-500">{{ t('cashier.orderClosed') }}</p>
         <Button class="bg-[#00056a]" @click="go('/caixa')"><ArrowLeft class="size-4" /> {{ t('cashier.title') }}</Button>
     </div>
 
-    <div v-else class="grid h-full min-h-0 lg:grid-cols-[1fr_420px]">
+    <div v-else-if="order" class="grid h-full min-h-0 lg:grid-cols-[1fr_420px]">
         <section class="flex min-h-0 flex-col border-r bg-white dark:bg-slate-900">
             <header class="flex items-center gap-2 border-b p-3">
                 <Button variant="ghost" size="icon" class="size-11" @click="go('/caixa')"><ArrowLeft class="size-5" /></Button>
@@ -427,30 +427,6 @@ function finish(): void {
             </p>
         </section>
 
-        <Dialog :open="!!result" @update:open="(v) => !v && finish()">
-            <DialogContent class="max-h-[92vh] overflow-y-auto sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle class="flex items-center gap-2"><CheckCircle2 class="size-6 text-emerald-600" /> {{ t('cashier.ticketIssued', { number: result?.fullNumber ?? '' }) }}</DialogTitle>
-                </DialogHeader>
-                <div v-if="result && result.change > 0" class="rounded-xl bg-amber-100 p-4 text-center text-amber-900">
-                    <p class="text-sm">{{ t('cashier.change') }}</p>
-                    <p class="text-4xl font-bold tabular-nums">{{ formatMoney(result.change) }}</p>
-                </div>
-                <div class="flex justify-center"><PrintPreview v-if="result" :document="result.document" /></div>
-                <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
-                    {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
-                </p>
-                <p class="text-center text-sm text-slate-600">{{ t('cashier.printTicketQuestion') }}</p>
-                <p class="text-center text-xs text-slate-500">{{ t('cashier.openPdfHint') }}</p>
-                <DialogFooter>
-                    <Button variant="outline" class="h-12 w-full sm:w-auto" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
-                    <Button class="h-12 w-full bg-[#00056a] sm:flex-1" :disabled="printing" @click="printTicket">
-                        <FileText class="size-5" /> {{ printing ? t('cashier.openingPdf') : t('cashier.openPdf') }}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
         <Teleport to="body">
             <MoneyKeypad
                 v-if="keypadOpen"
@@ -462,4 +438,28 @@ function finish(): void {
             />
         </Teleport>
     </div>
+
+    <Dialog :open="!!result" @update:open="(v) => !v && finish()">
+        <DialogContent class="max-h-[92vh] overflow-y-auto sm:max-w-md">
+            <DialogHeader>
+                <DialogTitle class="flex items-center gap-2"><CheckCircle2 class="size-6 text-emerald-600" /> {{ t('cashier.ticketIssued', { number: result?.fullNumber ?? '' }) }}</DialogTitle>
+            </DialogHeader>
+            <div v-if="result && result.change > 0" class="rounded-xl bg-amber-100 p-4 text-center text-amber-900">
+                <p class="text-sm">{{ t('cashier.change') }}</p>
+                <p class="text-4xl font-bold tabular-nums">{{ formatMoney(result.change) }}</p>
+            </div>
+            <div class="flex justify-center"><PrintPreview v-if="result" :document="result.document" /></div>
+            <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
+                {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
+            </p>
+            <p class="text-center text-sm text-slate-600">{{ t('cashier.printTicketQuestion') }}</p>
+            <p class="text-center text-xs text-slate-500">{{ t('cashier.openPdfHint') }}</p>
+            <DialogFooter>
+                <Button variant="outline" class="h-12 w-full sm:w-auto" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
+                <Button class="h-12 w-full bg-[#00056a] sm:flex-1" :disabled="printing" @click="printTicket">
+                    <FileText class="size-5" /> {{ printing ? t('cashier.openingPdf') : t('cashier.openPdf') }}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
 </template>
