@@ -80,6 +80,27 @@ o.label = p.label;
         case 'line.edit':
             editLines(p);
             break;
+        case 'line.quantity': {
+            const found = findLine(p.lineUuid);
+
+            if (found && !found.line.voided) {
+                const line = found.line;
+                line.quantity = Math.max(1, line.paidQuantity, Math.min(999, Math.round(Number(p.quantity ?? line.quantity))));
+
+                for (const ticket of Object.values(state.kitchenTickets)) {
+                    const item = ticket.items.find((i) => i.lineUuid === line.uuid);
+
+                    if (item) {
+                        item.quantity = line.quantity;
+                        markDirty('kitchenTickets', ticket.uuid);
+                    }
+                }
+
+                markDirty('orders', found.order.uuid);
+            }
+
+            break;
+        }
         case 'product.edit': {
             const product = state.products[p.productId];
 

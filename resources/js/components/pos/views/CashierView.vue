@@ -8,11 +8,12 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t } from '@/i18n';
-import { closeSession, localSummary, openSession, orderLabel, reportDocument, reprint, waiterName } from '@/pos/cashier';
+import { closeSession, localSummary, openSession, orderLabel, reportDocument, waiterName } from '@/pos/cashier';
 import { formatMoney, parseMoney } from '@/pos/money';
 import { orderTotal } from '@/pos/orders';
 import { go } from '@/pos/router';
 import { sorted, state } from '@/pos/store';
+import { openTicketPdf } from '@/pos/ticketPdf';
 import type { PrintDocument, TicketSummary } from '@/pos/types';
 
 const DENOMINATIONS = [50000, 20000, 10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
@@ -27,6 +28,7 @@ const openingFloat = ref('');
 const opening = ref(false);
 
 const preview = ref<{ title: string; document: PrintDocument } | null>(null);
+const openingPdf = ref(false);
 const closing = ref(false);
 const counts = ref<Record<number, string>>({});
 const notes = ref('');
@@ -72,13 +74,21 @@ function showX(): void {
     preview.value = { title: t('cashier.xReport'), document: reportDocument(true) };
 }
 
+/** Like the tickets: open the PDF in a new tab and print it from the computer. */
 async function printPreview(): Promise<void> {
-    if (!preview.value) {
+    if (!preview.value || openingPdf.value) {
         return;
     }
 
-    await reprint(preview.value.title, preview.value.document);
-    toast.success(t('cashier.sentToPrinter'));
+    openingPdf.value = true;
+
+    try {
+        await openTicketPdf(preview.value.title, preview.value.document);
+    } catch {
+        toast.error(t('common.error'));
+    } finally {
+        openingPdf.value = false;
+    }
 }
 
 function startClose(): void {
@@ -208,9 +218,12 @@ async function confirmClose(): Promise<void> {
                     <DialogTitle>{{ preview?.title }}</DialogTitle>
                 </DialogHeader>
                 <div class="flex justify-center"><PrintPreview v-if="preview" :document="preview.document" /></div>
+                <p class="text-center text-xs text-slate-500">{{ t('cashier.openPdfHint') }}</p>
                 <DialogFooter>
-                    <Button variant="outline" @click="preview = null">{{ t('common.close') }}</Button>
-                    <Button class="bg-[#00056a]" @click="printPreview"><Printer class="size-4" /> {{ t('cashier.reprint') }}</Button>
+                    <Button variant="outline" class="h-12" @click="preview = null">{{ t('common.close') }}</Button>
+                    <Button class="h-12 bg-[#00056a] sm:flex-1" :disabled="openingPdf" @click="printPreview">
+                        <Printer class="size-4" /> {{ openingPdf ? t('cashier.openingPdf') : t('cashier.openPdf') }}
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

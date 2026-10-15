@@ -385,6 +385,8 @@ const ca = {
         noOpenOrders: 'No hi ha comptes oberts',
         quickSale: 'Venda directa',
         charge: 'Cobra',
+        lessQuantity: 'Una menys',
+        moreQuantity: 'Una més',
         charging: 'Cobrant…',
         payAll: 'Cobra-ho tot',
         splitByItems: 'Divideix per productes',

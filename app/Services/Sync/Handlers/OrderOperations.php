@@ -30,7 +30,7 @@ class OrderOperations implements OperationHandler
         return [
             'order.open', 'order.send', 'order.march', 'order.update', 'order.move', 'order.merge',
             'order.requestBill', 'order.reopen', 'order.cancel', 'order.discount',
-            'line.void', 'line.discount', 'line.edit', 'product.soldOut', 'product.edit', 'print.job',
+            'line.void', 'line.discount', 'line.edit', 'line.quantity', 'product.soldOut', 'product.edit', 'print.job',
         ];
     }
 
@@ -54,6 +54,7 @@ class OrderOperations implements OperationHandler
             'line.void' => $this->voidLine($payload, $context),
             'line.discount' => $this->discountLine($payload, $context),
             'line.edit' => $this->editLines($payload, $context),
+            'line.quantity' => $this->setQuantity($payload, $context),
             'product.soldOut' => $this->soldOut($payload, $context),
             'product.edit' => $this->editProduct($payload, $context),
             'print.job' => [],
@@ -673,6 +674,42 @@ class OrderOperations implements OperationHandler
         $context->touch('orders', 'kitchen');
 
         return ['lines' => $lines->count()];
+    }
+
+    /**
+     * Quantity corrected on the charge screen before the ticket is issued (+/-). It never
+     * goes below what is already paid; removing the rest of a line is a void.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function setQuantity(array $payload, OperationContext $context): array
+    {
+        $line = OrderLine::query()->where('uuid', $this->requireString($payload, 'lineUuid'))->lockForUpdate()->first();
+
+        if ($line === null) {
+            throw new OperationRejected('line_not_found');
+        }
+
+        if ($line->voided_at !== null || ! $line->order->isActive()) {
+            throw new OperationRejected('order_closed');
+        }
+
+        $quantity = max(1, $line->paid_quantity, min(999, (int) ($payload['quantity'] ?? $line->quantity)));
+
+        if ($quantity === $line->quantity) {
+            return [];
+        }
+
+        $before = $line->quantity;
+        $line->forceFill(['quantity' => $quantity])->save();
+        KitchenTicketItem::query()->where('order_line_id', $line->id)->update(['quantity' => $quantity]);
+
+        AuditLog::record('line.quantity', $line, ['before' => $before, 'after' => $quantity, 'name' => $line->translated()], userId: $context->operator->id, deviceId: $context->device?->id);
+        $line->order->touch();
+        $context->touch('orders', 'kitchen');
+
+        return [];
     }
 
     /**

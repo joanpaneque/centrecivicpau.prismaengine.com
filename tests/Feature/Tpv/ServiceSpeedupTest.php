@@ -106,6 +106,29 @@ test('a line can be voided without a reason', function () {
     expect($line->refresh()->voided_at)->not->toBeNull()->and($line->void_reason)->toBeNull();
 });
 
+test('the cashier corrects a quantity before charging, never below what is paid', function () {
+    $user = User::factory()->create();
+    $cookie = registerTpvDevice($this, $user);
+    $orderUuid = (string) Str::uuid();
+    $lineUuid = (string) Str::uuid();
+
+    speedupPush($this, $cookie, [tpvOperation('order.send', [
+        'orderUuid' => $orderUuid,
+        'tableId' => null,
+        'label' => 'Barra',
+        'lines' => [['uuid' => $lineUuid, 'name' => ['ca' => 'Canya', 'es' => 'Caña'], 'quantity' => 3, 'unitPrice' => 220, 'vatRate' => 10, 'modifiers' => [], 'children' => []]],
+        'kitchenTickets' => [],
+    ], $user->id)]);
+
+    speedupPush($this, $cookie, [tpvOperation('line.quantity', ['lineUuid' => $lineUuid, 'quantity' => 2], $user->id)]);
+    $line = OrderLine::query()->where('uuid', $lineUuid)->firstOrFail();
+    expect($line->quantity)->toBe(2);
+
+    $line->forceFill(['paid_quantity' => 2])->save();
+    speedupPush($this, $cookie, [tpvOperation('line.quantity', ['lineUuid' => $lineUuid, 'quantity' => 1], $user->id)]);
+    expect($line->refresh()->quantity)->toBe(2);
+});
+
 test('waiters add invented products to the catalog from the pos', function () {
     $user = User::factory()->create();
     $category = speedupCategory('Tapes');

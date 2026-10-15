@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Wallet } from '@lucide/vue';
+import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Trash2, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
@@ -11,14 +11,16 @@ import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
 import { issueTicket, orderLabel, pendingSelection, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
+import { uuid } from '@/pos/crypto';
 import { formatMoney, parseMoney } from '@/pos/money';
 import { childLines, editSentLines, proformaDocument, proformaTitle, unpricedGroups } from '@/pos/orders';
 import type { LineEdit, LineGroup } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { followOrder, isActive, state } from '@/pos/store';
+import { enqueue } from '@/pos/sync';
 import { openTicketPdf } from '@/pos/ticketPdf';
-import type { PrintDocument } from '@/pos/types';
+import type { OrderLine, PrintDocument } from '@/pos/types';
 
 type Mode = 'all' | 'items' | 'equal';
 type Method = 'cash' | 'card' | 'mixed';
@@ -176,6 +178,30 @@ function unitAmount(uuid: string): number {
     const line = order.value?.lines.find((l) => l.uuid === uuid);
 
     return order.value && line ? lineAmount(line, order.value.lines, 1) : 0;
+}
+
+/** Until the ticket is issued the cashier can still correct quantities (or drop a line). */
+const canEditQuantities = computed(() => !split.value && !charging.value);
+
+function quantityEditable(line: OrderLine): boolean {
+    return canEditQuantities.value && !!order.value && !childLines(order.value, line).length;
+}
+
+async function changeQuantity(line: OrderLine, delta: number): Promise<void> {
+    if (!quantityEditable(line)) {
+        return;
+    }
+
+    const target = line.quantity + delta;
+    customCents.value = null;
+
+    if (target - line.paidQuantity <= 0) {
+        await enqueue('line.void', { lineUuid: line.uuid, quantity: line.quantity - line.paidQuantity, reason: null, splitUuid: uuid() });
+
+        return;
+    }
+
+    await enqueue('line.quantity', { lineUuid: line.uuid, quantity: target });
 }
 
 function adjust(uuid: string, available: number, delta: number): void {
@@ -383,6 +409,14 @@ function finish(): void {
                             <Button variant="outline" size="icon" class="size-10" @click="adjust(line.uuid, quantity, 1)"><Plus class="size-4" /></Button>
                         </div>
                     </template>
+                    <div v-else-if="quantityEditable(line)" class="flex items-center gap-1">
+                        <Button variant="outline" size="icon" class="size-10" :aria-label="t('cashier.lessQuantity')" @click="changeQuantity(line, -1)">
+                            <Trash2 v-if="quantity === 1" class="size-4 text-red-600" />
+                            <Minus v-else class="size-4" />
+                        </Button>
+                        <span class="w-8 text-center text-lg font-bold tabular-nums">{{ quantity }}</span>
+                        <Button variant="outline" size="icon" class="size-10" :aria-label="t('cashier.moreQuantity')" @click="changeQuantity(line, 1)"><Plus class="size-4" /></Button>
+                    </div>
                     <span v-else class="w-8 text-center text-lg font-bold tabular-nums">{{ quantity }}</span>
                     <button type="button" class="min-w-0 flex-1 text-left" @click="mode === 'items' && toggleLine(line.uuid, quantity)">
                         <span class="block truncate font-medium">{{ lineName(line.uuid) }}</span>

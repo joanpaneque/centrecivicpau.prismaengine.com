@@ -183,6 +183,7 @@ Registrar el aparato como **Caja**. Si no lo es, sale el aviso «Este dispositiv
    - **Divideix per productes / Dividir por productos**
    - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). Si alguien paga más que su parte, el extra se resta de lo que queda.
    - Antes de cobrar, **Proforma** abre el PDF de la cuenta (no es factura) para imprimirlo desde Windows.
+   - Mientras no se haya emitido el tiquet, en **Cobrarlo todo** (y en **Partes iguales** antes de cobrar la primera parte) cada línea tiene **− / +** para corregir la cantidad; con una sola unidad, el botón de papelera la quita. No imprime nada en cocina ni barra. No se puede bajar de lo que ya está cobrado, y los menús del día no se pueden cambiar desde aquí.
    - Si la cuenta tiene productos **sin precio**, al entrar a cobrar sale **Falten preus / Faltan precios**: hay que poner el precio de cada uno (**Desa i continua / Guardar y seguir**) antes de poder cobrar. Si el producto no tenía precio en la carta, se guarda en la carta por defecto. **Cancelar** vuelve a la cuenta.
 4. En los tres modos, **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema) para marcar un importe superior al que toca. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera lo cobrado, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el extra es propina y el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
 5. Se emite el **tiquet** (factura simplificada). Sale un recuadro con el número y la vista previa. **Obre el PDF / Abrir PDF** abre el ticket en una pestaña nueva; desde ahí se imprime con el diálogo de Windows. **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra sin abrir el PDF.
@@ -193,7 +194,9 @@ Logo, datos del emisor, serie y número, fecha y hora, mesa y camarero, líneas,
 
 La numeración es correlativa **por caja** (serie del dispositivo), para poder emitir sin conexión. Si el número ya existiera, el servidor lo corrige.
 
-**Reimprimeix / Reimprimir:** tickets de la sesión actual en esa caja. Los antiguos se reimprimen desde Gestión (PDF).
+**Reimprimeix / Reimprimir:** tocar un tiquet de la sesión actual en esa caja → **Obre el PDF / Abrir PDF**. Los antiguos se reimprimen desde Gestión (PDF).
+
+**Informe X** y el **cierre Z** también salen en una vista previa con **Obre el PDF / Abrir PDF**: se abre en una pestaña nueva y desde ahí se imprime con el diálogo de Windows, igual que los tiquets.
 
 **Informe X:** parcial sin cerrar. **Tanca la caixa (Z) / Cerrar la caja (Z):** recuento por billetes y monedas, esperado, diferencia, totales por forma de pago, IVA, descuentos, suplemento y anulaciones. El Z definitivo lo calcula el servidor.
 

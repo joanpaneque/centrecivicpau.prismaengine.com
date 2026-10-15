@@ -387,6 +387,8 @@ const es: Messages = {
         noOpenOrders: 'No hay cuentas abiertas',
         quickSale: 'Venta directa',
         charge: 'Cobrar',
+        lessQuantity: 'Una menos',
+        moreQuantity: 'Una más',
         charging: 'Cobrando…',
         payAll: 'Cobrar todo',
         splitByItems: 'Dividir por productos',
