@@ -99,7 +99,8 @@ const heldCourses = computed(() => {
 const hasSecondCourse = computed(() => draft.value.lines.some((l) => (l.course ?? 0) >= 2 || l.children.some((c) => (c.course ?? 0) >= 2)));
 const title = computed(() => (table.value ? t('order.table', { label: table.value.label }) : order.value?.label || draft.value.label || t('floor.quickSaleLabel')));
 const canCharge = computed(() => state.device?.type === 'cashier' && !!order.value);
-const canSendAndCharge = computed(() => state.device?.type === 'cashier' && !tableId.value);
+const isCashier = computed(() => state.device?.type === 'cashier');
+const canSendAndCharge = computed(() => isCashier.value && !tableId.value);
 
 type LineStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'held';
 const STATUS_ORDER: LineStatus[] = ['held', 'pending', 'preparing', 'ready', 'served'];
@@ -187,7 +188,7 @@ function changeQty(line: DraftLine, delta: number): void {
     }
 }
 
-async function send(holdSecond = false, charge = false): Promise<void> {
+async function send(holdSecond = false, charge = false, silent = false): Promise<void> {
     if (!draft.value.lines.length || sending.value) {
         return;
     }
@@ -196,8 +197,11 @@ async function send(holdSecond = false, charge = false): Promise<void> {
 
     try {
         const before = order.value?.uuid;
-        const uuid = await sendDraft(draft.value, holdSecond);
-        toast.success(t('order.sentOk'));
+        const uuid = await sendDraft(draft.value, holdSecond, silent);
+
+        if (!silent) {
+            toast.success(t('order.sentOk'));
+        }
 
         if (before && before !== uuid) {
             toast.info(t('order.mergedInfo'));
@@ -473,19 +477,24 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
-                    <Button
-                        v-if="draft.lines.length"
-                        class="h-14 bg-emerald-600 text-lg hover:bg-emerald-700"
-                        :class="canSendAndCharge ? '' : 'col-span-2'"
-                        :disabled="sending"
-                        @click="send(false)"
-                    >
+                    <Button v-if="draft.lines.length" class="col-span-2 h-14 bg-emerald-600 text-lg hover:bg-emerald-700" :disabled="sending" @click="send(false)">
                         <Send class="size-5" />
                         {{ sending ? t('order.sending') : t('order.send') }} ({{ draft.lines.reduce((s, l) => s + l.quantity, 0) }})
                     </Button>
-                    <Button v-if="draft.lines.length && canSendAndCharge" class="h-14 bg-[#00056a] text-lg" :disabled="sending" @click="send(false, true)">
+                    <Button v-if="draft.lines.length && canSendAndCharge" class="h-12 bg-[#00056a] text-base" :disabled="sending" @click="send(false, true)">
                         <Receipt class="size-5" />
                         {{ t('order.sendAndCharge') }}
+                    </Button>
+                    <Button
+                        v-if="draft.lines.length && isCashier"
+                        variant="outline"
+                        class="h-12 border-[#00056a] text-base text-[#00056a]"
+                        :class="canSendAndCharge ? '' : 'col-span-2'"
+                        :disabled="sending"
+                        @click="send(false, true, true)"
+                    >
+                        <Receipt class="size-5" />
+                        {{ t('order.chargeWithoutSending') }}
                     </Button>
                     <Button v-if="draft.lines.length && hasSecondCourse" variant="outline" class="col-span-2 h-11" :disabled="sending" @click="send(true)">
                         <Timer class="size-4" />

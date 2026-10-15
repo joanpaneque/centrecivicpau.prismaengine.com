@@ -298,9 +298,10 @@ function previewOrder(draft: Draft): Order {
 
 /**
  * Send the draft: one operation carrying the lines, the kitchen tickets for screen
- * destinations and the print jobs for printer destinations.
+ * destinations and the print jobs for printer destinations. `silent` ("charge without
+ * sending") only adds the lines to the order: nothing reaches the kitchen or the bar.
  */
-export async function sendDraft(draft: Draft, holdSecond = false): Promise<string> {
+export async function sendDraft(draft: Draft, holdSecond = false, silent = false): Promise<string> {
     const current = draft.tableId ? activeOrderForTable(draft.tableId) : followOrder(draft.orderUuid);
 
     if (current && (current.status === 'open' || current.status === 'bill_requested')) {
@@ -325,7 +326,7 @@ export async function sendDraft(draft: Draft, holdSecond = false): Promise<strin
     const groups = new Map<string, { destinationId: number; held: boolean; course: number | null; lines: OrderLine[] }>();
 
     for (const input of flat) {
-        if (!input.destinationId) {
+        if (!input.destinationId || silent) {
             continue;
         }
 

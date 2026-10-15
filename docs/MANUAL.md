@@ -136,6 +136,8 @@ Si hay un menú programado para hoy, aparece **Menú del dia**. El camarero elig
 
 En **venta rápida desde la caja** también hay **Envia i cobra / Enviar y cobrar**: envía y abre directamente el cobro.
 
+En la **caja** (mesas y ventas rápidas) hay además **Cobra sense enviar / Cobrar sin enviar**: añade los productos a la cuenta **sin enviar nada a cocina ni a barra** (no imprime ni sale en pantalla de cocina) y abre directamente el cobro. Para lo que se sirve en el momento desde la barra.
+
 Las líneas iguales enviadas en rondas distintas (2 cañas y luego 1 más) se ven en la cuenta **juntas** (3 cañas) y salen juntas en la proforma y el tiquet. Cocina y barra siguen recibiendo solo lo nuevo de cada envío. Lo que ya está cobrado (cobro por productos o por partes) **no se muestra** en la cuenta.
 
 ### Cambiar, juntar, descuentos, anular
