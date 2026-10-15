@@ -9,12 +9,14 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * @property int $id
  * @property int|null $parent_id
  * @property array<string, string> $name
  * @property string|null $color
+ * @property string|null $photo_path
  * @property int|null $production_destination_id
  * @property bool $is_menu
  * @property bool $active
@@ -86,6 +88,11 @@ class Category extends Model
     public function effectiveDestinationId(): ?int
     {
         return $this->production_destination_id ?? $this->parent?->effectiveDestinationId();
+    }
+
+    public function photoUrl(): ?string
+    {
+        return $this->photo_path ? Storage::disk('public')->url($this->photo_path) : null;
     }
 
     public function effectiveColor(): ?string

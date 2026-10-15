@@ -29,6 +29,7 @@ type Category = {
     parentId: number | null;
     name: Trans;
     color: string | null;
+    photoUrl: string | null;
     destinationId: number | null;
     isMenu: boolean;
     active: boolean;
@@ -39,7 +40,7 @@ type Product = {
     id: number;
     categoryId: number;
     name: Trans;
-    price: number;
+    price: number | null;
     vatRate: number;
     photoUrl: string | null;
     color: string | null;
@@ -117,7 +118,19 @@ const categoryForm = useForm({
     isMenu: false,
     active: true,
     modifierGroupIds: [] as number[],
+    removePhoto: false,
 });
+const categoryPhoto = ref<File | null>(null);
+const categoryPhotoPreview = computed(() => (categoryPhoto.value ? URL.createObjectURL(categoryPhoto.value) : null));
+
+function pickCategoryPhoto(event: Event): void {
+    const file = (event.target as HTMLInputElement).files?.[0];
+
+    if (file) {
+        categoryPhoto.value = file;
+        categoryForm.removePhoto = false;
+    }
+}
 
 function openCategory(category: Category | null): void {
     editingCategory.value = category;
@@ -129,17 +142,19 @@ function openCategory(category: Category | null): void {
     categoryForm.isMenu = category?.isMenu ?? false;
     categoryForm.active = category?.active ?? true;
     categoryForm.modifierGroupIds = [...(category?.modifierGroupIds ?? [])];
+    categoryForm.removePhoto = false;
+    categoryPhoto.value = null;
     categoryOpen.value = true;
 }
 
 function saveCategory(): void {
-    const options = { preserveScroll: true, onSuccess: () => (categoryOpen.value = false) };
-
-    if (editingCategory.value) {
-        categoryForm.patch(categoriesRoutes.update.url(editingCategory.value.id), options);
-    } else {
-        categoryForm.post(categoriesRoutes.store.url(), options);
-    }
+    categoryForm
+        .transform((data) => ({ ...data, photo: categoryPhoto.value }))
+        .post(editingCategory.value ? categoriesRoutes.update.url(editingCategory.value.id) : categoriesRoutes.store.url(), {
+            preserveScroll: true,
+            forceFormData: true,
+            onSuccess: () => (categoryOpen.value = false),
+        });
 }
 
 const productOpen = ref(false);
@@ -193,7 +208,7 @@ function saveProduct(): void {
     productForm
         .transform((data) => ({
             ...data,
-            price: parseMoney(priceInput.value),
+            price: priceInput.value.trim() === '' ? null : parseMoney(priceInput.value),
             color: data.color || null,
             photo: photoFile.value,
             crop: photoFile.value ? crop.value : null,
@@ -372,7 +387,10 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                     </div>
                     <div class="min-w-0 flex-1">
                         <div class="truncate font-medium">{{ tr(product.name) }}</div>
-                        <div class="text-sm tabular-nums">{{ money(product.price) }} <span class="text-xs text-muted-foreground">· IVA {{ product.vatRate }}%</span></div>
+                        <div class="text-sm tabular-nums">
+                            <span v-if="product.price !== null">{{ money(product.price) }}</span>
+                            <Badge v-else variant="outline" class="border-amber-400 text-amber-700">{{ t('admin.catalog.noPrice') }}</Badge>
+                            <span class="text-xs text-muted-foreground">· IVA {{ product.vatRate }}%</span></div>
                         <div class="mt-1 flex flex-wrap gap-1">
                             <Badge v-if="product.soldOut" variant="destructive">{{ t('admin.catalog.soldOut') }}</Badge>
                             <Badge v-if="product.orderCount" variant="secondary">{{ product.orderCount }} {{ t('admin.catalog.sold').toLowerCase() }}</Badge>
@@ -437,6 +455,28 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                         <Label class="flex items-center gap-2"><Checkbox v-model="categoryForm.active" /> {{ t('common.active') }}</Label>
                     </div>
                 </div>
+                <div class="flex items-center gap-4">
+                    <div class="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted" :style="{ background: categoryForm.color }">
+                        <img v-if="categoryPhotoPreview" :src="categoryPhotoPreview" alt="" class="size-full object-cover" />
+                        <img v-else-if="editingCategory?.photoUrl && !categoryForm.removePhoto" :src="editingCategory.photoUrl" alt="" class="size-full object-cover" />
+                        <ImageOff v-else class="size-8 text-white/80" />
+                    </div>
+                    <div class="min-w-0 flex-1 space-y-1">
+                        <Label>{{ t('admin.catalog.categoryPhoto') }}</Label>
+                        <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="block w-full text-sm" @change="pickCategoryPhoto" />
+                        <p class="text-xs text-muted-foreground">{{ t('admin.catalog.categoryPhotoHelp') }}</p>
+                        <Button
+                            v-if="editingCategory?.photoUrl && !categoryPhoto"
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            @click="categoryForm.removePhoto = !categoryForm.removePhoto"
+                        >
+                            {{ categoryForm.removePhoto ? t('common.cancel') : t('admin.catalog.removePhoto') }}
+                        </Button>
+                        <p class="text-xs text-destructive">{{ (categoryForm.errors as Record<string, string>).photo }}</p>
+                    </div>
+                </div>
                 <Field v-if="modifierGroups.length" :label="t('admin.catalog.modifierGroups')">
                     <div class="flex flex-wrap gap-2">
                         <Label v-for="group in modifierGroups" :key="group.id" class="flex items-center gap-1.5 rounded-md border px-2 py-1 text-sm font-normal">
@@ -472,7 +512,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                         <TransInput v-model="productForm.name" :label="t('common.name')" :error="productForm.errors['name.ca'] || productForm.errors.name" />
                         <div class="grid gap-4 sm:grid-cols-3">
                             <Field :label="t('common.price')" :error="productForm.errors.price" :help="t('admin.catalog.priceHelp')">
-                                <Input v-model="priceInput" inputmode="decimal" required />
+                                <Input v-model="priceInput" inputmode="decimal" :placeholder="t('admin.catalog.noPrice')" />
                             </Field>
                             <Field :label="t('admin.catalog.vatRate')" :error="productForm.errors.vatRate">
                                 <SelectInput v-model="productForm.vatRate" :options="vatOptions" />

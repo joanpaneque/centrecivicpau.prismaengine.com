@@ -15,6 +15,8 @@ export type DraftLine = {
     setMenuId: number | null;
     name: T9n;
     unitPrice: number;
+    /** No price yet: it can be set with the gear button and is required before charging. */
+    unpriced: boolean;
     vatRate: number;
     modifiers: LineModifier[];
     note: string;
@@ -84,17 +86,18 @@ export function draftLineTotal(line: DraftLine): number {
     return unit * line.quantity + children * line.quantity;
 }
 
-export type InventedProduct = { name: string; unitPrice: number; destinationId: number | null };
+export type InventedProduct = { name: T9n; unitPrice: number | null; destinationId: number | null };
 
-export function draftFromCustom(name: string, unitPrice: number, destinationId: number | null, course: number | null = null): DraftLine {
-    const label = name.trim();
+export function draftFromCustom(name: T9n | string, unitPrice: number | null, destinationId: number | null, course: number | null = null): DraftLine {
+    const label = typeof name === 'string' ? { ca: name.trim(), es: name.trim() } : { ca: name.ca.trim(), es: name.es.trim() };
 
     return {
         key: uuid(),
         productId: null,
         setMenuId: null,
-        name: { ca: label, es: label },
-        unitPrice,
+        name: label,
+        unitPrice: unitPrice ?? 0,
+        unpriced: unitPrice === null,
         vatRate: Number(state.settings?.default_vat_rate ?? 10),
         modifiers: [],
         note: '',
@@ -111,7 +114,8 @@ export function draftFromProduct(product: Product, modifiers: LineModifier[] = [
         productId: product.id,
         setMenuId: null,
         name: product.name,
-        unitPrice: product.price,
+        unitPrice: product.price ?? 0,
+        unpriced: product.price === null,
         vatRate: product.vatRate,
         modifiers,
         note,
@@ -129,6 +133,7 @@ export function draftFromMenu(menu: SetMenu, choices: { name: T9n; productId: nu
         setMenuId: menu.id,
         name: menu.name,
         unitPrice: menu.price,
+        unpriced: false,
         vatRate: menu.vatRate,
         modifiers: [],
         note: '',
@@ -141,6 +146,7 @@ export function draftFromMenu(menu: SetMenu, choices: { name: T9n; productId: nu
             setMenuId: menu.id,
             name: choice.name,
             unitPrice: choice.supplement,
+            unpriced: false,
             vatRate: menu.vatRate,
             modifiers: [],
             note: '',
@@ -158,11 +164,15 @@ export function addToDraft(draft: Draft, line: DraftLine): void {
             return false;
         }
 
+        if (l.unitPrice !== line.unitPrice || l.unpriced !== line.unpriced || l.name.ca !== line.name.ca || l.name.es !== line.name.es) {
+            return false;
+        }
+
         if (line.productId !== null) {
             return l.productId === line.productId && JSON.stringify(l.modifiers) === JSON.stringify(line.modifiers);
         }
 
-        return l.productId === null && l.unitPrice === line.unitPrice && l.destinationId === line.destinationId && l.name.ca === line.name.ca && l.name.es === line.name.es;
+        return l.productId === null && l.destinationId === line.destinationId;
     });
 
     if (same) {
@@ -226,6 +236,7 @@ function toLineInput(line: DraftLine, lineUuid = uuid()): Record<string, unknown
         name: line.name,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        unpriced: line.unpriced,
         vatRate: line.vatRate,
         modifiers: line.modifiers,
         note: line.note || null,
@@ -248,6 +259,7 @@ function asOrderLine(input: Record<string, any>, parentUuid: string | null): Ord
         name: input.name,
         quantity: input.quantity,
         unitPrice: input.unitPrice,
+        unpriced: !!input.unpriced,
         vatRate: input.vatRate,
         modifiers: input.modifiers,
         note: input.note,
@@ -438,8 +450,32 @@ export function ticketViewFor(order: Order, lines?: { line: OrderLine; quantity:
     };
 }
 
+/**
+ * Identical lines sent in different rounds (two beers now, one more later) are printed as
+ * one line on the customer's documents. Kitchen tickets keep each round separate.
+ */
+export function mergeViewLines(lines: TicketView['lines']): TicketView['lines'] {
+    const merged = new Map<string, TicketView['lines'][number]>();
+
+    for (const line of lines) {
+        const key = JSON.stringify([line.name, line.unitPrice, line.vatRate, line.details ?? []]);
+        const existing = merged.get(key);
+
+        if (existing) {
+            existing.quantity = Math.round((existing.quantity + line.quantity) * 1000) / 1000;
+            existing.total += line.total;
+            existing.discount = (existing.discount ?? 0) + (line.discount ?? 0);
+        } else {
+            merged.set(key, { ...line, details: [...(line.details ?? [])] });
+        }
+    }
+
+    return [...merged.values()];
+}
+
 export function billViewFor(order: Order, lines?: { line: OrderLine; quantity: number }[]): TicketView {
     const view = ticketViewFor(order, lines);
+    view.lines = mergeViewLines(view.lines);
     const tax = computeTax(view.lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), view.surchargeRate);
     view.surchargeAmount = tax.surchargeAmount;
     view.total = tax.total;
@@ -466,25 +502,178 @@ export async function requestBill(order: Order, view: TicketView, opts: { print?
     await enqueue('order.requestBill', { orderUuid: order.uuid }, printJobs);
 }
 
-export async function voidOrderLine(order: Order, line: OrderLine, quantity: number, reason: string): Promise<void> {
-    const printJobs: PrintJobPayload[] = [];
-    const destinations = new Set<number>();
+/**
+ * Void `quantity` units of a group of identical lines, newest first. No reason is asked;
+ * every destination that prepared the product gets one cancellation slip.
+ */
+export async function voidLines(order: Order, lines: OrderLine[], quantity: number, reason: string | null = null): Promise<void> {
+    const parts: { line: OrderLine; quantity: number }[] = [];
+    let remaining = quantity;
 
-    if (line.destinationId) {
-        destinations.add(line.destinationId);
+    for (const line of [...lines].reverse()) {
+        const available = line.voided ? 0 : line.quantity - line.paidQuantity;
+        const take = Math.min(available, remaining);
+
+        if (take > 0) {
+            parts.push({ line, quantity: take });
+            remaining -= take;
+        }
     }
 
-    for (const child of childLines(order, line)) {
-        if (child.destinationId) {
-            destinations.add(child.destinationId);
+    if (!parts.length) {
+        return;
+    }
+
+    const printJobs: PrintJobPayload[] = [];
+    const destinations = new Set<number>();
+    const first = parts[0].line;
+    const total = parts.reduce((sum, part) => sum + part.quantity, 0);
+
+    for (const { line } of parts) {
+        if (line.destinationId) {
+            destinations.add(line.destinationId);
+        }
+
+        for (const child of childLines(order, line)) {
+            if (child.destinationId) {
+                destinations.add(child.destinationId);
+            }
         }
     }
 
     for (const destinationId of destinations) {
         for (const printerId of printersFor(destinationId)) {
-            printJobs.push(job('void', `${t('order.voided')} · ${tr(line.name)}`, printerId, voidDocument(order, tr(state.destinations[destinationId]?.name), line, quantity, reason, widthFor(printerId))));
+            printJobs.push(job('void', `${t('order.voided')} · ${tr(first.name)}`, printerId, voidDocument(order, tr(state.destinations[destinationId]?.name), first, total, reason, widthFor(printerId))));
         }
     }
 
-    await enqueue('line.void', { lineUuid: line.uuid, quantity, reason, splitUuid: uuid() }, printJobs);
+    for (const [index, part] of parts.entries()) {
+        await enqueue('line.void', { lineUuid: part.line.uuid, quantity: part.quantity, reason, splitUuid: uuid() }, index === 0 ? printJobs : []);
+    }
+}
+
+export type LineEdit = { unitPrice: number; name: T9n | null; saveToCatalog: boolean };
+
+/** Gear button on sent lines: new price and/or name, optionally saved to the catalog. */
+export async function editSentLines(lines: OrderLine[], edit: LineEdit): Promise<void> {
+    const first = lines[0];
+
+    if (!first) {
+        return;
+    }
+
+    await enqueue('line.edit', { lineUuids: lines.map((l) => l.uuid), unitPrice: edit.unitPrice, name: edit.name });
+
+    if (edit.saveToCatalog && first.productId) {
+        await saveProductPrice(first.productId, edit.unitPrice, edit.name);
+    }
+}
+
+/** Gear button on unsent lines: they are still local, only the catalog needs an operation. */
+export async function editDraftLine(line: DraftLine, edit: LineEdit): Promise<void> {
+    line.unitPrice = edit.unitPrice;
+    line.unpriced = false;
+
+    if (edit.name) {
+        line.name = edit.name;
+    }
+
+    if (edit.saveToCatalog && line.productId) {
+        await saveProductPrice(line.productId, edit.unitPrice, edit.name);
+    }
+}
+
+export async function saveProductPrice(productId: number, price: number, name: T9n | null = null): Promise<void> {
+    await enqueue('product.edit', { productId, price, ...(name ? { name } : {}) });
+}
+
+export type LineGroup = {
+    key: string;
+    /** Lines in sending order; actions apply to all of them. */
+    lines: OrderLine[];
+    first: OrderLine;
+    /** Units still to charge (all units for a voided group). */
+    quantity: number;
+    amount: number;
+    voided: boolean;
+};
+
+/**
+ * Lines as the waiter sees them: identical products sent in different rounds are shown as
+ * one line with the summed quantity, and what has already been charged is hidden.
+ */
+export function groupOrderLines(order: Order | null): LineGroup[] {
+    if (!order) {
+        return [];
+    }
+
+    const groups = new Map<string, LineGroup>();
+
+    for (const line of topLines(order)) {
+        const pending = line.voided ? line.quantity : line.quantity - line.paidQuantity;
+
+        if (pending <= 0) {
+            continue;
+        }
+
+        const hasChildren = order.lines.some((l) => l.parentUuid === line.uuid);
+        const key = hasChildren
+            ? line.uuid
+            : JSON.stringify([
+                  line.voided,
+                  line.productId,
+                  line.setMenuId,
+                  line.name.ca,
+                  line.name.es,
+                  line.unitPrice,
+                  line.unpriced,
+                  line.vatRate,
+                  line.modifiers.map((m) => [m.id, m.priceDelta, typeof m.name === 'string' ? m.name : JSON.stringify(m.name)]),
+                  line.note ?? '',
+                  line.course,
+                  line.discountType,
+                  line.discountValue,
+              ]);
+        const amount = line.voided ? 0 : lineAmount(line, order.lines, pending);
+        const group = groups.get(key);
+
+        if (group) {
+            group.lines.push(line);
+            group.quantity += pending;
+            group.amount += amount;
+        } else {
+            groups.set(key, { key, lines: [line], first: line, quantity: pending, amount, voided: line.voided });
+        }
+    }
+
+    return [...groups.values()];
+}
+
+/** Lines that still need a price before the order can be charged. */
+export function unpricedGroups(order: Order | null): LineGroup[] {
+    return groupOrderLines(order).filter((group) => !group.voided && group.lines.some((l) => l.unpriced));
+}
+
+/** Unsent lines follow the order when it is moved to another table. */
+export function moveDraft(fromTableId: number, toTableId: number): void {
+    const from = drafts[`table:${fromTableId}`];
+
+    if (!from) {
+        return;
+    }
+
+    delete drafts[`table:${fromTableId}`];
+
+    if (!from.lines.length) {
+        return;
+    }
+
+    const target = drafts[`table:${toTableId}`];
+
+    if (target) {
+        target.lines.push(...from.lines);
+    } else {
+        from.tableId = toTableId;
+        drafts[`table:${toTableId}`] = from;
+    }
 }

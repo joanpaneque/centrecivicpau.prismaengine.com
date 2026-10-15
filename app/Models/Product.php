@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Storage;
  * @property int $id
  * @property int $category_id
  * @property array<string, string> $name
- * @property int $price
+ * @property int|null $price null until it is set (it can be set during service)
  * @property float $vat_rate
  * @property string|null $photo_path
  * @property string|null $color

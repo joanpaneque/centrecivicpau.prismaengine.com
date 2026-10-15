@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, string> $name
  * @property int $quantity
  * @property int $unit_price
+ * @property bool $unpriced taken from a product without price; the cashier asks for it before charging
  * @property float $vat_rate
  * @property list<array{id: int|null, name: array<string, string>, price_delta: int}>|null $modifiers
  * @property string|null $note
@@ -54,6 +55,7 @@ class OrderLine extends Model
             'name' => 'array',
             'modifiers' => 'array',
             'vat_rate' => 'float',
+            'unpriced' => 'boolean',
             'voided_at' => 'datetime',
             'sent_at' => 'datetime',
         ];

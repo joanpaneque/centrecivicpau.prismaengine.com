@@ -39,6 +39,18 @@ class ImageProcessor
         return $path;
     }
 
+    /**
+     * Square family image shown next to the family name on the POS: 300×300 WebP.
+     */
+    public function categoryPhoto(UploadedFile $file): string
+    {
+        $image = $this->manager->decodePath($file->getRealPath())->orient()->cover(300, 300);
+        $path = 'categories/'.Str::uuid().'.webp';
+        Storage::disk('public')->put($path, $image->encode(new WebpEncoder(quality: 82))->toString());
+
+        return $path;
+    }
+
     public function logo(UploadedFile $file): string
     {
         $image = $this->manager->decodePath($file->getRealPath())->orient()->scaleDown(576, 300);

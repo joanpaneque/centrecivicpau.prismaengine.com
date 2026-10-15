@@ -89,6 +89,29 @@ function ticketLines(order: Order, selection: Selection, factor = 1): TicketLine
     });
 }
 
+/** Identical lines from different rounds become one ticket line (summed quantity and totals). */
+function mergeTicketLines(rows: { input: TicketLineInput; view: TicketView['lines'][number] }[]): { input: TicketLineInput; view: TicketView['lines'][number] }[] {
+    const merged = new Map<string, { input: TicketLineInput; view: TicketView['lines'][number] }>();
+
+    for (const row of rows) {
+        const key = JSON.stringify([row.input.name, row.input.unitPrice, row.input.vatRate, row.input.modifiers]);
+        const existing = merged.get(key);
+
+        if (existing) {
+            existing.input.quantity = Math.round((existing.input.quantity + row.input.quantity) * 1000) / 1000;
+            existing.input.total += row.input.total;
+            existing.input.discountAmount += row.input.discountAmount;
+            existing.view.quantity = existing.input.quantity;
+            existing.view.total = existing.input.total;
+            existing.view.discount = existing.input.discountAmount;
+        } else {
+            merged.set(key, { input: { ...row.input }, view: { ...row.view } });
+        }
+    }
+
+    return [...merged.values()];
+}
+
 export function selectionTotal(order: Order, selection: Selection, factor = 1): { subtotal: number; surchargeAmount: number; total: number } {
     const lines = ticketLines(order, selection, factor);
     const tax = computeTax(lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), surchargeRateFor(order));
@@ -117,7 +140,15 @@ export async function issueTicket(
     const number = nextTicketNumber();
     const fullNumber = formatTicketNumber(series.code, number);
     const issuedAt = new Date().toISOString();
-    const lines = ticketLines(order, selection, factor);
+    const base = ticketViewFor(order, selection);
+    const merged = mergeTicketLines(
+        ticketLines(order, selection, factor).map((input, i) => {
+            const view = base.lines[i];
+
+            return { input, view: { ...view, quantity: input.quantity, total: input.total, discount: input.discountAmount } };
+        }),
+    );
+    const lines = merged.map((m) => m.input);
     const surchargeRate = surchargeRateFor(order);
     const tax = computeTax(lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), surchargeRate);
     const publicToken = randomToken(16);
@@ -137,12 +168,11 @@ export async function issueTicket(
     const cashPaid = paymentRows.filter((p) => p.method === 'cash').reduce((sum, p) => sum + p.amount, 0);
     const tip = Math.max(0, opts.tip ?? cardPaid + cashPaid - tax.total);
 
-    const base = ticketViewFor(order, selection);
     const view: TicketView = {
         ...base,
         fullNumber,
         issuedAt,
-        lines: base.lines.map((l, i) => ({ ...l, quantity: lines[i]?.quantity ?? l.quantity, total: lines[i]?.total ?? l.total, discount: lines[i]?.discountAmount ?? l.discount })),
+        lines: merged.map((m) => m.view),
         surchargeRate,
         surchargeAmount: tax.surchargeAmount,
         total: tax.total,

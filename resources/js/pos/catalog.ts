@@ -1,7 +1,7 @@
 import { computed } from 'vue';
 import { tr } from '@/i18n';
 import { sorted, state } from './store';
-import type { ModifierGroup, Product, SetMenu } from './types';
+import type { Category, ModifierGroup, Product, SetMenu } from './types';
 
 export function normalize(text: string): string {
     return text
@@ -46,6 +46,41 @@ export function productColor(product: Product): string | null {
     }
 
     return null;
+}
+
+export function categoryColor(category: Category): string | null {
+    let current: Category | undefined = category;
+    let guard = 0;
+
+    while (current && guard++ < 10) {
+        if (current.color) {
+            return current.color;
+        }
+
+        current = current.parentId ? state.categories[current.parentId] : undefined;
+    }
+
+    return null;
+}
+
+export const NEUTRAL_TILE = '#e2e8f0';
+
+/** Black or white, whichever reads better on the given background colour. */
+export function readableText(background: string | null | undefined): string {
+    const hex = (background ?? NEUTRAL_TILE).replace('#', '');
+
+    if (!/^[0-9a-f]{6}$/i.test(hex)) {
+        return '#0f172a';
+    }
+
+    const [r, g, b] = [0, 2, 4].map((i) => {
+        const c = parseInt(hex.slice(i, i + 2), 16) / 255;
+
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+    return luminance > 0.179 ? '#0f172a' : '#ffffff';
 }
 
 export function productModifierGroups(product: Product): ModifierGroup[] {

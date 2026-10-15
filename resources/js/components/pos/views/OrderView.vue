@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRightLeft, BellRing, Ban, ChefHat, Combine, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Timer, Trash2, Undo2, Users } from '@lucide/vue';
+import { ArrowLeft, ArrowRightLeft, BellRing, Ban, ChefHat, Combine, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Settings, Timer, Trash2, Undo2, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import LineActions from '@/components/pos/LineActions.vue';
+import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
 import ModifierDialog from '@/components/pos/ModifierDialog.vue';
 import ProductPicker from '@/components/pos/ProductPicker.vue';
+import ProductWizard from '@/components/pos/ProductWizard.vue';
 import SetMenuWizard from '@/components/pos/SetMenuWizard.vue';
+import TableMoveDialog from '@/components/pos/TableMoveDialog.vue';
 import TablePicker from '@/components/pos/TablePicker.vue';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -20,22 +23,24 @@ import {
     draftFromCustom,
     draftFromProduct,
     draftLineTotal,
+    editDraftLine as applyDraftEdit,
+    editSentLines,
+    groupOrderLines,
     marchCourse,
     billViewFor,
+    moveDraft,
     orderTotal,
     proformaDocument,
     proformaTitle,
     requestBill,
     sendDraft,
-    topLines,
 } from '@/pos/orders';
-import type { Draft, DraftLine, InventedProduct } from '@/pos/orders';
-import { lineAmount } from '@/pos/print';
+import type { Draft, DraftLine, InventedProduct, LineEdit, LineGroup } from '@/pos/orders';
 import { go, route } from '@/pos/router';
 import { activeOrderForTable, followOrder, isActive, state } from '@/pos/store';
 import { openTicketPdf } from '@/pos/ticketPdf';
 import { enqueue } from '@/pos/sync';
-import type { DiningTable, OrderLine, Product } from '@/pos/types';
+import type { DiningTable, LineModifier, OrderLine, Product } from '@/pos/types';
 
 const tableId = computed(() => (route.value.name === 'taula' ? Number(route.value.params[0]) : null));
 const routeUuid = computed(() => (route.value.name === 'comanda' && route.value.params[0] !== 'nova' ? route.value.params[0] : null));
@@ -67,13 +72,16 @@ watch(
 const course = ref<number | null>(null);
 const editing = ref<{ product: Product | null; line: DraftLine | null } | null>(null);
 const menuWizard = ref(false);
-const lineAction = ref<OrderLine | null | undefined>(undefined);
-const picker = ref<'move' | 'merge' | null>(null);
+const wizard = ref<Product | null>(null);
+const lineAction = ref<LineGroup | null | undefined>(undefined);
+const priceEdit = ref<{ draft: DraftLine } | { group: LineGroup } | null>(null);
+const picker = ref<'merge' | null>(null);
+const moving = ref(false);
 const sending = ref(false);
 const printingProforma = ref(false);
 const showPicker = ref(true);
 
-const sentLines = computed(() => topLines(order.value));
+const sentGroups = computed(() => groupOrderLines(order.value));
 const pendingTotal = computed(() => orderTotal(order.value));
 const draftTotal = computed(() => draft.value.lines.reduce((sum, line) => sum + draftLineTotal(line), 0));
 const surchargeRate = computed(() => (zone.value?.appliesTerraceSurcharge ? Number(state.settings?.terrace_surcharge_percent ?? 0) : 0));
@@ -91,8 +99,12 @@ const heldCourses = computed(() => {
 const hasSecondCourse = computed(() => draft.value.lines.some((l) => (l.course ?? 0) >= 2 || l.children.some((c) => (c.course ?? 0) >= 2)));
 const title = computed(() => (table.value ? t('order.table', { label: table.value.label }) : order.value?.label || draft.value.label || t('floor.quickSaleLabel')));
 const canCharge = computed(() => state.device?.type === 'cashier' && !!order.value);
+const canSendAndCharge = computed(() => state.device?.type === 'cashier' && !tableId.value);
 
-function lineStatus(line: OrderLine): 'pending' | 'preparing' | 'ready' | 'served' | 'held' | null {
+type LineStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'held';
+const STATUS_ORDER: LineStatus[] = ['held', 'pending', 'preparing', 'ready', 'served'];
+
+function lineStatus(line: OrderLine): LineStatus | null {
     const ticket = Object.values(state.kitchenTickets).find((k) => k.items.some((i) => i.lineUuid === line.uuid));
 
     if (!ticket) {
@@ -102,9 +114,16 @@ function lineStatus(line: OrderLine): 'pending' | 'preparing' | 'ready' | 'serve
     return ticket.held ? 'held' : ticket.status;
 }
 
+/** A grouped line shows the least advanced status of its rounds. */
+function groupStatus(group: LineGroup): LineStatus | null {
+    const statuses = group.lines.map(lineStatus).filter((s): s is LineStatus => s !== null);
+
+    return statuses.length ? statuses.sort((a, b) => STATUS_ORDER.indexOf(a) - STATUS_ORDER.indexOf(b))[0] : null;
+}
+
 function pickProduct(product: Product): void {
-    if (productModifierGroups(product).some((g) => g.required)) {
-        editing.value = { product, line: null };
+    if (productModifierGroups(product).length) {
+        wizard.value = product;
 
         return;
     }
@@ -112,8 +131,29 @@ function pickProduct(product: Product): void {
     addToDraft(draft.value, draftFromProduct(product, [], '', course.value));
 }
 
+function addFromWizard(product: Product, data: { modifiers: LineModifier[]; note: string; course: number | null; quantity: number }): void {
+    addToDraft(draft.value, draftFromProduct(product, data.modifiers, data.note, data.course, data.quantity));
+}
+
 function inventProduct(product: InventedProduct): void {
     addToDraft(draft.value, draftFromCustom(product.name, product.unitPrice, product.destinationId, course.value));
+}
+
+async function savePrice(edit: LineEdit): Promise<void> {
+    const target = priceEdit.value;
+    priceEdit.value = null;
+
+    if (!target) {
+        return;
+    }
+
+    if ('draft' in target) {
+        await applyDraftEdit(target.draft, edit);
+    } else {
+        await editSentLines(target.group.lines.filter((l) => !l.voided), edit);
+    }
+
+    toast.success(t('order.lineEdited'));
 }
 
 function editDraftLine(line: DraftLine): void {
@@ -147,7 +187,7 @@ function changeQty(line: DraftLine, delta: number): void {
     }
 }
 
-async function send(holdSecond = false): Promise<void> {
+async function send(holdSecond = false, charge = false): Promise<void> {
     if (!draft.value.lines.length || sending.value) {
         return;
     }
@@ -165,7 +205,9 @@ async function send(holdSecond = false): Promise<void> {
 
         draft.value = draftFor(followOrder(uuid), tableId.value);
 
-        if (!tableId.value) {
+        if (charge) {
+            go(`/caixa/${uuid}`);
+        } else if (!tableId.value) {
             go(`/comanda/${uuid}`);
         } else {
             go('/sala');
@@ -240,10 +282,7 @@ async function pickTable(target: DiningTable): Promise<void> {
         return;
     }
 
-    if (picker.value === 'move') {
-        await enqueue('order.move', { orderUuid: order.value.uuid, toTableId: target.id });
-        go(`/taula/${target.id}`);
-    } else if (picker.value === 'merge') {
+    if (picker.value === 'merge') {
         const into = activeOrderForTable(target.id);
 
         if (into) {
@@ -251,6 +290,24 @@ async function pickTable(target: DiningTable): Promise<void> {
             go(`/taula/${target.id}`);
         }
     }
+}
+
+async function moveTo(target: DiningTable): Promise<void> {
+    const from = tableId.value;
+
+    if (!from || activeOrderForTable(target.id)) {
+        toast.error(t('order.tableOccupied', { label: target.label }));
+
+        return;
+    }
+
+    if (order.value) {
+        await enqueue('order.move', { orderUuid: order.value.uuid, toTableId: target.id });
+    }
+
+    moveDraft(from, target.id);
+    toast.success(t('order.moved', { label: target.label }));
+    go(`/taula/${target.id}`);
 }
 
 async function cancelEmpty(): Promise<void> {
@@ -298,6 +355,10 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <span v-if="surchargeRate">{{ t('order.surchargeInfo', { percent: surchargeRate }) }}</span>
                     </p>
                 </div>
+                <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="h-11 gap-1 px-3" @click="moving = true">
+                    <ArrowRightLeft class="size-4" />
+                    <span class="max-sm:hidden">{{ t('order.moveTable') }}</span>
+                </Button>
                 <Button variant="outline" class="h-11 gap-1" @click="setGuests">
                     <Users class="size-4" />
                     {{ order?.guests ?? draft.guests ?? '–' }}
@@ -307,7 +368,6 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <Button variant="outline" size="icon" class="size-11"><MoreHorizontal class="size-5" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="w-56">
-                        <DropdownMenuItem :disabled="!order" @select="picker = 'move'"><ArrowRightLeft class="size-4" /> {{ t('order.move') }}</DropdownMenuItem>
                         <DropdownMenuItem :disabled="!order" @select="picker = 'merge'"><Combine class="size-4" /> {{ t('order.merge') }}</DropdownMenuItem>
                         <DropdownMenuItem :disabled="!order" @select="lineAction = null"><Percent class="size-4" /> {{ t('order.discountOrder') }}</DropdownMenuItem>
                         <DropdownMenuItem v-if="order?.status === 'bill_requested'" @select="reopen"><Undo2 class="size-4" /> {{ t('order.reopen') }}</DropdownMenuItem>
@@ -333,39 +393,48 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             </div>
 
             <div class="min-h-0 flex-1 overflow-y-auto">
-                <p v-if="!sentLines.length && !draft.lines.length" class="p-6 text-center text-sm text-slate-500">{{ t('order.empty') }}</p>
+                <p v-if="!sentGroups.length && !draft.lines.length" class="p-6 text-center text-sm text-slate-500">{{ t('order.empty') }}</p>
 
-                <ul v-if="sentLines.length" class="divide-y">
+                <ul v-if="sentGroups.length" class="divide-y">
                     <li
-                        v-for="line in sentLines"
-                        :key="line.uuid"
-                        class="flex cursor-pointer gap-2 px-3 py-2 hover:bg-slate-50"
-                        :class="line.voided ? 'opacity-50' : ''"
-                        @click="!line.voided && (lineAction = line)"
+                        v-for="group in sentGroups"
+                        :key="group.key"
+                        class="flex cursor-pointer items-center gap-2 px-3 py-2 hover:bg-slate-50"
+                        :class="group.voided ? 'opacity-50' : ''"
+                        @click="!group.voided && (lineAction = group)"
                     >
-                        <span class="w-7 shrink-0 text-right font-bold">{{ line.quantity }}</span>
+                        <span class="w-7 shrink-0 self-start text-right text-lg font-bold">{{ group.quantity }}</span>
                         <div class="min-w-0 flex-1">
-                            <p class="font-medium" :class="line.voided ? 'line-through' : ''">
-                                {{ tr(line.name) }}
-                                <span v-if="line.course" class="ml-1 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-600">{{ t(`order.courses.${line.course}`) }}</span>
+                            <p class="font-medium" :class="group.voided ? 'line-through' : ''">
+                                {{ tr(group.first.name) }}
+                                <span v-if="group.first.course" class="ml-1 rounded bg-slate-100 px-1 text-[10px] font-semibold text-slate-600">{{ t(`order.courses.${group.first.course}`) }}</span>
                             </p>
-                            <p v-for="m in line.modifiers" :key="String(m.id) + tr(m.name)" class="text-xs text-slate-500">+ {{ tr(m.name) }}</p>
-                            <p v-for="child in childLines(order!, line)" :key="child.uuid" class="text-xs text-slate-600" :class="child.voided ? 'line-through' : ''">
+                            <p v-for="m in group.first.modifiers" :key="String(m.id) + tr(m.name)" class="text-xs text-slate-500">+ {{ tr(m.name) }}</p>
+                            <p v-for="child in childLines(order!, group.first)" :key="child.uuid" class="text-xs text-slate-600" :class="child.voided ? 'line-through' : ''">
                                 · {{ tr(child.name) }}
                                 <span v-if="lineStatus(child)" class="ml-1 rounded px-1 text-[10px]" :class="statusIcon[lineStatus(child)!].cls">{{ t(statusIcon[lineStatus(child)!].label) }}</span>
                             </p>
-                            <p v-if="line.note" class="text-xs font-medium text-amber-700">! {{ line.note }}</p>
-                            <p v-if="line.discountType" class="text-xs text-emerald-700">
-                                {{ t('order.discount') }} {{ line.discountType === 'percent' ? `${line.discountValue}%` : formatMoney(line.discountValue) }}
-                                <span v-if="line.discountReason">· {{ line.discountReason }}</span>
+                            <p v-if="group.first.note" class="text-xs font-medium text-amber-700">! {{ group.first.note }}</p>
+                            <p v-if="group.first.discountType" class="text-xs text-emerald-700">
+                                {{ t('order.discount') }} {{ group.first.discountType === 'percent' ? `${group.first.discountValue}%` : formatMoney(group.first.discountValue) }}
+                                <span v-if="group.first.discountReason">· {{ group.first.discountReason }}</span>
                             </p>
-                            <p v-if="line.voided" class="text-xs text-red-600">{{ t('order.voided') }}<span v-if="line.voidReason"> · {{ line.voidReason }}</span></p>
-                            <p v-if="line.paidQuantity" class="text-xs text-sky-700">{{ t('order.paid') }}: {{ line.paidQuantity }}</p>
+                            <p v-if="group.voided" class="text-xs text-red-600">{{ t('order.voided') }}</p>
                         </div>
                         <div class="flex shrink-0 flex-col items-end gap-1">
-                            <span class="font-semibold">{{ formatMoney(lineAmount(line, order!.lines)) }}</span>
-                            <span v-if="lineStatus(line)" class="rounded px-1.5 text-[10px] font-semibold" :class="statusIcon[lineStatus(line)!].cls">{{ t(statusIcon[lineStatus(line)!].label) }}</span>
+                            <span v-if="group.lines.some((l) => l.unpriced) && !group.voided" class="rounded bg-amber-100 px-1.5 text-xs font-bold text-amber-800">{{ t('order.unpriced') }}</span>
+                            <span v-else class="font-semibold">{{ formatMoney(group.amount) }}</span>
+                            <span v-if="groupStatus(group)" class="rounded px-1.5 text-[10px] font-semibold" :class="statusIcon[groupStatus(group)!].cls">{{ t(statusIcon[groupStatus(group)!].label) }}</span>
                         </div>
+                        <button
+                            v-if="!group.voided"
+                            type="button"
+                            class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600"
+                            :aria-label="t('order.editLine')"
+                            @click.stop="priceEdit = { group }"
+                        >
+                            <Settings class="size-5" />
+                        </button>
                     </li>
                 </ul>
 
@@ -387,7 +456,11 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                                 <p v-for="c in line.children" :key="c.key" class="text-xs text-slate-600">· {{ tr(c.name) }}</p>
                                 <p v-if="line.note" class="text-xs font-medium text-amber-700">! {{ line.note }}</p>
                             </button>
-                            <span class="shrink-0 font-semibold">{{ formatMoney(draftLineTotal(line)) }}</span>
+                            <span v-if="line.unpriced" class="shrink-0 rounded bg-amber-100 px-1.5 text-xs font-bold text-amber-800">{{ t('order.unpriced') }}</span>
+                            <span v-else class="shrink-0 font-semibold">{{ formatMoney(draftLineTotal(line)) }}</span>
+                            <button type="button" class="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-slate-600 shadow-sm" :aria-label="t('order.editLine')" @click="priceEdit = { draft: line }">
+                                <Settings class="size-4" />
+                            </button>
                         </li>
                     </ul>
                 </div>
@@ -400,9 +473,19 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
-                    <Button v-if="draft.lines.length" class="col-span-2 h-14 bg-emerald-600 text-lg hover:bg-emerald-700" :disabled="sending" @click="send(false)">
+                    <Button
+                        v-if="draft.lines.length"
+                        class="h-14 bg-emerald-600 text-lg hover:bg-emerald-700"
+                        :class="canSendAndCharge ? '' : 'col-span-2'"
+                        :disabled="sending"
+                        @click="send(false)"
+                    >
                         <Send class="size-5" />
                         {{ sending ? t('order.sending') : t('order.send') }} ({{ draft.lines.reduce((s, l) => s + l.quantity, 0) }})
+                    </Button>
+                    <Button v-if="draft.lines.length && canSendAndCharge" class="h-14 bg-[#00056a] text-lg" :disabled="sending" @click="send(false, true)">
+                        <Receipt class="size-5" />
+                        {{ t('order.sendAndCharge') }}
                     </Button>
                     <Button v-if="draft.lines.length && hasSecondCourse" variant="outline" class="col-span-2 h-11" :disabled="sending" @click="send(true)">
                         <Timer class="size-4" />
@@ -444,15 +527,19 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             @remove="editing.line && removeDraftLine(editing.line)"
             @close="editing = null"
         />
+        <ProductWizard v-if="wizard" :product="wizard" :course="course" @add="(data) => addFromWizard(wizard!, data)" @close="wizard = null" />
         <SetMenuWizard v-if="menuWizard" @add="(line) => addToDraft(draft, line)" @close="menuWizard = false" />
-        <LineActions v-if="lineAction !== undefined && order" :order="order" :line="lineAction" @close="lineAction = undefined" />
-        <TablePicker
-            v-if="picker"
-            :title="picker === 'move' ? t('floor.moveTo') : t('floor.mergeWith')"
-            :only-occupied="picker === 'merge'"
-            :exclude="order?.tableId"
-            @pick="pickTable"
-            @close="picker = null"
+        <LineActions v-if="lineAction !== undefined && order" :order="order" :group="lineAction" @edit="(group) => (priceEdit = { group })" @close="lineAction = undefined" />
+        <LinePriceDialog
+            v-if="priceEdit"
+            :name="'draft' in priceEdit ? priceEdit.draft.name : priceEdit.group.first.name"
+            :unit-price="'draft' in priceEdit ? priceEdit.draft.unitPrice : priceEdit.group.first.unitPrice"
+            :unpriced="'draft' in priceEdit ? priceEdit.draft.unpriced : priceEdit.group.lines.some((l) => l.unpriced)"
+            :product-id="'draft' in priceEdit ? priceEdit.draft.productId : priceEdit.group.first.productId"
+            @save="savePrice"
+            @close="priceEdit = null"
         />
+        <TableMoveDialog v-if="moving && tableId" :from-table-id="tableId" @move="moveTo" @close="moving = false" />
+        <TablePicker v-if="picker" :title="t('floor.mergeWith')" :only-occupied="true" :exclude="order?.tableId" @pick="pickTable" @close="picker = null" />
     </div>
 </template>

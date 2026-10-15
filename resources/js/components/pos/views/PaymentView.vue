@@ -2,6 +2,7 @@
 import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
 import PrintPreview from '@/components/pos/PrintPreview.vue';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,8 @@ import { t, tr } from '@/i18n';
 import { issueTicket, orderLabel, pendingSelection, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { formatMoney, parseMoney } from '@/pos/money';
-import { childLines, proformaDocument, proformaTitle } from '@/pos/orders';
+import { childLines, editSentLines, proformaDocument, proformaTitle, unpricedGroups } from '@/pos/orders';
+import type { LineEdit, LineGroup } from '@/pos/orders';
 import { lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { followOrder, isActive, state } from '@/pos/store';
@@ -48,6 +50,22 @@ const printingProforma = ref(false);
 const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
+/** Lines taken without price: the cashier must price them before charging. */
+const missingPrices = computed(() => (order.value ? unpricedGroups(order.value) : []));
+let priceSaved = false;
+
+async function saveMissingPrice(group: LineGroup, edit: LineEdit): Promise<void> {
+    priceSaved = true;
+    await editSentLines(group.lines.filter((l) => !l.voided), edit);
+}
+
+function closeMissingPrice(): void {
+    if (!priceSaved && order.value) {
+        go(order.value.tableId ? `/taula/${order.value.tableId}` : `/comanda/${order.value.uuid}`);
+    }
+
+    priceSaved = false;
+}
 const split = computed(() => (order.value ? (splits[order.value.uuid] ?? null) : null));
 const parts = ref(split.value?.parts ?? 2);
 const paidParts = computed(() => split.value?.paidParts ?? 0);
@@ -209,7 +227,7 @@ function clearPaidMore(): void {
 }
 
 async function charge(): Promise<void> {
-    if (!order.value || due.value <= 0 || insufficient.value || charging.value) {
+    if (!order.value || due.value <= 0 || insufficient.value || charging.value || missingPrices.value.length) {
         return;
     }
 
@@ -458,6 +476,20 @@ function finish(): void {
                 @cancel="keypadOpen = false"
             />
         </Teleport>
+
+        <LinePriceDialog
+            v-if="missingPrices.length && !result"
+            :key="missingPrices[0].key"
+            :name="missingPrices[0].first.name"
+            :unit-price="missingPrices[0].first.unitPrice"
+            :unpriced="true"
+            :product-id="missingPrices[0].first.productId"
+            :title="t('order.missingPrices', { count: missingPrices.length })"
+            :description="t('order.missingPricesHelp', { quantity: missingPrices[0].quantity, name: tr(missingPrices[0].first.name) })"
+            :confirm-label="t('order.saveAndContinue')"
+            @save="(edit) => saveMissingPrice(missingPrices[0], edit)"
+            @close="closeMissingPrice"
+        />
     </div>
 
     <Dialog :open="!!result" @update:open="(v) => !v && finish()">

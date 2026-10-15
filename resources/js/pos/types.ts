@@ -85,6 +85,7 @@ export type Category = {
     parentId: number | null;
     name: T9n;
     color: string | null;
+    photoUrl: string | null;
     destinationId: number | null;
     isMenu: boolean;
     active: boolean;
@@ -97,7 +98,8 @@ export type Product = {
     id: number;
     categoryId: number | null;
     name: T9n;
-    price: number;
+    /** null until a price is set (it can be set during service). */
+    price: number | null;
     vatRate: number;
     photoUrl: string | null;
     color: string | null;
@@ -144,6 +146,8 @@ export type OrderLine = {
     name: T9n;
     quantity: number;
     unitPrice: number;
+    /** Taken from a product without price: the cashier asks for it before charging. */
+    unpriced: boolean;
     vatRate: number;
     modifiers: LineModifier[];
     note: string | null;

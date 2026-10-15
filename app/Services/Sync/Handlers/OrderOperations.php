@@ -30,7 +30,7 @@ class OrderOperations implements OperationHandler
         return [
             'order.open', 'order.send', 'order.march', 'order.update', 'order.move', 'order.merge',
             'order.requestBill', 'order.reopen', 'order.cancel', 'order.discount',
-            'line.void', 'line.discount', 'product.soldOut', 'print.job',
+            'line.void', 'line.discount', 'line.edit', 'product.soldOut', 'product.edit', 'print.job',
         ];
     }
 
@@ -53,7 +53,9 @@ class OrderOperations implements OperationHandler
             'order.discount' => $this->discountOrder($payload, $context),
             'line.void' => $this->voidLine($payload, $context),
             'line.discount' => $this->discountLine($payload, $context),
+            'line.edit' => $this->editLines($payload, $context),
             'product.soldOut' => $this->soldOut($payload, $context),
+            'product.edit' => $this->editProduct($payload, $context),
             'print.job' => [],
             default => throw new OperationRejected('unknown_operation'),
         };
@@ -216,6 +218,7 @@ class OrderOperations implements OperationHandler
             'name' => Translation::normalize(is_array($data['name'] ?? null) ? $data['name'] : ($product?->name ?? '')),
             'quantity' => $quantity,
             'unit_price' => (int) ($data['unitPrice'] ?? $product?->price ?? 0),
+            'unpriced' => (bool) ($data['unpriced'] ?? false),
             'vat_rate' => (float) ($data['vatRate'] ?? $product?->vat_rate ?? 10),
             'modifiers' => $this->modifiers($data['modifiers'] ?? []),
             'note' => is_string($data['note'] ?? null) && $data['note'] !== '' ? mb_substr($data['note'], 0, 250) : null,
@@ -614,6 +617,94 @@ class OrderOperations implements OperationHandler
 
         $product->forceFill(['sold_out' => (bool) ($payload['soldOut'] ?? true)])->save();
         AuditLog::record('product.sold_out', $product, ['sold_out' => $product->sold_out], userId: $context->operator->id, deviceId: $context->device?->id);
+        $context->touch('catalog');
+
+        return [];
+    }
+
+    /**
+     * Price and/or name of order lines changed from the gear button. Any waiter can do it at
+     * any time; a line that had no price stops being "unpriced".
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function editLines(array $payload, OperationContext $context): array
+    {
+        $uuids = array_values(array_filter((array) ($payload['lineUuids'] ?? []), 'is_string'));
+
+        if ($uuids === []) {
+            throw new OperationRejected('invalid_payload', ['field' => 'lineUuids']);
+        }
+
+        $changes = [];
+
+        if (is_numeric($payload['unitPrice'] ?? null)) {
+            $changes['unit_price'] = max(0, min(10_000_000, (int) $payload['unitPrice']));
+            $changes['unpriced'] = false;
+        }
+
+        if (is_array($payload['name'] ?? null)) {
+            $name = Translation::normalize($payload['name']);
+
+            if ($name['ca'] !== '' || $name['es'] !== '') {
+                $changes['name'] = $name;
+            }
+        }
+
+        if ($changes === []) {
+            return [];
+        }
+
+        $lines = OrderLine::query()->whereIn('uuid', $uuids)->whereNull('voided_at')->get();
+
+        foreach ($lines as $line) {
+            $before = ['unit_price' => $line->unit_price, 'name' => $line->name];
+            $line->forceFill($changes)->save();
+
+            if (isset($changes['name'])) {
+                KitchenTicketItem::query()->where('order_line_id', $line->id)->update(['name' => $line->name]);
+            }
+
+            AuditLog::record('line.edit', $line, ['before' => $before, 'after' => ['unit_price' => $line->unit_price, 'name' => $line->name]], userId: $context->operator->id, deviceId: $context->device?->id);
+            $line->order->touch();
+        }
+
+        $context->touch('orders', 'kitchen');
+
+        return ['lines' => $lines->count()];
+    }
+
+    /**
+     * Catalog price (and optionally name) set from the POS during service.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function editProduct(array $payload, OperationContext $context): array
+    {
+        $product = Product::query()->find((int) ($payload['productId'] ?? 0));
+
+        if ($product === null) {
+            throw new OperationRejected('product_not_found');
+        }
+
+        $before = ['price' => $product->price, 'name' => $product->name];
+
+        if (array_key_exists('price', $payload)) {
+            $product->price = is_numeric($payload['price']) ? max(0, min(10_000_000, (int) $payload['price'])) : null;
+        }
+
+        if (is_array($payload['name'] ?? null)) {
+            $name = Translation::normalize($payload['name']);
+
+            if ($name['ca'] !== '' || $name['es'] !== '') {
+                $product->name = $name;
+            }
+        }
+
+        $product->save();
+        AuditLog::record('product.edit', $product, ['before' => $before, 'after' => ['price' => $product->price, 'name' => $product->name]], userId: $context->operator->id, deviceId: $context->device?->id);
         $context->touch('catalog');
 
         return [];

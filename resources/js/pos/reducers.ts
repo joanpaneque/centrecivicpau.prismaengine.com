@@ -77,6 +77,26 @@ o.label = p.label;
 
             break;
         }
+        case 'line.edit':
+            editLines(p);
+            break;
+        case 'product.edit': {
+            const product = state.products[p.productId];
+
+            if (product) {
+                if ('price' in p) {
+                    product.price = typeof p.price === 'number' ? p.price : null;
+                }
+
+                if (p.name && (p.name.ca || p.name.es)) {
+                    product.name = { ca: p.name.ca || p.name.es, es: p.name.es || p.name.ca };
+                }
+
+                markDirty('products', product.id);
+            }
+
+            break;
+        }
         case 'product.soldOut': {
             const product = state.products[p.productId];
 
@@ -194,6 +214,7 @@ function addLine(order: Order, input: LineInput, parentUuid: string | null, crea
             name: input.name,
             quantity: Math.max(1, input.quantity ?? 1),
             unitPrice: input.unitPrice ?? 0,
+            unpriced: !!input.unpriced,
             vatRate: input.vatRate ?? 10,
             modifiers: input.modifiers ?? [],
             note: input.note || null,
@@ -356,6 +377,36 @@ function setDiscount(line: OrderLine, type: 'percent' | 'amount' | null, value: 
     line.discountType = type;
     line.discountValue = type === 'percent' ? Math.min(100, value) : Math.round(value);
     line.discountReason = reason;
+}
+
+function editLines(p: Payload): void {
+    for (const lineUuid of (p.lineUuids ?? []) as string[]) {
+        const found = findLine(lineUuid);
+
+        if (!found || found.line.voided) {
+            continue;
+        }
+
+        if (typeof p.unitPrice === 'number') {
+            found.line.unitPrice = Math.max(0, Math.round(p.unitPrice));
+            found.line.unpriced = false;
+        }
+
+        if (p.name && (p.name.ca || p.name.es)) {
+            found.line.name = { ca: p.name.ca || p.name.es, es: p.name.es || p.name.ca };
+
+            for (const ticket of Object.values(state.kitchenTickets)) {
+                const item = ticket.items.find((i) => i.lineUuid === lineUuid);
+
+                if (item) {
+                    item.name = found.line.name;
+                    markDirty('kitchenTickets', ticket.uuid);
+                }
+            }
+        }
+
+        markDirty('orders', found.order.uuid);
+    }
 }
 
 function voidLine(p: Payload): void {

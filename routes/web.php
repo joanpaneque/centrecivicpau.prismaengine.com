@@ -21,6 +21,7 @@ use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\InvoiceRequestController;
 use App\Http\Controllers\Tpv\FloorController;
 use App\Http\Controllers\Tpv\PrintJobController;
+use App\Http\Controllers\Tpv\ProductController as TpvProductController;
 use App\Http\Controllers\Tpv\SessionController;
 use App\Http\Controllers\Tpv\ShellController;
 use App\Http\Controllers\Tpv\SyncController;
@@ -61,6 +62,8 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
         Route::post('tickets/pdf', [TicketPdfController::class, 'store'])->name('tickets.pdf');
         Route::post('device', [ShellController::class, 'registerDevice'])->name('device');
         Route::post('switch-user', [SessionController::class, 'switchUser'])->middleware('throttle:30,1')->name('switch-user');
+        Route::post('products', [TpvProductController::class, 'store'])->name('products.store');
+        Route::post('products/suggest', [TpvProductController::class, 'suggest'])->middleware('throttle:30,1')->name('products.suggest');
 
         Route::middleware('admin')->group(function () {
             Route::post('tables', [FloorController::class, 'store'])->name('tables.store');
@@ -114,7 +117,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('carta', [CatalogController::class, 'index'])->name('catalog');
         Route::post('carta/categorias', [CatalogController::class, 'storeCategory'])->name('categories.store');
         Route::post('carta/categorias/orden', [CatalogController::class, 'reorderCategories'])->name('categories.reorder');
-        Route::patch('carta/categorias/{category}', [CatalogController::class, 'updateCategory'])->name('categories.update');
+        Route::post('carta/categorias/{category}', [CatalogController::class, 'updateCategory'])->name('categories.update');
         Route::delete('carta/categorias/{category}', [CatalogController::class, 'destroyCategory'])->name('categories.destroy');
         Route::post('carta/productos', [CatalogController::class, 'storeProduct'])->name('products.store');
         Route::post('carta/productos/orden', [CatalogController::class, 'reorderProducts'])->name('products.reorder');

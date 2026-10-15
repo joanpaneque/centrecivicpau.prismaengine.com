@@ -272,6 +272,7 @@ class SnapshotBuilder
             'parentId' => $category->parent_id,
             'name' => $category->name,
             'color' => $category->color,
+            'photoUrl' => $category->photoUrl(),
             'destinationId' => $category->production_destination_id,
             'isMenu' => $category->is_menu,
             'active' => $category->active,
@@ -284,7 +285,7 @@ class SnapshotBuilder
     /**
      * @return array<string, mixed>
      */
-    private function product(Product $product): array
+    public function product(Product $product): array
     {
         return [
             'id' => $product->id,
@@ -405,6 +406,7 @@ class SnapshotBuilder
                 'name' => $line->name,
                 'quantity' => $line->quantity,
                 'unitPrice' => $line->unit_price,
+                'unpriced' => $line->unpriced,
                 'vatRate' => $line->vat_rate,
                 'modifiers' => array_map(fn (array $m) => ['id' => $m['id'], 'name' => $m['name'], 'priceDelta' => $m['price_delta']], $line->modifiers ?? []),
                 'note' => $line->note,

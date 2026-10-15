@@ -30,6 +30,7 @@ class CatalogController extends Controller
                 'parentId' => $c->parent_id,
                 'name' => $c->name,
                 'color' => $c->color,
+                'photoUrl' => $c->photoUrl(),
                 'destinationId' => $c->production_destination_id,
                 'isMenu' => $c->is_menu,
                 'active' => $c->active,
@@ -63,19 +64,39 @@ class CatalogController extends Controller
         ]);
     }
 
-    public function storeCategory(Request $request): RedirectResponse
+    public function storeCategory(Request $request, ImageProcessor $images): RedirectResponse
     {
         $data = $this->categoryData($request);
-        $category = Category::query()->create($data['attributes'] + ['sort' => (int) Category::query()->where('parent_id', $data['attributes']['parent_id'])->max('sort') + 1]);
+        $category = new Category($data['attributes'] + ['sort' => (int) Category::query()->where('parent_id', $data['attributes']['parent_id'])->max('sort') + 1]);
+
+        if ($request->hasFile('photo')) {
+            $category->photo_path = $images->categoryPhoto($request->file('photo'));
+        }
+
+        $category->save();
         $category->modifierGroups()->sync($data['modifierGroupIds']);
 
         return $this->changed();
     }
 
-    public function updateCategory(Request $request, Category $category): RedirectResponse
+    public function updateCategory(Request $request, Category $category, ImageProcessor $images): RedirectResponse
     {
         $data = $this->categoryData($request, $category);
-        $category->update($data['attributes']);
+        $category->fill($data['attributes']);
+
+        if ($request->hasFile('photo')) {
+            $old = $category->photo_path;
+            $category->photo_path = $images->categoryPhoto($request->file('photo'));
+
+            if ($old) {
+                Storage::disk('public')->delete($old);
+            }
+        } elseif ($request->boolean('removePhoto') && $category->photo_path) {
+            Storage::disk('public')->delete($category->photo_path);
+            $category->photo_path = null;
+        }
+
+        $category->save();
         $category->modifierGroups()->sync($data['modifierGroupIds']);
 
         return $this->changed();
@@ -274,6 +295,7 @@ class CatalogController extends Controller
             'active' => ['boolean'],
             'modifierGroupIds' => ['array'],
             'modifierGroupIds.*' => ['integer', 'exists:modifier_groups,id'],
+            'photo' => ['nullable', 'image', 'max:12288'],
         ]);
 
         return [
@@ -299,7 +321,7 @@ class CatalogController extends Controller
             'name.ca' => ['required_without:name.es', 'nullable', 'string', 'max:80'],
             'name.es' => ['required_without:name.ca', 'nullable', 'string', 'max:80'],
             'categoryId' => ['required', 'integer', 'exists:categories,id'],
-            'price' => ['required', 'integer', 'min:0', 'max:10000000'],
+            'price' => ['nullable', 'integer', 'min:0', 'max:10000000'],
             'vatRate' => ['required', 'numeric', Rule::in([0, 4, 5, 10, 21])],
             'color' => ['nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
             'allergens' => ['array'],
@@ -321,7 +343,7 @@ class CatalogController extends Controller
             'attributes' => [
                 'name' => Translation::normalize($data['name']),
                 'category_id' => (int) $data['categoryId'],
-                'price' => (int) $data['price'],
+                'price' => isset($data['price']) ? (int) $data['price'] : null,
                 'vat_rate' => (float) $data['vatRate'],
                 'color' => $data['color'] ?? null,
                 'allergens' => array_values(array_unique($data['allergens'] ?? [])),

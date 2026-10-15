@@ -109,17 +109,21 @@ Objetivo: el mínimo de toques.
 
 ### Elegir productos
 
-- Cuadrícula por categorías, con foto o nombre sobre color.
+- Primero salen las **familias** (cuadros grandes del color de la familia, con su imagen al lado del nombre si tiene). Al tocar una familia salen sus productos; **← Famílies / Familias** vuelve atrás. Si la familia tiene subfamilias, salen como botones encima.
+- Los productos son botones rellenos del color de su familia (o del suyo), con el texto en blanco o negro según lo que se lea mejor.
 - Buscador siempre visible (los dos idiomas, **sin acentos**).
-- Pestaña **Més demanats / Más pedidos**: los más vendidos primero.
+- Primer cuadro **Més demanats / Más pedidos**: los más vendidos primero.
 - Tocar varias veces suma unidades; hay botón para restar.
 - Toque largo: marcar **Esgotat / Agotado** (se desactiva en todos los dispositivos) o volver a disponible.
-- **Inventa producte / Inventar producto:** nombre libre, precio con teclado en pantalla y destino (cocina, barra o sin destino, si no hay que imprimir). El IVA es el de Ajustes. No entra en la carta.
+- Un producto puede no tener precio todavía (**Sense preu / Sin precio**). Se puede añadir y enviar igualmente; el precio se pone con el engranaje o al cobrar.
+- **Inventa producte / Inventar producto:** nombre libre, precio con teclado en pantalla (se puede dejar vacío) y destino (cocina, barra o sin destino). Al añadir, si hay conexión, la IA propone el nombre bien escrito en catalán y castellano («croq. jamon» → «Croquetes de pernil / Croquetas de jamón»): se acepta o se deja lo escrito. Si se marca **Afegeix-lo també a la carta / Añadirlo también a la carta**, se elige la familia (la IA marca una **Proposta / Propuesta**) y el producto queda en la carta. Sin conexión se añade solo a la cuenta. El IVA es el de Ajustes.
 
 ### Modificadores, notas y pases
 
-- Si el producto tiene opciones (descafeinado, leche de avena, punto de la carne…), salen al añadirlo. Algunas son obligatorias.
+- Si el producto tiene opciones (leche, azúcar, licor del carajillo, marca de cerveza…), se abre un **asistente paso a paso**: una pantalla por grupo de opciones con cuadros grandes. Si solo se puede elegir una, pasa sola a la siguiente. **Salta / Saltar** deja ese grupo sin nada y **Afegeix ja / Añadir ya** añade el producto en cualquier momento. Al final se puede poner una **nota** y la cantidad. Algunas opciones son obligatorias.
+- Tocar una línea sin enviar abre la edición completa (opciones, nota, pase, cantidad).
 - **Nota** libre por línea (sin sal, poco hecho…).
+- **Engranaje** en cada línea (enviada o no): cambia **precio y nombre**. Por defecto solo en esa cuenta; con **Desa-ho també a la carta / Guardarlo también en la carta** queda en el producto para siempre (viene marcado si el producto no tenía precio). Cualquier camarero puede usarlo.
 - **Pas / Pase:** 1r / 2n / Postres. Se puede **Envia i retén el 2n / Enviar y retener el 2.º** y luego **Marxa 2n / Marcha 2.º** cuando toque.
 
 ### Menú del día
@@ -130,12 +134,16 @@ Si hay un menú programado para hoy, aparece **Menú del dia**. El camarero elig
 
 **Envia / Enviar.** Cada destino (cocina, barra…) recibe solo lo suyo. Confirmación «enviado a [impresora]». La impresión es **simulada** (se guarda una vista previa de ticket de 80 mm).
 
+En **venta rápida desde la caja** también hay **Envia i cobra / Enviar y cobrar**: envía y abre directamente el cobro.
+
+Las líneas iguales enviadas en rondas distintas (2 cañas y luego 1 más) se ven en la cuenta **juntas** (3 cañas) y salen juntas en la proforma y el tiquet. Cocina y barra siguen recibiendo solo lo nuevo de cada envío. Lo que ya está cobrado (cobro por productos o por partes) **no se muestra** en la cuenta.
+
 ### Cambiar, juntar, descuentos, anular
 
-- **Mou / Mover:** pasa el cuenta a otra mesa.
+- **Mou taula / Mover mesa** (botón arriba en la cuenta): abre el plano; se puede cambiar de sala (terraza…) y tocar la mesa nueva. Pregunta «¿Seguro que quieres mover la mesa X a la mesa Y?» con **Aceptar / Cancelar**. Las mesas **ocupadas no se pueden elegir** (para juntar cuentas está **Junta**). Lo que no se haya enviado también se mueve.
 - **Junta / Juntar:** fusiona con otra mesa que ya tenga cuenta.
 - **Descompte / Descuento:** a una línea o a todo el cuenta (porcentaje o importe), con motivo.
-- **Anul·la / Anular:** línea o cantidad, con motivo. Imprime anulación en cocina.
+- **Anul·la / Anular:** tocar la línea → anular. **No pide motivo** y cualquier camarero puede hacerlo. Si hay más de una unidad, se elige cuántas. Imprime la anulación en el destino que la preparaba (cocina o barra).
 - **Demana el compte / Pedir la cuenta:** la mesa pasa a ámbar y aparece en caja como pendiente. En **caja**, además abre la **proforma** en PDF (no es factura). **Las tablets no cobran.**
 - **Imprimeix la proforma / Imprimir la proforma** (solo caja): abre el PDF de la cuenta pendiente, sin cobrar. Desde la pestaña, se imprime con Windows.
 - **Tanca el compte buit / Cerrar el cuenta vacío:** si no hay líneas.
@@ -173,6 +181,7 @@ Registrar el aparato como **Caja**. Si no lo es, sale el aviso «Este dispositiv
    - **Divideix per productes / Dividir por productos**
    - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). Si alguien paga más que su parte, el extra se resta de lo que queda.
    - Antes de cobrar, **Proforma** abre el PDF de la cuenta (no es factura) para imprimirlo desde Windows.
+   - Si la cuenta tiene productos **sin precio**, al entrar a cobrar sale **Falten preus / Faltan precios**: hay que poner el precio de cada uno (**Desa i continua / Guardar y seguir**) antes de poder cobrar. Si el producto no tenía precio en la carta, se guarda en la carta por defecto. **Cancelar** vuelve a la cuenta.
 4. En los tres modos, **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema) para marcar un importe superior al que toca. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera lo cobrado, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el extra es propina y el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
 5. Se emite el **tiquet** (factura simplificada). Sale un recuadro con el número y la vista previa. **Obre el PDF / Abrir PDF** abre el ticket en una pestaña nueva; desde ahí se imprime con el diálogo de Windows. **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra sin abrir el PDF.
 
@@ -251,8 +260,8 @@ Cada trabajador ve sus turnos en el TPV (Fitxar). El panel compara horas planifi
 
 Solo administrador.
 
-- Categorías en árbol, color, destino de producción, reordenar arrastrando. **No se puede borrar** una categoría con productos o subcategorías (hay que moverlos antes).
-- Producto: nombre ca/es, categoría, precio **con IVA incluido**, tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
+- Categorías (familias) en árbol, color, **imagen** (sale al lado del nombre en el TPV; PNG, JPG o WebP), destino de producción, reordenar arrastrando. **No se puede borrar** una categoría con productos o subcategorías (hay que moverlos antes).
+- Producto: nombre ca/es, categoría, precio **con IVA incluido** (se puede dejar **vacío** = sin precio; se pondrá desde el TPV), tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
 - Grupos de modificadores: asignables a categoría o producto; obligatorios o de elección múltiple.
 
 ---
