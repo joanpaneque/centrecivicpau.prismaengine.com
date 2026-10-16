@@ -132,7 +132,6 @@ class AssistantController extends Controller
 
         $user = $this->user($request);
         $kind = $data['kind'] ?? AssistantConversation::HELP;
-        abort_if($kind === AssistantConversation::CARTA && ! $user->isAdmin(), 403);
         $text = trim($data['message']);
         $created = empty($data['conversationId']);
 
@@ -156,7 +155,7 @@ class AssistantController extends Controller
             ->all();
 
         if ($kind === AssistantConversation::CARTA) {
-            return $this->studioChat($conversation, $question, array_values($history), $user, $data['locale'] ?? app()->getLocale(), $created);
+            return $this->studioChat($conversation, $question, array_values($history), $user, $data['locale'] ?? app()->getLocale(), $created, $data['context'] ?? 'admin');
         }
 
         $system = $this->assistant->systemPrompt($user, $data['locale'] ?? app()->getLocale(), $data['context'] ?? 'admin');
@@ -237,9 +236,9 @@ class AssistantController extends Controller
      *
      * @param  list<array{role: string, content: string}>  $history
      */
-    private function studioChat(AssistantConversation $conversation, AssistantMessage $question, array $history, User $user, string $locale, bool $created): StreamedResponse
+    private function studioChat(AssistantConversation $conversation, AssistantMessage $question, array $history, User $user, string $locale, bool $created, string $context): StreamedResponse
     {
-        return response()->stream(function () use ($conversation, $question, $history, $user, $locale, $created): void {
+        return response()->stream(function () use ($conversation, $question, $history, $user, $locale, $created, $context): void {
             $send = function (array $event): void {
                 echo json_encode($event, JSON_UNESCAPED_UNICODE)."\n";
 
@@ -253,7 +252,7 @@ class AssistantController extends Controller
             $send(['type' => 'start', 'conversation' => $this->conversationData($conversation), 'question' => $this->messageData($question)]);
 
             try {
-                $result = app(MenuAgent::class)->run($user, $locale, $history, $send);
+                $result = app(MenuAgent::class)->run($user, $locale, $history, $send, $context);
             } catch (Throwable $e) {
                 if (! $e instanceof AssistantException) {
                     report($e);
@@ -311,10 +310,7 @@ class AssistantController extends Controller
 
     private function kind(Request $request): string
     {
-        $kind = $request->query('kind') === AssistantConversation::CARTA ? AssistantConversation::CARTA : AssistantConversation::HELP;
-        abort_if($kind === AssistantConversation::CARTA && ! $this->user($request)->isAdmin(), 403);
-
-        return $kind;
+        return $request->query('kind') === AssistantConversation::CARTA ? AssistantConversation::CARTA : AssistantConversation::HELP;
     }
 
     private function user(Request $request): User

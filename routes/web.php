@@ -95,7 +95,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['admin'])->prefix('gestion')->name('admin.')->group(function () {
         Route::get('/', fn () => redirect()->route('dashboard'))->name('index');
         Route::get('asistente', [AssistantController::class, 'page'])->name('assistant');
-        Route::redirect('carta-ia', '/gestion/asistente')->name('menu-studio');
+        Route::get('carta-ia', fn () => redirect()->route('admin.assistant'))->name('menu-studio');
 
         Route::get('usuarios', [AdminUserController::class, 'index'])->name('users');
         Route::post('usuarios', [AdminUserController::class, 'store'])->name('users.store');

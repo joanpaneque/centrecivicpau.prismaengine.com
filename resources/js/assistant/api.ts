@@ -40,7 +40,36 @@ export type MenuPreview = {
     print?: { languages: string[] } | null;
 };
 
-export type StudioMeta = { actions?: StudioAction[]; previews?: (FamilyPreview | MenuPreview)[]; options?: string[] };
+export type ReportFormat = 'eur' | 'int' | 'qty' | 'minutes' | 'text';
+
+/** Business report computed on the server (figures never come from the model). */
+export type ReportPreview = {
+    type: 'report';
+    id: string;
+    title: string;
+    subtitle: string;
+    kpis: { label: string; value: number | string; format: ReportFormat; hint?: string; tone?: 'good' | 'bad' }[];
+    chart: { kind: 'bar' | 'column'; labels: string[]; values: number[]; format: ReportFormat } | null;
+    columns: { key: string; label: string; format?: ReportFormat; align?: 'right'; link?: string }[];
+    rows: Record<string, string | number | null>[];
+    links: { label: string; url: string }[];
+};
+
+/** Lines the assistant resolved for a table; the POS adds them to that table's unsent lines. */
+export type OrderPreview = {
+    type: 'order';
+    id: string;
+    tableId: number;
+    tableLabel: string;
+    zone: T9n | null;
+    send: boolean;
+    lines: { productId: number; name: T9n; quantity: number; modifiers: { id: number; name: T9n; priceDelta: number }[]; note: string; unitPrice: number | null }[];
+    problems: string[];
+};
+
+export type StudioPreviewData = FamilyPreview | MenuPreview | ReportPreview | OrderPreview;
+
+export type StudioMeta = { actions?: StudioAction[]; previews?: StudioPreviewData[]; options?: string[] };
 
 export type Conversation = {
     id: number;
@@ -59,7 +88,7 @@ export type ChatMessage = {
 export type ChatEvent =
     | { type: 'start'; conversation: Conversation; question: ChatMessage }
     | { type: 'delta'; text: string }
-    | { type: 'status'; status: 'catalog' | 'menus' }
+    | { type: 'status'; status: 'catalog' | 'menus' | 'report' | 'floor' }
     | { type: 'action'; action: StudioAction }
     | { type: 'done'; message: ChatMessage; conversation: Conversation; error: string | null }
     | { type: 'error'; message: string; discarded: 'conversation' | 'question' };

@@ -269,10 +269,14 @@ Solo administrador.
 - Producto: nombre ca/es, categoría, precio **con IVA incluido** (se puede dejar **vacío** = sin precio; se pondrá desde el TPV), tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
 - Grupos de modificadores: asignables a categoría o producto; obligatorios o de elección múltiple.
 
-### Asistente IA de los administradores (carta, menús y dudas)
+### Asistente IA (comandas por voz, informes, carta y menús)
 
-Para los administradores, **Assistent IA** (en el menú del TPV y en Gestión) es un solo asistente que **responde dudas** de la aplicación y además **gestiona la carta y los menús**, todo desde el propio chat, **hablando o escribiendo**. El personal de sala tiene el asistente de ayuda normal.
+**Assistent IA** (en el menú del TPV y, para administradores, en Gestión) es un solo asistente que se usa **hablando o escribiendo**. Lo que puede hacer depende de quién lo usa:
 
+- **Todos:** resolver dudas de la aplicación (con el manual).
+- **Sala y administradores, en el TPV — comandas por voz:** «posa dues canyes i un tallat a la taula 4», «un cafè amb llet sense lactosa per a la 7 i envia-ho». Añade a la mesa todo lo que entiende (queda **por enviar**, como si se hubiera tocado; con «envia-ho» lo envía a cocina y barra) y **pregunta con botones lo que no tiene claro** (por ejemplo «cervesa»: ¿canya, gerra o quinto?; una mesa que no existe; una opción obligatoria), sin dejar de poner lo demás. La tarjeta verde muestra qué ha puesto, lo que falta, y los botones **Obre la taula** y **Envia**.
+- **Administradores — todo el negocio (solo lectura):** «com anem avui?», «vendes d'aquesta setmana per dia», «què s'ha venut més aquest mes?», «vendes per cambrer de l'agost», «busca el tiquet de l'entrecot d'ahir», «tancaments de caixa amb descuadre», «hores treballades de la Marta», «reserves de dissabte», «anul·lacions i descomptes d'aquesta setmana», «quant hem gastat en proveïdors». Sale una **tarjeta de informe** con las cifras clave, un **gráfico** (tocar una barra muestra su valor), la **tabla** con los datos exactos, botón **CSV** (abre en Excel) y enlaces a Gestión. Las cifras salen siempre de los datos, no las inventa la IA. **No puede modificar** tiquets, cobros, cierres ni fichajes.
+- **Administradores — carta y menús:** familias, productos, precios, menús, diseños e impresión (ver abajo).
 - **Micrófono grande:** tocar para hablar, volver a tocar para enviar (la ✕ cancela). **Mientras hablas, el texto va apareciendo en directo** en el chat; al tocar otra vez se envía. Necesita `ELEVENLABS_API_KEY` en el `.env` y permiso de micrófono en el navegador (HTTPS). Si el directo fallara, se transcribe la grabación al terminar. El asistente de ayuda también tiene micrófono, y escribe lo dictado en la caja de texto.
 - **Manual** (icono del libro) y **Aturar / Parar** mientras trabaja.
 - Qué puede hacer: crear y cambiar **familias** (nombre, color, orden), **productos** (nombre en catalán y castellano, precio o sin precio, familia, posición, opciones, agotado) y **menús del día** completos (precio, qué incluye, días, secciones y platos con suplementos). También puede retirar productos o borrar menús, pero **siempre pregunta antes**.

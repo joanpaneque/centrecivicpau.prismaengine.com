@@ -2,8 +2,9 @@
 import { BookOpen, Check, CircleCheck, History, Loader2, Mic, MessageSquarePlus, Pencil, Send, Sparkles, Square, Trash2, Wand2, WifiOff, X } from '@lucide/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
-import type { ChatEvent, ChatMessage, Conversation, StudioAction } from '@/assistant/api';
+import type { ChatEvent, ChatMessage, Conversation, OrderPreview, StudioAction } from '@/assistant/api';
 import { ask, deleteConversation, listConversations, loadConversation, loadManual, renderMarkdown } from '@/assistant/api';
+import ReportCard from '@/components/assistant/ReportCard.vue';
 import StudioPreview from '@/components/assistant/StudioPreview.vue';
 import VoiceButton from '@/components/assistant/VoiceButton.vue';
 import { Button } from '@/components/ui/button';
@@ -18,7 +19,10 @@ import { HttpError } from '@/lib/http';
  * chat (with the printable menu) and offers big answer buttons. While speaking, the words
  * appear live.
  */
-const props = defineProps<{ context: 'tpv' | 'admin'; userName?: string | null }>();
+const props = withDefaults(defineProps<{ context: 'tpv' | 'admin'; userName?: string | null; admin?: boolean }>(), { userName: null, admin: true });
+/** Each finished reply, so the POS can apply the orders it carries. */
+const emit = defineEmits<{ reply: [message: ChatMessage] }>();
+defineSlots<{ order?: (props: { order: OrderPreview }) => unknown }>();
 
 const conversations = ref<Conversation[]>([]);
 const activeId = ref<number | null>(null);
@@ -42,7 +46,7 @@ const textarea = ref<HTMLTextAreaElement | null>(null);
 let controller: AbortController | null = null;
 let localId = -1;
 
-const suggestions = computed(() => tl('studio.suggestions'));
+const suggestions = computed(() => tl(props.admin ? 'studio.suggestions' : 'studio.staffSuggestions'));
 const firstName = computed(() => (props.userName ?? '').split(' ')[0]);
 const lastAssistant = computed(() => [...messages.value].reverse().find((m) => m.role === 'assistant') ?? null);
 const options = computed(() => (!working.value && lastAssistant.value === messages.value[messages.value.length - 1] ? (lastAssistant.value?.meta?.options ?? []) : []));
@@ -174,6 +178,7 @@ function handleEvent(event: ChatEvent, optimisticId: number): void {
             break;
         case 'done':
             messages.value.push(event.message);
+            emit('reply', event.message);
             conversations.value = [event.conversation, ...conversations.value.filter((c) => c.id !== event.conversation.id)];
             break;
         case 'error':
@@ -309,12 +314,11 @@ watch(() => messages.value.length, scrollToBottom);
                                 <CircleCheck class="mt-0.5 size-4 shrink-0" :class="action.kind === 'deleted' ? 'text-red-600' : 'text-emerald-600'" /> {{ action.label }}
                             </li>
                         </ul>
-                        <StudioPreview
-                            v-for="preview in message.meta?.previews ?? []"
-                            :key="`${preview.type}${preview.id}`"
-                            :preview="preview"
-                            :latest="message.id === lastAssistant?.id && preview.type === 'set_menu'"
-                        />
+                        <template v-for="preview in message.meta?.previews ?? []" :key="`${preview.type}${preview.id}`">
+                            <ReportCard v-if="preview.type === 'report'" :report="preview" />
+                            <slot v-else-if="preview.type === 'order'" name="order" :order="preview" />
+                            <StudioPreview v-else :preview="preview" :latest="message.id === lastAssistant?.id && preview.type === 'set_menu'" />
+                        </template>
                         <div class="flex gap-2.5">
                             <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200"><Sparkles class="size-4" /></div>
                             <!-- eslint-disable-next-line vue/no-v-html -->

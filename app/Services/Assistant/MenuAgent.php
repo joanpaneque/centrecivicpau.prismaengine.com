@@ -5,12 +5,14 @@ namespace App\Services\Assistant;
 use App\Events\TpvChanged;
 use App\Models\User;
 use App\Services\Catalog\SetMenuWriter;
+use App\Services\TimeTracking\WorkedTime;
 
 /**
- * "Carta amb IA": a tool-using loop where the model reads and changes the catalog and the
- * set menus on behalf of an administrator, like vibe coding but for menus. Each executed
- * change is reported live through $emit; the turn ends with a reply, the cards to preview
- * and, optionally, big answer buttons.
+ * The AI assistant: a tool-using loop that answers questions about the app and, depending
+ * on who asks and from where, takes orders on the POS (everyone except kitchen), manages
+ * the carta and menus, and reads reports of the whole business (administrators). Each
+ * executed step is reported live through $emit; the turn ends with a reply, the cards to
+ * show and, optionally, big answer buttons.
  */
 class MenuAgent
 {
@@ -19,17 +21,60 @@ class MenuAgent
     public function __construct(
         private readonly AssistantService $assistant,
         private readonly SetMenuWriter $writer,
+        private readonly WorkedTime $worked,
     ) {}
+
+    /**
+     * What this user can do from here: catalog/menus and reports for administrators, taking
+     * orders on the POS for anyone who serves tables.
+     *
+     * @return array{catalog: bool, reports: bool, orders: bool}
+     */
+    public function abilities(User $user, string $context): array
+    {
+        return [
+            'catalog' => $user->isAdmin(),
+            'reports' => $user->isAdmin(),
+            'orders' => $context === 'tpv' && ! $user->isKitchen(),
+        ];
+    }
 
     /**
      * @param  list<array{role: string, content: string}>  $history  ending with the new user message
      * @param  callable(array<string, mixed>): void  $emit
      * @return array{content: string, meta: array<string, mixed>, usage: array{prompt_tokens: int, completion_tokens: int}}
      */
-    public function run(User $user, string $locale, array $history, callable $emit): array
+    public function run(User $user, string $locale, array $history, callable $emit, string $context = 'admin'): array
     {
+        $can = $this->abilities($user, $context);
         $tools = new MenuTools($user, $this->writer);
-        $messages = [['role' => 'system', 'content' => $this->systemPrompt($user, $locale)], ...$history];
+        $business = new BusinessTools($locale === 'es' ? 'es' : 'ca', $this->worked);
+        $orders = new OrderTools;
+        $allowed = [MenuTools::ASK => 'menu'];
+
+        if ($can['catalog'] || $can['orders']) {
+            $allowed['get_catalog'] = 'menu';
+        }
+
+        if ($can['catalog']) {
+            foreach (MenuTools::definitions() as $definition) {
+                $allowed[$definition['function']['name']] = 'menu';
+            }
+        }
+
+        if ($can['reports']) {
+            $allowed += array_fill_keys(BusinessTools::names(), 'business');
+        }
+
+        if ($can['orders']) {
+            $allowed += array_fill_keys(OrderTools::names(), 'orders');
+        }
+
+        $definitions = array_values(array_filter(
+            [...MenuTools::definitions(), ...BusinessTools::definitions(), ...OrderTools::definitions()],
+            fn (array $definition) => isset($allowed[$definition['function']['name']]),
+        ));
+        $messages = [['role' => 'system', 'content' => $this->systemPrompt($user, $locale, $can)], ...$history];
         $usage = ['prompt_tokens' => 0, 'completion_tokens' => 0];
         $actions = [];
         $previews = [];
@@ -38,7 +83,7 @@ class MenuAgent
         $text = '';
 
         for ($step = 0; $step < self::MAX_STEPS; $step++) {
-            $reply = $this->assistant->complete($messages, MenuTools::definitions());
+            $reply = $this->assistant->complete($messages, $definitions);
             $usage['prompt_tokens'] += $reply['usage']['prompt_tokens'];
             $usage['completion_tokens'] += $reply['usage']['completion_tokens'];
 
@@ -71,11 +116,22 @@ class MenuAgent
                     )), 0, 6));
                     $result = ['ok' => true];
                 } else {
-                    if ($status = MenuTools::status($name)) {
+                    $status = match ($allowed[$name] ?? null) {
+                        'business' => 'report',
+                        'orders' => $name === 'get_floor' ? 'floor' : null,
+                        default => MenuTools::status($name),
+                    };
+
+                    if ($status !== null) {
                         $emit(['type' => 'status', 'status' => $status]);
                     }
 
-                    $outcome = $tools->run($name, $args);
+                    $outcome = match ($allowed[$name] ?? null) {
+                        'menu' => $tools->run($name, $args),
+                        'business' => $business->run($name, $args),
+                        'orders' => $orders->run($name, $args),
+                        default => ['result' => ['error' => 'Esta herramienta no está disponible para este usuario.']],
+                    };
                     $result = $outcome['result'];
 
                     if (isset($outcome['action'])) {
@@ -119,37 +175,67 @@ class MenuAgent
         ];
     }
 
-    public function systemPrompt(User $user, string $locale): string
+    /**
+     * @param  array{catalog: bool, reports: bool, orders: bool}|null  $can
+     */
+    public function systemPrompt(User $user, string $locale, ?array $can = null): string
     {
+        $can ??= ['catalog' => $user->isAdmin(), 'reports' => $user->isAdmin(), 'orders' => false];
         $language = $locale === 'es' ? 'castellano' : 'catalán';
         $clock = now();
         $clock->locale($locale);
         $today = $clock->isoFormat('dddd D [de] MMMM [de] YYYY, HH:mm');
+        $role = $user->isAdmin() ? 'administrador/a' : ($user->isKitchen() ? 'cocina' : 'personal de sala');
+        $abilities = ['- Respondes dudas sobre cómo usar la aplicación, basándote SOLO en el manual de abajo (si algo no está, dilo y sugiere hablar con el administrador).'];
+
+        if ($can['orders']) {
+            $abilities[] = <<<'TEXT'
+            - TOMAS COMANDAS en el TPV: «posa dues canyes a la taula 4», «un tallat amb llet de civada i un cafè sol per a la 7».
+              · Usa get_catalog para los ids de producto y sus grupos de opciones, y get_floor si dudas de la mesa.
+              · Añade con add_to_order TODO lo que esté claro (una llamada por mesa). Lo que no esté claro (producto ambiguo como «cervesa» cuando hay caña, jarra y quinto; mesa que no existe; una opción obligatoria sin decir) NO lo inventes: añade lo demás igualmente y pregunta lo que falta con ask_user, con opciones concretas (por ejemplo «Canya», «Gerra», «Quinto»).
+              · Si nombran opciones (sin lactosa, sacarina, Estrella…) pásalas en option_ids. Notas libres («poc fet», «sense ceba») en note.
+              · Por defecto las líneas quedan por enviar en la mesa (send=false). Usa send=true solo si dicen «envia-ho», «marxa», «a cuina ja».
+              · Cuando esté hecho, di en una frase qué has puesto y en qué mesa. Si algo falta, dilo claro.
+            TEXT;
+        }
+
+        if ($can['catalog']) {
+            $abilities[] = <<<'TEXT'
+            - GESTIONAS LA CARTA Y LOS MENÚS como un "vibe coding": familias y productos (nombre, precio, posición, familia, agotado, opciones), menús (del día, infantil, de grupo, de Navidad…), su diseño y su impresión en varios idiomas.
+              · Antes de cambiar nada, lee lo que hay (get_catalog o get_set_menus). Nunca inventes ids.
+              · Si el encargo está claro, hazlo directamente. Si falta algo importante (familia, días, precio del menú), pregunta con ask_user.
+              · Borrar o retirar algo: SIEMPRE pregunta antes con ask_user («Sí, esborra-ho» / «No») y solo entonces llama con confirmed=true.
+              · Nombres siempre en catalán y castellano, bien escritos, con mayúscula inicial. Precios en euros con IVA; sin precio = null. Posiciones desde 1.
+              · Menús: secciones Primers (course 1), Segons (course 2), Postres (course 3); choices = cuántos platos elige el cliente. Si el plato existe en la carta usa su product_id. Para cambiar un menú, mándalo entero con su id.
+              · Diseños: classic, halloween, christmas, easter, kids (infantil). Al guardar un menú se traduce solo a francés, inglés, alemán, ruso, italiano y neerlandés. Si piden imprimirlo o verlo en otros idiomas, usa print_set_menu: en el chat sale la hoja A4 con el botón para generar el PDF (una hoja por idioma).
+            TEXT;
+        }
+
+        if ($can['reports']) {
+            $abilities[] = <<<'TEXT'
+            - VES TODO EL NEGOCIO (solo lectura, no puedes cambiar tiquets, cobros, cierres ni fichajes): estado en directo (live_status), informes de ventas agrupados como pidan (sales_report: por día, semana, mes, hora, día de la semana, producto, familia, camarero, forma de pago, mesa o zona), buscar tiquets y ver su detalle, cierres de caja y descuadres, horas trabajadas, reservas, anulaciones y descuentos, gasto en proveedores.
+              · Las cifras SIEMPRE de las herramientas; nunca las inventes ni las calcules de memoria. Para comparar periodos, llama a la herramienta para cada periodo.
+              · La tarjeta del informe (con gráfico y tabla) sale sola: en el texto comenta solo lo importante en 1-3 frases (lo que más se vende, el día flojo, un descuadre…), sin repetir la tabla.
+              · Interpreta las fechas con sentido: «ahir», «aquesta setmana» (lunes a hoy), «el mes passat», «l'agost»…
+            TEXT;
+        }
+
+        $abilities = implode("\n", $abilities);
 
         return <<<PROMPT
-        Eres el asistente de IA del bar-restaurante del Centre Cívic Pau. Hablas con {$user->name}, administrador/a, desde el TPV o el móvil, a menudo por voz (el texto puede venir con errores de dictado: interprétalo con sentido común).
+        Eres el asistente de IA del bar-restaurante del Centre Cívic Pau. Hablas con {$user->name} ({$role}), desde el TPV o el móvil, a menudo por voz: el texto puede venir con errores de dictado, interprétalo con sentido común (por ejemplo «canyes» = cañas, «la cuatro» = mesa 4).
 
-        Haces dos cosas:
-        1. Respondes dudas sobre cómo usar la aplicación, basándote SOLO en el manual de abajo (si algo no está, dilo).
-        2. Gestionas la carta y los menús con herramientas, como un "vibe coding" de cartas: el usuario pide, tú lo haces, se lo enseñas en el chat y puede seguir pidiendo cambios sobre lo mismo.
+        Qué haces:
+        {$abilities}
 
-        Qué puedes hacer con herramientas: leer la carta (familias, productos, precios, grupos de opciones), crear y cambiar familias y productos (nombre, precio, posición, familia, agotado, opciones), retirar productos, crear, cambiar o borrar menús (del día, infantil, de grupo, de Navidad…), cambiar su diseño y prepararlos para imprimir en varios idiomas.
-
-        Reglas:
-        - Antes de cambiar nada, lee lo que hay (get_catalog o get_set_menus) para usar los ids correctos. Nunca inventes ids.
-        - Si el encargo está claro, hazlo directamente, sin pedir permiso. Si falta algo importante (en qué familia, qué días, el precio del menú), pregunta con ask_user dando opciones concretas.
-        - Borrar o retirar algo: SIEMPRE pregunta antes con ask_user (opciones tipo «Sí, esborra-ho» / «No»), y solo entonces llama a la herramienta con confirmed=true.
-        - Nombres siempre en catalán y en castellano, bien escritos y con mayúscula inicial (como en una carta). Traduce tú.
-        - Precios en euros con IVA. Si el usuario no da precio de un producto, déjalo sin precio (null): se pone durante el servicio. Las posiciones empiezan en 1.
-        - Menús: secciones típicas Primers/Primeros (course 1), Segons/Segundos (course 2), Postres (course 3); choices = cuántos platos elige el cliente (normalmente 1). Si un plato existe en la carta usa su product_id; si no, ponle nombre. Para cambiar un menú, mándalo entero con su id.
-        - Diseños de impresión: classic (normal), halloween, christmas (Navidad), easter (Pascua) y kids (infantil). Un menú infantil va con kids; si piden «posa-li el disseny de Nadal», usa set_menu_template.
-        - Al guardar un menú se traduce solo al francés, inglés, alemán, ruso, italiano y neerlandés. Si piden imprimirlo, verlo impreso o en otros idiomas, usa print_set_menu con los idiomas pedidos: en el chat sale la hoja A4 con el botón para generar el PDF (una hoja por idioma). Tú no puedes imprimir directamente: dile que toque «Genera el PDF».
-        - Las tarjetas (familia o menú) salen solas en el chat: no repitas listas largas en el texto. Responde corto: una o dos frases.
-        - Al terminar un encargo, usa ask_user para ofrecer 2-4 siguientes pasos útiles (por ejemplo «Està bé així», «Imprimeix-lo», «Canvia el preu»). Las opciones son cortas (máximo 6 palabras), escritas como las diría el usuario, en su idioma.
-        - Para dudas de uso de la app responde con pasos claros y breves (Markdown), sin usar herramientas.
+        Reglas generales:
+        - Si una petición tiene varias partes, haz todas las que se entiendan y pregunta solo por lo que falte.
+        - Las tarjetas (comanda, familia, menú, informe) salen solas en el chat: no repitas su contenido en el texto. Responde corto.
+        - Usa ask_user cuando falte información o para confirmar algo delicado, y al terminar un encargo para ofrecer 2-4 siguientes pasos útiles. Opciones cortas (máximo 6 palabras), como las diría el usuario, en su idioma.
+        - Si piden algo que no puedes hacer, dilo y explica dónde se hace en la aplicación.
         - Responde en el idioma del usuario (por defecto {$language}). Sin tecnicismos ni ids en el texto.
 
-        Hoy es {$today}.
+        Ahora es {$today}.
 
         ===== MANUAL DE LA APLICACIÓN =====
         {$this->assistant->manual()}

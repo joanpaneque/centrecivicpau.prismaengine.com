@@ -25,14 +25,12 @@ function toolCall(string $name, array $args, string $id = 'call_1'): array
     return ['id' => $id, 'type' => 'function', 'function' => ['name' => $name, 'arguments' => json_encode($args, JSON_UNESCAPED_UNICODE)]];
 }
 
-test('only admins can use carta amb ia', function () {
+test('the management assistant page is for admins; staff use the assistant on the pos', function () {
     $staff = User::factory()->create();
 
     $this->actingAs($staff)->get(route('admin.menu-studio'))->assertForbidden();
-    $this->actingAs($staff)->getJson(route('assistant.index', ['kind' => 'carta']))->assertForbidden();
-
-    config(['services.openrouter.key' => 'test-key']);
-    $this->actingAs($staff)->postJson(route('assistant.chat'), ['message' => 'Crea una família', 'kind' => 'carta'])->assertForbidden();
+    $this->actingAs($staff)->get(route('admin.assistant'))->assertForbidden();
+    $this->actingAs($staff)->getJson(route('assistant.index', ['kind' => 'carta']))->assertOk()->assertJsonPath('conversations', []);
 });
 
 test('the tools create families and products in the requested position', function () {
