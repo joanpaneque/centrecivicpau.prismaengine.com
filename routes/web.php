@@ -85,6 +85,7 @@ Route::middleware(['auth'])->prefix('asistente/api')->name('assistant.')->group(
     Route::delete('conversaciones/{conversation}', [AssistantController::class, 'destroy'])->name('destroy');
     Route::get('manual', [AssistantController::class, 'manual'])->name('manual');
     Route::post('chat', [AssistantController::class, 'chat'])->middleware('throttle:20,1')->name('chat');
+    Route::post('transcribe', [AssistantController::class, 'transcribe'])->middleware('throttle:30,1')->name('transcribe');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -93,6 +94,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['admin'])->prefix('gestion')->name('admin.')->group(function () {
         Route::get('/', fn () => redirect()->route('dashboard'))->name('index');
         Route::get('asistente', [AssistantController::class, 'page'])->name('assistant');
+        Route::get('carta-ia', [AssistantController::class, 'studio'])->name('menu-studio');
 
         Route::get('usuarios', [AdminUserController::class, 'index'])->name('users');
         Route::post('usuarios', [AdminUserController::class, 'store'])->name('users.store');
@@ -133,6 +135,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('menus/{menu}', [SetMenuController::class, 'update'])->name('set-menus.update');
         Route::post('menus/{menu}/duplicar', [SetMenuController::class, 'duplicate'])->name('set-menus.duplicate');
         Route::delete('menus/{menu}', [SetMenuController::class, 'destroy'])->name('set-menus.destroy');
+        Route::get('menus/{menu}/pdf', [SetMenuController::class, 'pdf'])->name('set-menus.pdf');
+        Route::get('menus/{menu}/vista', [SetMenuController::class, 'preview'])->name('set-menus.preview');
+        Route::patch('menus/{menu}/plantilla', [SetMenuController::class, 'template'])->name('set-menus.template');
+        Route::get('carta/pdf', [CatalogController::class, 'pdf'])->name('catalog.pdf');
 
         Route::get('impresion', [PrintingController::class, 'index'])->name('printing');
         Route::get('impresion/registro', [PrintingController::class, 'log'])->name('printing.log');

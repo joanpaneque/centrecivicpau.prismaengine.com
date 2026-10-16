@@ -19,6 +19,7 @@ import {
     Users,
     Utensils,
     Vault,
+    Wand2,
 } from '@lucide/vue';
 import { computed } from 'vue';
 import AppLogo from '@/components/AppLogo.vue';
@@ -64,6 +65,7 @@ const groups = computed<{ label?: string; items: NavItem[] }[]>(() => [
         items: [
             { title: t('nav.panel'), href: dashboard(), icon: LayoutGrid },
             { title: t('nav.assistant'), href: '/gestion/asistente', icon: Sparkles },
+            { title: t('nav.menuStudio'), href: '/gestion/carta-ia', icon: Wand2 },
         ],
     },
     {

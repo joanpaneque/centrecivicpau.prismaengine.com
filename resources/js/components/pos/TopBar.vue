@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarClock, ChefHat, Clock, Cog, Languages, LayoutGrid, LogOut, Menu, QrCode, Receipt, RefreshCw, Sparkles, Volume2, VolumeX } from '@lucide/vue';
+import { CalendarClock, ChefHat, Clock, Cog, Languages, LayoutGrid, LogOut, Menu, QrCode, Receipt, RefreshCw, Sparkles, Volume2, VolumeX, Wand2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import OperatorSwitch from '@/components/pos/OperatorSwitch.vue';
 import SyncIndicator from '@/components/pos/SyncIndicator.vue';
@@ -37,6 +37,10 @@ const tabs = computed(() => {
 
     items.push({ name: 'fitxar', label: t('nav.clock'), icon: Clock });
     items.push({ name: 'assistent', label: t('nav.assistant'), icon: Sparkles });
+
+    if (isAdmin.value) {
+        items.push({ name: 'carta-ia', label: t('nav.menuStudio'), icon: Wand2 });
+    }
 
     return items;
 });

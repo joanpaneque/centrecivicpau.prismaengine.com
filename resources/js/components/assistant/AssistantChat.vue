@@ -4,6 +4,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner';
 import type { AssistantContext, ChatEvent, ChatMessage, Conversation } from '@/assistant/api';
 import { ask, deleteConversation, listConversations, loadConversation, loadManual, renameConversation, renderMarkdown } from '@/assistant/api';
+import VoiceButton from '@/components/assistant/VoiceButton.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,7 @@ const conversations = ref<Conversation[]>([]);
 const activeId = ref<number | null>(null);
 const messages = ref<ChatMessage[]>([]);
 const configured = ref(true);
+const voice = ref(false);
 const loadingList = ref(true);
 const loadingConversation = ref(false);
 const streaming = ref(false);
@@ -65,6 +67,7 @@ async function refreshList(): Promise<void> {
         const response = await listConversations();
         conversations.value = response.conversations;
         configured.value = response.configured;
+        voice.value = response.voice;
     } catch {
         online.value = navigator.onLine;
     } finally {
@@ -446,6 +449,7 @@ async function openManual(): Promise<void> {
                         @input="resizeTextarea"
                         @keydown="onKeydown"
                     />
+                    <VoiceButton v-if="voice && !streaming" :disabled="!online || !configured" @text="send" />
                     <Button v-if="streaming" type="button" variant="outline" class="size-11 shrink-0 rounded-xl" :title="t('assistant.stop')" @click="stop">
                         <Square class="size-4 fill-current" />
                     </Button>
@@ -472,99 +476,3 @@ async function openManual(): Promise<void> {
     </div>
 </template>
 
-<style>
-.assistant-md {
-    font-size: 15px;
-    line-height: 1.6;
-    overflow-wrap: anywhere;
-}
-.assistant-md > * + * {
-    margin-top: 0.75em;
-}
-.assistant-md h1 {
-    font-size: 1.5em;
-    font-weight: 700;
-    margin-top: 1.2em;
-}
-.assistant-md h2 {
-    font-size: 1.25em;
-    font-weight: 700;
-    margin-top: 1.4em;
-    padding-bottom: 0.2em;
-    border-bottom: 1px solid var(--border);
-}
-.assistant-md h3 {
-    font-size: 1.08em;
-    font-weight: 600;
-    margin-top: 1.2em;
-}
-.assistant-md h4 {
-    font-weight: 600;
-}
-.assistant-md ul {
-    list-style: disc;
-    padding-left: 1.4em;
-}
-.assistant-md ol {
-    list-style: decimal;
-    padding-left: 1.5em;
-}
-.assistant-md li + li {
-    margin-top: 0.25em;
-}
-.assistant-md li > ul,
-.assistant-md li > ol {
-    margin-top: 0.25em;
-}
-.assistant-md strong {
-    font-weight: 600;
-}
-.assistant-md a {
-    color: #00056a;
-    text-decoration: underline;
-}
-.assistant-md code {
-    font-size: 0.9em;
-    background: rgb(0 5 106 / 0.07);
-    border-radius: 4px;
-    padding: 0.1em 0.35em;
-}
-.assistant-md pre {
-    background: #0f172a;
-    color: #e2e8f0;
-    border-radius: 8px;
-    padding: 0.8em 1em;
-    overflow-x: auto;
-    font-size: 0.85em;
-}
-.assistant-md pre code {
-    background: none;
-    padding: 0;
-    color: inherit;
-}
-.assistant-md blockquote {
-    border-left: 3px solid rgb(0 5 106 / 0.3);
-    padding-left: 0.9em;
-    color: var(--muted-foreground);
-}
-.assistant-md table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.92em;
-    display: block;
-    overflow-x: auto;
-}
-.assistant-md th,
-.assistant-md td {
-    border: 1px solid var(--border);
-    padding: 0.35em 0.6em;
-    text-align: left;
-}
-.assistant-md th {
-    background: rgb(0 5 106 / 0.05);
-    font-weight: 600;
-}
-.assistant-md hr {
-    border-color: var(--border);
-}
-</style>

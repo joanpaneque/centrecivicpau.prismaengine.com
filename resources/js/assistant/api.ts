@@ -1,8 +1,44 @@
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { api, HttpError, xsrfToken } from '@/lib/http';
+import './assistant.css';
 
 export type AssistantContext = 'tpv' | 'admin';
+
+/** help: questions about the app. carta: Carta amb IA, the assistant changes the catalog and set menus. */
+export type AssistantKind = 'help' | 'carta';
+
+export type T9n = { ca: string; es: string };
+
+export type StudioAction = { kind: 'created' | 'updated' | 'deleted'; label: string };
+
+export type FamilyPreview = {
+    type: 'family';
+    id: number;
+    name: T9n;
+    color: string | null;
+    photoUrl: string | null;
+    active: boolean;
+    products: { id: number; name: T9n; price: number | null; soldOut: boolean; active: boolean }[];
+};
+
+export type MenuPreview = {
+    type: 'set_menu';
+    id: number;
+    name: T9n;
+    includes: T9n | null;
+    price: number;
+    color: string | null;
+    template: string;
+    active: boolean;
+    scheduleType: 'always' | 'weekdays' | 'dates';
+    weekdays: number[];
+    startsOn: string | null;
+    endsOn: string | null;
+    sections: { name: T9n; choices: number; items: { name: T9n; supplement: number }[] }[];
+};
+
+export type StudioMeta = { actions?: StudioAction[]; previews?: (FamilyPreview | MenuPreview)[]; options?: string[] };
 
 export type Conversation = {
     id: number;
@@ -14,19 +50,22 @@ export type ChatMessage = {
     id: number;
     role: 'user' | 'assistant';
     content: string;
+    meta?: StudioMeta | null;
     createdAt: string;
 };
 
 export type ChatEvent =
     | { type: 'start'; conversation: Conversation; question: ChatMessage }
     | { type: 'delta'; text: string }
+    | { type: 'status'; status: 'catalog' | 'menus' }
+    | { type: 'action'; action: StudioAction }
     | { type: 'done'; message: ChatMessage; conversation: Conversation; error: string | null }
     | { type: 'error'; message: string; discarded: 'conversation' | 'question' };
 
 const BASE = '/asistente/api';
 
-export function listConversations(): Promise<{ conversations: Conversation[]; configured: boolean; model: string }> {
-    return api('GET', `${BASE}/conversaciones`);
+export function listConversations(kind: AssistantKind = 'help'): Promise<{ conversations: Conversation[]; configured: boolean; voice: boolean; model: string }> {
+    return api('GET', `${BASE}/conversaciones?kind=${kind}`);
 }
 
 export function loadConversation(id: number): Promise<{ conversation: Conversation; messages: ChatMessage[] }> {
@@ -49,7 +88,7 @@ export function loadManual(): Promise<{ manual: string }> {
  * Send a question and call `onEvent` for every newline-delimited JSON event of the streamed answer.
  */
 export async function ask(
-    body: { message: string; conversationId: number | null; context: AssistantContext; locale: string },
+    body: { message: string; conversationId: number | null; context: AssistantContext; locale: string; kind?: AssistantKind },
     onEvent: (event: ChatEvent) => void,
     signal: AbortSignal,
 ): Promise<void> {
@@ -106,6 +145,33 @@ export async function ask(
     }
 
     flush(buffer + decoder.decode());
+}
+
+/** Send a voice recording and get the dictated text back (ElevenLabs on the server). */
+export async function transcribe(audio: Blob): Promise<string> {
+    const extension = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm';
+    const form = new FormData();
+    form.append('audio', audio, `dictat.${extension}`);
+
+    const response = await fetch(`${BASE}/transcribe`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': xsrfToken() },
+        body: form,
+    });
+    let data: { text?: string; message?: string } | null = null;
+
+    try {
+        data = await response.json();
+    } catch {
+        data = null;
+    }
+
+    if (!response.ok || !data?.text) {
+        throw new HttpError(response.status, data);
+    }
+
+    return data.text;
 }
 
 export function renderMarkdown(text: string): string {

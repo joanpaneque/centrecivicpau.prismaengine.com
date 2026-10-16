@@ -10,9 +10,13 @@ use App\Models\ModifierGroup;
 use App\Models\Product;
 use App\Models\ProductionDestination;
 use App\Services\Images\ImageProcessor;
+use App\Services\Printing\DocumentPdfRenderer;
+use App\Support\AppSettings;
 use App\Support\Translation;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -62,6 +66,37 @@ class CatalogController extends Controller
             'destinations' => ProductionDestination::query()->orderBy('sort')->get(['id', 'name', 'code']),
             'allergens' => Product::ALLERGENS,
         ]);
+    }
+
+    /**
+     * The whole catalog as a printable A4 (opened from Carta amb IA).
+     */
+    public function pdf(DocumentPdfRenderer $renderer): HttpResponse
+    {
+        $categories = Category::query()->where('active', true)->orderBy('sort')->orderBy('id')->get();
+        $products = Product::query()->where('active', true)->orderBy('sort')->orderBy('id')->get()->groupBy('category_id');
+        $families = [];
+
+        foreach ($categories->whereNull('parent_id') as $root) {
+            $groups = [['title' => null, 'products' => $products->get($root->id) ?? collect()]];
+
+            foreach ($categories->where('parent_id', $root->id) as $child) {
+                $groups[] = ['title' => $child->name['ca'] ?? '', 'products' => $products->get($child->id) ?? collect()];
+            }
+
+            $groups = array_values(array_filter($groups, fn (array $g) => $g['products']->isNotEmpty()));
+
+            if ($groups !== []) {
+                $families[] = ['name' => $root->name, 'color' => $root->color ?: '#00056a', 'groups' => $groups];
+            }
+        }
+
+        return Pdf::loadView('pdf.carta', [
+            'title' => 'Carta',
+            'families' => $families,
+            'logo' => $renderer->logoPath(),
+            'business' => (string) AppSettings::get('business_name', ''),
+        ])->setPaper('a4')->stream('carta.pdf');
     }
 
     public function storeCategory(Request $request, ImageProcessor $images): RedirectResponse

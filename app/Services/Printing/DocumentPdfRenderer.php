@@ -29,7 +29,7 @@ class DocumentPdfRenderer
         return Qr::dataUri($data, 120);
     }
 
-    private function logoPath(): ?string
+    public function logoPath(): ?string
     {
         $path = AppSettings::get('logo_path');
 

@@ -36,6 +36,12 @@ return [
         'manual' => env('ASSISTANT_MANUAL_PATH', 'docs/MANUAL.md'),
     ],
 
+    'elevenlabs' => [
+        'key' => env('ELEVENLABS_API_KEY'),
+        'url' => env('ELEVENLABS_URL', 'https://api.elevenlabs.io/v1'),
+        'stt_model' => env('ELEVENLABS_STT_MODEL', 'scribe_v2'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

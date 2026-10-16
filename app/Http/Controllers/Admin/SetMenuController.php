@@ -9,11 +9,16 @@ use App\Models\ProductionDestination;
 use App\Models\SetMenu;
 use App\Models\SetMenuSection;
 use App\Models\SetMenuSectionItem;
-use App\Support\Translation;
+use App\Services\Assistant\MenuTranslator;
+use App\Services\Catalog\MenuDocument;
+use App\Services\Catalog\SetMenuWriter;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,6 +35,7 @@ class SetMenuController extends Controller
                 'price' => $m->price,
                 'vatRate' => $m->vat_rate,
                 'color' => $m->color,
+                'template' => $m->template,
                 'scheduleType' => $m->schedule_type,
                 'weekdays' => $m->weekdays ?? [],
                 'startsOn' => $m->starts_on?->toDateString(),
@@ -97,6 +103,53 @@ class SetMenuController extends Controller
         return $this->changed(__('tpv.duplicated'));
     }
 
+    /**
+     * Printable menu: one A4 page per requested language, with the chosen design. Missing
+     * translations are made on the spot.
+     */
+    public function pdf(Request $request, SetMenu $menu, MenuDocument $document, MenuTranslator $translator): HttpResponse
+    {
+        [$template, $locales] = $this->printOptions($request, $menu);
+        $translator->ensure($menu, $locales);
+
+        return response($document->pdf($menu->refresh(), $template, $locales), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="'.Str::slug($menu->name['ca'] ?? 'menu').'.pdf"',
+        ]);
+    }
+
+    /**
+     * The same page as HTML for the live preview of the print dialog.
+     */
+    public function preview(Request $request, SetMenu $menu, MenuDocument $document, MenuTranslator $translator): HttpResponse
+    {
+        [$template, $locales] = $this->printOptions($request, $menu);
+        $locales = array_slice($locales, 0, 1);
+        $translator->ensure($menu, $locales);
+
+        return response($document->html($menu->refresh(), $template, $locales));
+    }
+
+    public function template(Request $request, SetMenu $menu): JsonResponse
+    {
+        $data = $request->validate(['template' => ['required', Rule::in(MenuDocument::TEMPLATES)]]);
+        $menu->forceFill(['template' => $data['template']])->save();
+
+        return response()->json(['template' => $menu->template]);
+    }
+
+    /**
+     * @return array{0: string, 1: list<string>}
+     */
+    private function printOptions(Request $request, SetMenu $menu): array
+    {
+        $template = in_array($request->query('template'), MenuDocument::TEMPLATES, true) ? (string) $request->query('template') : $menu->template;
+        $requested = array_filter(explode(',', (string) $request->query('langs', $request->query('lang', 'ca,es'))));
+        $locales = array_values(array_intersect(MenuDocument::LOCALES, $requested)) ?: ['ca', 'es'];
+
+        return [$template, $locales];
+    }
+
     public function destroy(SetMenu $menu): RedirectResponse
     {
         $menu->delete();
@@ -109,53 +162,7 @@ class SetMenuController extends Controller
      */
     private function save(SetMenu $menu, array $data): void
     {
-        $menu->fill([
-            'name' => Translation::normalize($data['name']),
-            'includes' => isset($data['includes']) ? Translation::normalize($data['includes']) : null,
-            'price' => (int) $data['price'],
-            'vat_rate' => (float) $data['vatRate'],
-            'color' => $data['color'] ?? null,
-            'schedule_type' => $data['scheduleType'],
-            'weekdays' => $data['scheduleType'] === 'weekdays' ? array_values(array_map('intval', $data['weekdays'] ?? [])) : null,
-            'starts_on' => $data['scheduleType'] === 'dates' ? ($data['startsOn'] ?? null) : null,
-            'ends_on' => $data['scheduleType'] === 'dates' ? ($data['endsOn'] ?? null) : null,
-            'active' => $data['active'] ?? true,
-        ])->save();
-
-        $keepSections = [];
-
-        foreach (array_values($data['sections'] ?? []) as $sort => $row) {
-            $section = isset($row['id']) ? $menu->sections()->whereKey($row['id'])->first() : null;
-            $section ??= $menu->sections()->make();
-            $section->fill([
-                'name' => Translation::normalize($row['name']),
-                'choices' => max(1, (int) ($row['choices'] ?? 1)),
-                'course' => isset($row['course']) ? (int) $row['course'] : null,
-                'sort' => $sort,
-            ])->save();
-            $keepSections[] = $section->id;
-
-            $keepItems = [];
-
-            foreach (array_values($row['items'] ?? []) as $itemSort => $itemRow) {
-                $item = isset($itemRow['id']) ? $section->items()->whereKey($itemRow['id'])->first() : null;
-                $item ??= $section->items()->make();
-                $hasName = isset($itemRow['name']) && trim(($itemRow['name']['ca'] ?? '').($itemRow['name']['es'] ?? '')) !== '';
-                $item->fill([
-                    'product_id' => $itemRow['productId'] ?? null,
-                    'name' => $hasName ? Translation::normalize($itemRow['name']) : null,
-                    'production_destination_id' => $itemRow['destinationId'] ?? null,
-                    'supplement' => max(0, (int) ($itemRow['supplement'] ?? 0)),
-                    'sort' => $itemSort,
-                ])->save();
-                $keepItems[] = $item->id;
-            }
-
-            $section->items()->whereNotIn('id', $keepItems)->delete();
-        }
-
-        $menu->sections()->whereNotIn('id', $keepSections)->delete();
-        $menu->touch();
+        app(SetMenuWriter::class)->save($menu, $data);
     }
 
     /**
@@ -179,6 +186,7 @@ class SetMenuController extends Controller
             'startsOn' => ['nullable', 'date'],
             'endsOn' => ['nullable', 'date', 'after_or_equal:startsOn'],
             'active' => ['boolean'],
+            'template' => ['nullable', Rule::in(MenuDocument::TEMPLATES)],
             'sections' => ['array'],
             'sections.*.id' => ['nullable', 'integer'],
             'sections.*.name' => ['required', 'array'],

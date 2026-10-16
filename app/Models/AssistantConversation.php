@@ -10,6 +10,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property int $user_id
+ * @property string $kind help (questions about the app) or carta (catalog and menus with tools)
  * @property string|null $title
  * @property Carbon $created_at
  * @property Carbon $updated_at
@@ -17,6 +18,10 @@ use Illuminate\Support\Carbon;
  */
 class AssistantConversation extends Model
 {
+    public const HELP = 'help';
+
+    public const CARTA = 'carta';
+
     protected $guarded = ['id'];
 
     /**

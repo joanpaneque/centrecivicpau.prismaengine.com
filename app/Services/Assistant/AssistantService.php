@@ -77,6 +77,63 @@ class AssistantService
     }
 
     /**
+     * One non-streamed completion, with tools (OpenAI format) if any. Returns the assistant message
+     * (content and tool_calls) and token usage.
+     *
+     * @param  list<array<string, mixed>>  $messages
+     * @param  list<array<string, mixed>>  $tools
+     * @return array{message: array<string, mixed>, usage: array{prompt_tokens: int, completion_tokens: int}}
+     */
+    public function complete(array $messages, array $tools): array
+    {
+        if (! $this->configured()) {
+            throw new AssistantException(__('assistant.not_configured'));
+        }
+
+        $payload = ['model' => $this->model(), 'messages' => $messages];
+
+        if ($tools !== []) {
+            $payload['tools'] = $tools;
+            $payload['tool_choice'] = 'auto';
+        }
+
+        if (filled(config('services.openrouter.reasoning'))) {
+            $payload['reasoning'] = ['effort' => (string) config('services.openrouter.reasoning'), 'exclude' => true];
+        }
+
+        try {
+            $response = Http::withToken((string) config('services.openrouter.key'))
+                ->withHeaders(['HTTP-Referer' => (string) config('app.url'), 'X-Title' => (string) config('app.name')])
+                ->connectTimeout(10)
+                ->timeout(120)
+                ->post(rtrim((string) config('services.openrouter.url'), '/').'/chat/completions', $payload);
+        } catch (ConnectionException $e) {
+            Log::warning('OpenRouter connection failed', ['error' => $e->getMessage()]);
+
+            throw new AssistantException(__('assistant.unavailable'));
+        }
+
+        if ($response->failed() || ! is_array($response->json('choices.0.message'))) {
+            Log::warning('OpenRouter request failed', ['status' => $response->status(), 'body' => mb_substr($response->body(), 0, 1000)]);
+
+            throw new AssistantException(match ($response->status()) {
+                401, 403 => __('assistant.bad_key'),
+                402 => __('assistant.no_credit'),
+                429 => __('assistant.rate_limited'),
+                default => __('assistant.unavailable'),
+            });
+        }
+
+        return [
+            'message' => (array) $response->json('choices.0.message'),
+            'usage' => [
+                'prompt_tokens' => (int) $response->json('usage.prompt_tokens', 0),
+                'completion_tokens' => (int) $response->json('usage.completion_tokens', 0),
+            ],
+        ];
+    }
+
+    /**
      * Stream the reply text as it arrives. The generator's return value holds token usage.
      *
      * @param  array<int, array{role: string, content: string}>  $messages

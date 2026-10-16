@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
  * @property int $conversation_id
  * @property string $role
  * @property string $content
+ * @property array<string, mixed>|null $meta actions done, previews and suggested answers (Carta amb IA)
  * @property string|null $model
  * @property int|null $prompt_tokens
  * @property int|null $completion_tokens
@@ -25,6 +26,13 @@ class AssistantMessage extends Model
     public const ASSISTANT = 'assistant';
 
     protected $guarded = ['id'];
+
+    protected function casts(): array
+    {
+        return [
+            'meta' => 'array',
+        ];
+    }
 
     /**
      * @return BelongsTo<AssistantConversation, $this>

@@ -269,6 +269,28 @@ Solo administrador.
 - Producto: nombre ca/es, categoría, precio **con IVA incluido** (se puede dejar **vacío** = sin precio; se pondrá desde el TPV), tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
 - Grupos de modificadores: asignables a categoría o producto; obligatorios o de elección múltiple.
 
+### Carta amb IA / Carta con IA (solo administradores)
+
+En el menú (**Gestión → Carta amb IA** o, en el TPV, **Carta amb IA** si el usuario es administrador) hay un chat para gestionar la carta y los menús del día **hablando o escribiendo**, pensado para el móvil.
+
+- **Micrófono grande:** tocar para hablar, volver a tocar para enviar (la ✕ cancela). Se transcribe y se envía solo. Necesita `ELEVENLABS_API_KEY` en el `.env` y que el navegador tenga permiso de micrófono (HTTPS). El asistente de ayuda también tiene un micrófono pequeño al lado de Enviar.
+- Qué puede hacer: crear y cambiar **familias** (nombre, color, orden), **productos** (nombre en catalán y castellano, precio o sin precio, familia, posición, opciones, agotado) y **menús del día** completos (precio, qué incluye, días, secciones y platos con suplementos). También puede retirar productos o borrar menús, pero **siempre pregunta antes**.
+- Ejemplos: «Crea el menú de dilluns a 13,50 € amb 3 primers i 3 segons», «Crea la família Tapes i posa-hi braves i croquetes», «Posa les croquetes les primeres», «Canvia el segon plat del menú per lluç».
+- Lo que hace aparece en verde (✓) y sale una **vista previa**: la familia con sus productos o el menú tal como se imprime. **Obre el menú (PDF) / Obre la carta (PDF)** abre el PDF para imprimir; **Obre a Gestió** abre la pantalla correspondiente.
+- Debajo salen **botones grandes** con respuestas (por ejemplo «Està bé així», «Canvia el preu») para seguir con un toque. Se puede seguir pidiendo cambios sobre lo mismo en la misma conversación.
+- Todo queda registrado en la **Auditoría** con el usuario que lo pidió. El historial de conversaciones está en el botón de la izquierda.
+
+### Imprimir un menú (plantillas e idiomas)
+
+Desde la tarjeta del menú en **Carta amb IA** o desde **Gestión → Menús** (botón **Imprimeix / Imprimir**):
+
+- **Diseño:** Normal ✨, Halloween 🎃, Nadal/Navidad 🎄, Pasqua/Pascua 🐣 o Infantil 🎈. El elegido queda guardado en el menú. También se le puede pedir a la IA («posa-li el disseny de Nadal»).
+- **Idiomas:** español, catalán, francés, inglés, alemán, ruso, italiano y neerlandés. Al tocar un idioma marcado se ve en la vista previa; tocándolo otra vez se quita. **Tots / Todos** los marca todos.
+- La **vista previa** muestra la hoja tal como saldrá. **Genera el PDF** crea un documento con **una hoja A4 por idioma**, con el logo; se abre en una pestaña nueva para imprimirlo.
+- Cada idioma cabe siempre en una sola hoja: si el menú es largo, la letra se ajusta sola.
+- Las traducciones se hacen solas al guardar el menú (en segundo plano). Si al imprimir aún falta alguna, se hace en ese momento (tarda unos segundos). Si se cambia el menú, se vuelven a traducir.
+- Puede haber tantos menús como se quiera (del día, infantil, de grupo, de Navidad…): cada uno con su precio, días y diseño.
+
 ---
 
 ## 15. Menús del día (Gestión → Menús del día)

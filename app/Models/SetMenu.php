@@ -15,6 +15,8 @@ use Illuminate\Support\Carbon;
  * @property int $price
  * @property float $vat_rate
  * @property string|null $color
+ * @property string $template classic|halloween|christmas|easter|kids (printed menu design)
+ * @property array{hash?: string, locales?: array<string, array<string, mixed>>}|null $translations texts in the printing languages other than ca/es
  * @property string $schedule_type always|weekdays|dates
  * @property list<int>|null $weekdays ISO weekdays, 1 = Monday
  * @property Carbon|null $starts_on
@@ -36,6 +38,7 @@ class SetMenu extends Model
         return [
             'name' => 'array',
             'includes' => 'array',
+            'translations' => 'array',
             'weekdays' => 'array',
             'starts_on' => 'date',
             'ends_on' => 'date',

@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { ArrowDown, ArrowUp, Copy, Pencil, Plus, Trash2 } from '@lucide/vue';
+import { ArrowDown, ArrowUp, Copy, Pencil, Plus, Printer, Trash2 } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import Field from '@/components/admin/Field.vue';
 import PageHeader from '@/components/admin/PageHeader.vue';
 import SelectInput from '@/components/admin/SelectInput.vue';
 import TransInput from '@/components/admin/TransInput.vue';
+import MenuPrintDialog from '@/components/menus/MenuPrintDialog.vue';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -28,6 +29,7 @@ type Menu = {
     price: number;
     vatRate: number;
     color: string | null;
+    template: string;
     scheduleType: 'always' | 'weekdays' | 'dates';
     weekdays: number[];
     startsOn: string | null;
@@ -50,6 +52,7 @@ type FormSection = { id: number | null; name: { ca: string; es: string }; choice
 
 const open = ref(false);
 const editing = ref<Menu | null>(null);
+const printing = ref<Menu | null>(null);
 const priceInput = ref('');
 const form = useForm({
     name: { ca: '', es: '' },
@@ -245,7 +248,8 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Menús del dia', href: setMenu
                     <div class="text-sm">{{ section.items.map(itemLabel).join(', ') || '—' }}</div>
                 </div>
             </div>
-            <div class="mt-4 flex gap-2">
+            <div class="mt-4 flex flex-wrap gap-2">
+                <Button size="sm" @click="printing = menu"><Printer class="size-4" /> {{ t('studio.printMenu') }}</Button>
                 <Button size="sm" variant="outline" @click="openMenu(menu)"><Pencil class="size-4" /> {{ t('common.edit') }}</Button>
                 <Button size="sm" variant="ghost" @click="router.post(duplicate.url(menu.id), {}, { preserveScroll: true })">
                     <Copy class="size-4" /> {{ t('common.duplicate') }}
@@ -254,6 +258,15 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Menús del dia', href: setMenu
         </div>
     </div>
     <p v-if="menus.length === 0" class="py-12 text-center text-sm text-muted-foreground">{{ t('common.empty') }}</p>
+
+    <MenuPrintDialog
+        v-if="printing"
+        :menu-id="printing.id"
+        :menu-name="tr(printing.name)"
+        :template="printing.template"
+        @template="(value) => printing && (printing.template = value)"
+        @close="printing = null"
+    />
 
     <Dialog v-model:open="open">
         <DialogContent class="max-h-[94vh] overflow-y-auto sm:max-w-4xl">
