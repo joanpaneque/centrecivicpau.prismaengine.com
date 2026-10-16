@@ -11,10 +11,12 @@ import type { DraftLine } from '@/pos/orders';
 import { state } from '@/pos/store';
 import type { SetMenu, SetMenuItem } from '@/pos/types';
 
+/** `initial`: the menu tapped in the Menús family, so the wizard starts on its first course. */
+const props = defineProps<{ initial?: SetMenu | null }>();
 const emit = defineEmits<{ close: []; add: [line: DraftLine] }>();
 
 const open = ref(true);
-const menu = ref<SetMenu | null>(menusToday.value.length === 1 ? menusToday.value[0] : null);
+const menu = ref<SetMenu | null>(props.initial ?? (menusToday.value.length === 1 ? menusToday.value[0] : null));
 const step = ref(0);
 const picks = ref<Record<number, number[]>>({});
 

@@ -40,7 +40,7 @@ import { go, route } from '@/pos/router';
 import { activeOrderForTable, followOrder, isActive, state } from '@/pos/store';
 import { openTicketPdf } from '@/pos/ticketPdf';
 import { enqueue } from '@/pos/sync';
-import type { DiningTable, LineModifier, OrderLine, Product } from '@/pos/types';
+import type { DiningTable, LineModifier, OrderLine, Product, SetMenu } from '@/pos/types';
 
 const tableId = computed(() => (route.value.name === 'taula' ? Number(route.value.params[0]) : null));
 const routeUuid = computed(() => (route.value.name === 'comanda' && route.value.params[0] !== 'nova' ? route.value.params[0] : null));
@@ -71,7 +71,8 @@ watch(
 
 const course = ref<number | null>(null);
 const editing = ref<{ product: Product | null; line: DraftLine | null } | null>(null);
-const menuWizard = ref(false);
+/** Set menu chosen in the Menús family (or true to pick one in the wizard). */
+const menuWizard = ref<SetMenu | true | null>(null);
 const wizard = ref<Product | null>(null);
 const lineAction = ref<LineGroup | null | undefined>(undefined);
 const priceEdit = ref<{ draft: DraftLine } | { group: LineGroup } | null>(null);
@@ -524,7 +525,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
         </section>
 
         <section v-show="showPicker" class="min-h-0 flex-1 bg-slate-100">
-            <ProductPicker @pick="pickProduct" @menu="menuWizard = true" @invent="inventProduct" />
+            <ProductPicker @pick="pickProduct" @menu="(menu) => (menuWizard = menu)" @invent="inventProduct" />
         </section>
 
         <ModifierDialog
@@ -537,7 +538,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             @close="editing = null"
         />
         <ProductWizard v-if="wizard" :product="wizard" :course="course" @add="(data) => addFromWizard(wizard!, data)" @close="wizard = null" />
-        <SetMenuWizard v-if="menuWizard" @add="(line) => addToDraft(draft, line)" @close="menuWizard = false" />
+        <SetMenuWizard v-if="menuWizard" :initial="menuWizard === true ? null : menuWizard" @add="(line) => addToDraft(draft, line)" @close="menuWizard = null" />
         <LineActions v-if="lineAction !== undefined && order" :order="order" :group="lineAction" @edit="(group) => (priceEdit = { group })" @close="lineAction = undefined" />
         <LinePriceDialog
             v-if="priceEdit"

@@ -316,6 +316,8 @@ const ca = {
         tableOccupied: 'La taula {label} està ocupada',
         moved: 'Compte mogut a la taula {label}',
         families: 'Famílies',
+        menusFamily: 'Menús',
+        menusCount: '{count} disponibles avui',
         wizardSkip: 'Salta',
         wizardNext: 'Següent',
         addNow: 'Afegeix ja',

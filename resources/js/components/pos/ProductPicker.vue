@@ -11,15 +11,17 @@ import { formatMoney } from '@/pos/money';
 import type { InventedProduct } from '@/pos/orders';
 import { sorted, state } from '@/pos/store';
 import { enqueue } from '@/pos/sync';
-import type { Category, Product } from '@/pos/types';
+import type { Category, Product, SetMenu } from '@/pos/types';
 
-const emit = defineEmits<{ pick: [product: Product]; menu: []; invent: [product: InventedProduct] }>();
+const emit = defineEmits<{ pick: [product: Product]; menu: [menu: SetMenu]; invent: [product: InventedProduct] }>();
 
 const FREQUENT = 'frequent';
+/** The set menus available today, shown as one more family. */
+const MENUS = 'menus';
 
 const query = ref('');
-/** null: the families grid; 'frequent' or a root category id: its products. */
-const view = ref<typeof FREQUENT | number | null>(null);
+/** null: the families grid; 'frequent', 'menus' or a root category id: what is inside. */
+const view = ref<typeof FREQUENT | typeof MENUS | number | null>(null);
 const subCategory = ref<number | null>(null);
 const info = ref<Product | null>(null);
 const inventing = ref(false);
@@ -46,7 +48,7 @@ const products = computed(() => {
 
 const showFamilies = computed(() => !query.value.trim() && view.value === null);
 
-function openFamily(value: typeof FREQUENT | number): void {
+function openFamily(value: typeof FREQUENT | typeof MENUS | number): void {
     view.value = value;
     subCategory.value = null;
 }
@@ -122,14 +124,6 @@ async function toggleSoldOut(product: Product): Promise<void> {
                     <X class="size-5" />
                 </button>
             </div>
-            <button
-                v-if="menusToday.length"
-                type="button"
-                class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3 text-sm font-semibold text-white"
-                @click="emit('menu')"
-            >
-                <UtensilsCrossed class="size-4" /> <span class="max-sm:hidden">{{ t('order.setMenu') }}</span>
-            </button>
             <button type="button" class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-amber-500 px-3 text-sm font-semibold text-amber-950" @click="inventing = true">
                 <PencilLine class="size-4" /> <span class="max-sm:hidden">{{ t('order.invent') }}</span>
             </button>
@@ -146,6 +140,18 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 >
                     <Star class="size-10 shrink-0" />
                     <span class="line-clamp-2 text-lg leading-tight font-bold">{{ t('order.frequent') }}</span>
+                </button>
+                <button
+                    v-if="menusToday.length"
+                    type="button"
+                    class="flex h-24 items-center gap-3 rounded-2xl bg-emerald-600 p-3 text-left text-white shadow-sm transition active:scale-95"
+                    @click="openFamily(MENUS)"
+                >
+                    <UtensilsCrossed class="size-10 shrink-0" />
+                    <span class="min-w-0">
+                        <span class="line-clamp-2 text-lg leading-tight font-bold">{{ t('order.menusFamily') }}</span>
+                        <span class="text-xs opacity-90">{{ t('order.menusCount', { count: menusToday.length }) }}</span>
+                    </span>
                 </button>
                 <button
                     v-for="category in roots"
@@ -169,10 +175,10 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 </button>
                 <span
                     class="flex h-11 min-w-0 items-center gap-2 truncate rounded-xl px-3 text-base font-bold"
-                    :style="current ? { background: familyColor(current), color: readableText(familyColor(current)) } : { background: '#00056a', color: '#fff' }"
+                    :style="current ? { background: familyColor(current), color: readableText(familyColor(current)) } : { background: view === MENUS ? '#059669' : '#00056a', color: '#fff' }"
                 >
                     <img v-if="current?.photoUrl" :src="current.photoUrl" alt="" class="size-8 rounded-lg object-cover" />
-                    {{ current ? tr(current.name) : t('order.frequent') }}
+                    {{ current ? tr(current.name) : view === MENUS ? t('order.menusFamily') : t('order.frequent') }}
                 </span>
             </div>
 
@@ -199,7 +205,25 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 </button>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+            <!-- The set menus of today: tap one to choose its dishes -->
+            <div v-if="view === MENUS && !query.trim()" class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+                <div class="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
+                    <button
+                        v-for="menu in menusToday"
+                        :key="menu.id"
+                        type="button"
+                        class="flex min-h-32 flex-col rounded-2xl p-3 text-left shadow-sm transition active:scale-95"
+                        :style="{ background: menu.color || '#059669', color: readableText(menu.color || '#059669') }"
+                        @click="emit('menu', menu)"
+                    >
+                        <span class="line-clamp-2 text-lg leading-tight font-bold">{{ tr(menu.name) }}</span>
+                        <span v-if="menu.includes" class="mt-1 line-clamp-2 text-xs opacity-90">{{ tr(menu.includes) }}</span>
+                        <span class="mt-auto pt-2 text-xl font-bold">{{ formatMoney(menu.price) }}</span>
+                    </button>
+                </div>
+            </div>
+
+            <div v-else class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
                 <div class="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-2">
                     <button
                         v-for="product in products"

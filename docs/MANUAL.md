@@ -128,7 +128,7 @@ Objetivo: el mínimo de toques.
 
 ### Menú del día
 
-Si hay un menú programado para hoy, aparece **Menú del dia**. El camarero elige primero → segundo → etc. según las secciones. Cada plato va a su destino (cocina o barra). Puede haber suplementos.
+Si hay menús programados para hoy, en la cuadrícula de familias aparece la familia **Menús** (verde, con cuántos hay). Al abrirla salen los menús de hoy (del día, infantil, de grupo…) con su precio; al tocar uno se abre directamente para elegir los platos. El camarero elige primero → segundo → etc. según las secciones. Cada plato va a su destino (cocina o barra). Puede haber suplementos.
 
 ### Enviar
 

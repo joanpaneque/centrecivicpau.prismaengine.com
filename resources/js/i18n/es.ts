@@ -318,6 +318,8 @@ const es: Messages = {
         tableOccupied: 'La mesa {label} está ocupada',
         moved: 'Cuenta movida a la mesa {label}',
         families: 'Familias',
+        menusFamily: 'Menús',
+        menusCount: '{count} disponibles hoy',
         wizardSkip: 'Saltar',
         wizardNext: 'Siguiente',
         addNow: 'Añadir ya',
