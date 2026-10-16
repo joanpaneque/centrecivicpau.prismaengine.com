@@ -26,11 +26,6 @@ class AssistantController extends Controller
         return Inertia::render('admin/Assistant');
     }
 
-    public function studio(): Response
-    {
-        return Inertia::render('admin/MenuStudio');
-    }
-
     public function index(Request $request): JsonResponse
     {
         $kind = $this->kind($request);
@@ -86,7 +81,19 @@ class AssistantController extends Controller
     }
 
     /**
-     * Microphone button: audio in, text out (ElevenLabs).
+     * Microphone button, live: a single-use token for the browser to stream to ElevenLabs.
+     */
+    public function voiceSession(SpeechToText $speech): JsonResponse
+    {
+        try {
+            return response()->json($speech->realtimeSession());
+        } catch (AssistantException $e) {
+            return response()->json(['message' => $e->getMessage()], $speech->configured() ? 502 : 503);
+        }
+    }
+
+    /**
+     * Microphone button, fallback: the whole recording in, text out (ElevenLabs).
      */
     public function transcribe(Request $request, SpeechToText $speech): JsonResponse
     {

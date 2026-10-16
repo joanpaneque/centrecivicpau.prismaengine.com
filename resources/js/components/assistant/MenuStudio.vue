@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { Check, CircleCheck, History, Loader2, MessageSquarePlus, Pencil, Send, Sparkles, Trash2, Wand2, WifiOff, X } from '@lucide/vue';
+import { BookOpen, Check, CircleCheck, History, Loader2, Mic, MessageSquarePlus, Pencil, Send, Sparkles, Square, Trash2, Wand2, WifiOff, X } from '@lucide/vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import type { ChatEvent, ChatMessage, Conversation, StudioAction } from '@/assistant/api';
-import { ask, deleteConversation, listConversations, loadConversation, renderMarkdown } from '@/assistant/api';
+import { ask, deleteConversation, listConversations, loadConversation, loadManual, renderMarkdown } from '@/assistant/api';
 import StudioPreview from '@/components/assistant/StudioPreview.vue';
 import VoiceButton from '@/components/assistant/VoiceButton.vue';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { locale, t, tl } from '@/i18n';
 import { formatDateTime } from '@/lib/format';
 import { HttpError } from '@/lib/http';
 
 /**
- * Carta amb IA: talk or type what you want ("crea'm el menú de dilluns", "posa les braves
- * a 5 €") and the assistant does it, shows a preview card and offers big answer buttons.
+ * The administrators' assistant: talk or type ("crea'm el menú de dilluns", "posa les braves
+ * a 5 €", "com tanco la caixa?") and it answers or does it, shows the result right in the
+ * chat (with the printable menu) and offers big answer buttons. While speaking, the words
+ * appear live.
  */
 const props = defineProps<{ context: 'tpv' | 'admin'; userName?: string | null }>();
 
@@ -27,6 +30,10 @@ const working = ref(false);
 const liveStatus = ref<string | null>(null);
 const liveActions = ref<StudioAction[]>([]);
 const recording = ref(false);
+const liveText = ref('');
+const manualOpen = ref(false);
+const manualHtml = ref('');
+const manualLoading = ref(false);
 const input = ref('');
 const historyOpen = ref(false);
 const online = ref(typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -64,6 +71,40 @@ onBeforeUnmount(() => {
     window.removeEventListener('offline', updateOnline);
     controller?.abort();
 });
+
+function stop(): void {
+    controller?.abort();
+}
+
+async function openManual(): Promise<void> {
+    manualOpen.value = true;
+
+    if (manualHtml.value) {
+        return;
+    }
+
+    manualLoading.value = true;
+
+    try {
+        manualHtml.value = renderMarkdown((await loadManual()).manual);
+    } catch (e) {
+        manualOpen.value = false;
+        toast.error(e instanceof HttpError ? e.message : t('assistant.offline'));
+    } finally {
+        manualLoading.value = false;
+    }
+}
+
+function onRecording(active: boolean): void {
+    recording.value = active;
+    liveText.value = '';
+    scrollToBottom();
+}
+
+function onLive(text: string): void {
+    liveText.value = text;
+    scrollToBottom();
+}
 
 function newChat(): void {
     if (working.value) {
@@ -161,7 +202,9 @@ async function send(text = input.value): Promise<void> {
     try {
         await ask({ message, conversationId: startedIn, context: props.context, locale: locale.value, kind: 'carta' }, (event) => handleEvent(event, optimisticId), controller.signal);
     } catch (e) {
-        if (!(e instanceof DOMException && e.name === 'AbortError')) {
+        if (e instanceof DOMException && e.name === 'AbortError') {
+            toast.info(t('assistant.stopped'));
+        } else {
             messages.value = messages.value.filter((m) => m.id !== optimisticId);
             input.value = message;
             const body = e instanceof HttpError ? (e.body as { discarded?: string } | null) : null;
@@ -226,6 +269,7 @@ watch(() => messages.value.length, scrollToBottom);
                 <span class="flex size-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-[#00056a] to-violet-600 text-white"><Wand2 class="size-4" /></span>
                 <h2 class="truncate font-semibold">{{ t('studio.title') }}</h2>
             </div>
+            <Button variant="ghost" size="icon" class="size-11" :aria-label="t('assistant.manual')" @click="openManual"><BookOpen class="size-5" /></Button>
             <Button variant="outline" class="h-11 gap-1.5" :disabled="working" @click="newChat"><MessageSquarePlus class="size-5" /> <span class="max-sm:hidden">{{ t('assistant.newChat') }}</span></Button>
         </header>
 
@@ -236,7 +280,7 @@ watch(() => messages.value.length, scrollToBottom);
         <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
             <div v-if="loadingConversation" class="flex justify-center py-16"><Loader2 class="size-6 animate-spin text-slate-400" /></div>
 
-            <div v-else-if="!messages.length" class="mx-auto flex max-w-xl flex-col items-center px-4 pt-8 pb-4 text-center">
+            <div v-else-if="!messages.length && !recording" class="mx-auto flex max-w-xl flex-col items-center px-4 pt-8 pb-4 text-center">
                 <div class="mb-4 flex size-16 items-center justify-center rounded-3xl bg-gradient-to-br from-[#00056a] to-violet-600 text-white shadow-lg"><Sparkles class="size-8" /></div>
                 <h3 class="text-xl font-bold">{{ firstName ? t('studio.welcome', { name: firstName }) : t('studio.title') }}</h3>
                 <p class="mt-1 text-sm text-slate-500">{{ t('studio.subtitle') }}</p>
@@ -265,7 +309,12 @@ watch(() => messages.value.length, scrollToBottom);
                                 <CircleCheck class="mt-0.5 size-4 shrink-0" :class="action.kind === 'deleted' ? 'text-red-600' : 'text-emerald-600'" /> {{ action.label }}
                             </li>
                         </ul>
-                        <StudioPreview v-for="preview in message.meta?.previews ?? []" :key="`${preview.type}${preview.id}`" :preview="preview" />
+                        <StudioPreview
+                            v-for="preview in message.meta?.previews ?? []"
+                            :key="`${preview.type}${preview.id}`"
+                            :preview="preview"
+                            :latest="message.id === lastAssistant?.id && preview.type === 'set_menu'"
+                        />
                         <div class="flex gap-2.5">
                             <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200"><Sparkles class="size-4" /></div>
                             <!-- eslint-disable-next-line vue/no-v-html -->
@@ -274,14 +323,25 @@ watch(() => messages.value.length, scrollToBottom);
                     </div>
                 </template>
 
+                <!-- What is being said, live -->
+                <div v-if="recording" class="flex justify-end">
+                    <div class="max-w-[85%] rounded-2xl rounded-br-md border-2 border-dashed border-[#00056a]/40 bg-[#00056a]/5 px-4 py-2.5 text-[15px] text-[#00056a] dark:text-blue-200">
+                        <span v-if="liveText">{{ liveText }}</span>
+                        <span v-else class="flex items-center gap-2 text-slate-500"><Mic class="size-4 animate-pulse text-red-600" /> {{ t('assistant.voiceListening') }}</span>
+                    </div>
+                </div>
+
                 <!-- Live progress while the assistant works -->
                 <div v-if="working" class="flex flex-col gap-1.5">
                     <div v-for="(action, i) in liveActions" :key="i" class="flex items-start gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 dark:bg-emerald-950 dark:text-emerald-100">
                         <Check class="mt-0.5 size-4 shrink-0 text-emerald-600" /> {{ action.label }}
                     </div>
-                    <p class="flex items-center gap-2 px-1 py-1 text-sm text-slate-500">
+                    <div class="flex items-center gap-2 px-1 py-1 text-sm text-slate-500">
                         <Loader2 class="size-4 animate-spin" /> {{ liveStatus ? t(`studio.status.${liveStatus}`) : t('studio.working') }}
-                    </p>
+                        <button type="button" class="ml-auto flex h-9 items-center gap-1.5 rounded-lg border bg-white px-3 text-sm font-medium text-slate-700 dark:bg-slate-900 dark:text-slate-200" @click="stop">
+                            <Square class="size-3.5 fill-current" /> {{ t('assistant.stop') }}
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Big answer buttons -->
@@ -319,10 +379,23 @@ watch(() => messages.value.length, scrollToBottom);
                 </Button>
             </div>
             <div class="mt-2 flex justify-center">
-                <VoiceButton v-if="voice" size="lg" :disabled="!online || !configured || working" @text="send" @recording="(active) => (recording = active)" />
+                <VoiceButton v-if="voice" size="lg" :disabled="!online || !configured || working" @text="send" @recording="onRecording" @live="onLive" />
                 <p v-else class="py-1 text-center text-xs text-slate-500">{{ t('assistant.voiceNotConfigured') }}</p>
             </div>
         </form>
+
+        <Dialog v-model:open="manualOpen">
+            <DialogContent class="flex h-[88vh] max-w-4xl flex-col gap-0 p-0 sm:max-w-4xl">
+                <DialogHeader class="border-b px-6 py-4">
+                    <DialogTitle class="flex items-center gap-2"><BookOpen class="size-5" /> {{ t('assistant.manualTitle') }}</DialogTitle>
+                </DialogHeader>
+                <div class="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                    <div v-if="manualLoading" class="flex justify-center py-16"><Loader2 class="size-6 animate-spin text-slate-400" /></div>
+                    <!-- eslint-disable-next-line vue/no-v-html -->
+                    <div v-else class="assistant-md" v-html="manualHtml" />
+                </div>
+            </DialogContent>
+        </Dialog>
 
         <!-- History drawer -->
         <div v-if="historyOpen" class="absolute inset-0 z-20 bg-black/30" @click="historyOpen = false" />

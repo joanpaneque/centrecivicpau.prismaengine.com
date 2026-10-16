@@ -11,7 +11,6 @@ import ClockQrView from '@/components/pos/views/ClockQrView.vue';
 import ClockView from '@/components/pos/views/ClockView.vue';
 import FloorView from '@/components/pos/views/FloorView.vue';
 import KdsView from '@/components/pos/views/KdsView.vue';
-import MenuStudioView from '@/components/pos/views/MenuStudioView.vue';
 import OrderView from '@/components/pos/views/OrderView.vue';
 import PaymentView from '@/components/pos/views/PaymentView.vue';
 import ReservationsView from '@/components/pos/views/ReservationsView.vue';
@@ -62,9 +61,8 @@ const view = computed(() => {
         case 'qr':
             return ClockQrView;
         case 'assistent':
-            return AssistantView;
         case 'carta-ia':
-            return MenuStudioView;
+            return AssistantView;
         default:
             return null;
     }

@@ -5,6 +5,7 @@ use App\Models\Category;
 use App\Models\Product;
 use App\Models\SetMenu;
 use App\Models\User;
+use App\Services\Assistant\MenuAgent;
 use App\Services\Assistant\MenuTools;
 use App\Services\Catalog\SetMenuWriter;
 use Illuminate\Http\UploadedFile;
@@ -159,4 +160,53 @@ test('without an elevenlabs key the microphone reports it is not configured', fu
         ->assertStatus(503);
 
     $this->actingAs($user)->getJson(route('assistant.index'))->assertJsonPath('voice', false);
+});
+
+test('the old carta amb ia address opens the assistant', function () {
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->get('/gestion/carta-ia')->assertRedirect('/gestion/asistente');
+    $this->actingAs($admin)->get(route('admin.assistant'))->assertOk();
+});
+
+test('the live microphone gets a single-use token without exposing the key', function () {
+    config(['services.elevenlabs.key' => 'xi-secret']);
+    Http::preventStrayRequests();
+    Http::fake(['api.elevenlabs.io/v1/single-use-token/realtime_scribe' => Http::response(['token' => 'sutkn_123'])]);
+    $user = User::factory()->create();
+
+    $response = $this->actingAs($user)->postJson(route('assistant.voice-session'))
+        ->assertOk()
+        ->assertJsonPath('token', 'sutkn_123')
+        ->assertJsonPath('model', 'scribe_v2_realtime');
+
+    expect($response->json('url'))->toStartWith('wss://')
+        ->and((string) $response->getContent())->not->toContain('xi-secret');
+    Http::assertSent(fn ($request) => $request->hasHeader('xi-api-key', 'xi-secret') && $request->method() === 'POST');
+});
+
+test('the assistant prepares a menu for printing in the requested languages', function () {
+    config(['services.openrouter.key' => 'test-key']);
+    Http::preventStrayRequests();
+    Http::fake(['openrouter.ai/*' => Http::response(['choices' => [['message' => ['content' => json_encode([
+        'en' => ['name' => 'Kids menu', 'includes' => null, 'sections' => [['name' => 'Dish', 'items' => ['Macaroni']]]],
+    ])]]], 'usage' => ['prompt_tokens' => 5, 'completion_tokens' => 5]])]);
+    $admin = User::factory()->admin()->create();
+    $menu = SetMenu::query()->create(['name' => ['ca' => 'Menú infantil', 'es' => 'Menú infantil'], 'price' => 900, 'vat_rate' => 10, 'schedule_type' => 'always', 'active' => true, 'sort' => 1]);
+    $menu->sections()->create(['name' => ['ca' => 'Plat', 'es' => 'Plato'], 'choices' => 1, 'sort' => 0])
+        ->items()->create(['name' => ['ca' => 'Macarrons', 'es' => 'Macarrones'], 'sort' => 0]);
+
+    $result = studioTools($admin)->run('print_set_menu', ['id' => $menu->id, 'languages' => ['ca', 'en', 'xx'], 'template' => 'kids']);
+
+    expect($result['preview']['print']['languages'])->toBe(['ca', 'en'])
+        ->and($result['preview']['template'])->toBe('kids')
+        ->and($menu->refresh()->translations['locales']['en']['name'])->toBe('Kids menu');
+});
+
+test('the assistant also answers from the manual', function () {
+    $admin = User::factory()->admin()->create();
+
+    expect(app(MenuAgent::class)->systemPrompt($admin, 'ca'))
+        ->toContain('MANUAL DE LA APLICACIÓN')
+        ->toContain('print_set_menu');
 });

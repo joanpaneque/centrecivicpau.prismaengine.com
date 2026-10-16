@@ -449,7 +449,7 @@ async function openManual(): Promise<void> {
                         @input="resizeTextarea"
                         @keydown="onKeydown"
                     />
-                    <VoiceButton v-if="voice && !streaming" :disabled="!online || !configured" @text="send" />
+                    <VoiceButton v-if="voice && !streaming" :disabled="!online || !configured" @text="send" @live="(text) => (input = text)" />
                     <Button v-if="streaming" type="button" variant="outline" class="size-11 shrink-0 rounded-xl" :title="t('assistant.stop')" @click="stop">
                         <Square class="size-4 fill-current" />
                     </Button>

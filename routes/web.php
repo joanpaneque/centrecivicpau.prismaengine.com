@@ -86,6 +86,7 @@ Route::middleware(['auth'])->prefix('asistente/api')->name('assistant.')->group(
     Route::get('manual', [AssistantController::class, 'manual'])->name('manual');
     Route::post('chat', [AssistantController::class, 'chat'])->middleware('throttle:20,1')->name('chat');
     Route::post('transcribe', [AssistantController::class, 'transcribe'])->middleware('throttle:30,1')->name('transcribe');
+    Route::post('voice-session', [AssistantController::class, 'voiceSession'])->middleware('throttle:30,1')->name('voice-session');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -94,7 +95,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::middleware(['admin'])->prefix('gestion')->name('admin.')->group(function () {
         Route::get('/', fn () => redirect()->route('dashboard'))->name('index');
         Route::get('asistente', [AssistantController::class, 'page'])->name('assistant');
-        Route::get('carta-ia', [AssistantController::class, 'studio'])->name('menu-studio');
+        Route::redirect('carta-ia', '/gestion/asistente')->name('menu-studio');
 
         Route::get('usuarios', [AdminUserController::class, 'index'])->name('users');
         Route::post('usuarios', [AdminUserController::class, 'store'])->name('users.store');

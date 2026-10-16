@@ -269,20 +269,21 @@ Solo administrador.
 - Producto: nombre ca/es, categoría, precio **con IVA incluido** (se puede dejar **vacío** = sin precio; se pondrá desde el TPV), tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
 - Grupos de modificadores: asignables a categoría o producto; obligatorios o de elección múltiple.
 
-### Carta amb IA / Carta con IA (solo administradores)
+### Asistente IA de los administradores (carta, menús y dudas)
 
-En el menú (**Gestión → Carta amb IA** o, en el TPV, **Carta amb IA** si el usuario es administrador) hay un chat para gestionar la carta y los menús del día **hablando o escribiendo**, pensado para el móvil.
+Para los administradores, **Assistent IA** (en el menú del TPV y en Gestión) es un solo asistente que **responde dudas** de la aplicación y además **gestiona la carta y los menús**, todo desde el propio chat, **hablando o escribiendo**. El personal de sala tiene el asistente de ayuda normal.
 
-- **Micrófono grande:** tocar para hablar, volver a tocar para enviar (la ✕ cancela). Se transcribe y se envía solo. Necesita `ELEVENLABS_API_KEY` en el `.env` y que el navegador tenga permiso de micrófono (HTTPS). El asistente de ayuda también tiene un micrófono pequeño al lado de Enviar.
+- **Micrófono grande:** tocar para hablar, volver a tocar para enviar (la ✕ cancela). **Mientras hablas, el texto va apareciendo en directo** en el chat; al tocar otra vez se envía. Necesita `ELEVENLABS_API_KEY` en el `.env` y permiso de micrófono en el navegador (HTTPS). Si el directo fallara, se transcribe la grabación al terminar. El asistente de ayuda también tiene micrófono, y escribe lo dictado en la caja de texto.
+- **Manual** (icono del libro) y **Aturar / Parar** mientras trabaja.
 - Qué puede hacer: crear y cambiar **familias** (nombre, color, orden), **productos** (nombre en catalán y castellano, precio o sin precio, familia, posición, opciones, agotado) y **menús del día** completos (precio, qué incluye, días, secciones y platos con suplementos). También puede retirar productos o borrar menús, pero **siempre pregunta antes**.
 - Ejemplos: «Crea el menú de dilluns a 13,50 € amb 3 primers i 3 segons», «Crea la família Tapes i posa-hi braves i croquetes», «Posa les croquetes les primeres», «Canvia el segon plat del menú per lluç».
-- Lo que hace aparece en verde (✓) y sale una **vista previa**: la familia con sus productos o el menú tal como se imprime. **Obre el menú (PDF) / Obre la carta (PDF)** abre el PDF para imprimir; **Obre a Gestió** abre la pantalla correspondiente.
+- Lo que hace aparece en verde (✓) y sale una **tarjeta** en el chat: la familia con sus productos, o el **menú con su hoja A4 de verdad**, con los diseños, los idiomas y **Genera el PDF** ahí mismo (una hoja por idioma). Se le puede pedir directamente: «imprimeix el menú en anglès i francès» y deja la tarjeta lista con esos idiomas marcados. **Obre a Gestió** abre la pantalla correspondiente.
 - Debajo salen **botones grandes** con respuestas (por ejemplo «Està bé així», «Canvia el preu») para seguir con un toque. Se puede seguir pidiendo cambios sobre lo mismo en la misma conversación.
 - Todo queda registrado en la **Auditoría** con el usuario que lo pidió. El historial de conversaciones está en el botón de la izquierda.
 
 ### Imprimir un menú (plantillas e idiomas)
 
-Desde la tarjeta del menú en **Carta amb IA** o desde **Gestión → Menús** (botón **Imprimeix / Imprimir**):
+Desde la tarjeta del menú en el **Assistent IA** (dentro del chat) o desde **Gestión → Menús** (botón **Imprimeix / Imprimir**):
 
 - **Diseño:** Normal ✨, Halloween 🎃, Nadal/Navidad 🎄, Pasqua/Pascua 🐣 o Infantil 🎈. El elegido queda guardado en el menú. También se le puede pedir a la IA («posa-li el disseny de Nadal»).
 - **Idiomas:** español, catalán, francés, inglés, alemán, ruso, italiano y neerlandés. Al tocar un idioma marcado se ve en la vista previa; tocándolo otra vez se quita. **Tots / Todos** los marca todos.

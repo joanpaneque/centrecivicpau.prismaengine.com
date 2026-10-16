@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { Loader2, Mic, Square, X } from '@lucide/vue';
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import { RecorderError, useRecorder } from '@/assistant/useRecorder';
 import { t } from '@/i18n';
 
 /**
- * Microphone button: tap to talk, tap again to send. `lg` is the big round button of
- * Carta amb IA (with the time and a cancel button), `sm` fits next to the send button.
+ * Microphone button: tap to talk, tap again to send; `live` carries the text as it is
+ * spoken. `lg` is the big round button (with the time and a cancel button), `sm` fits
+ * next to the send button.
  */
 const props = withDefaults(defineProps<{ size?: 'lg' | 'sm'; disabled?: boolean }>(), { size: 'sm', disabled: false });
-const emit = defineEmits<{ text: [text: string]; recording: [active: boolean] }>();
+const emit = defineEmits<{ text: [text: string]; recording: [active: boolean]; live: [text: string] }>();
 
 const recorder = useRecorder();
+watch(recorder.live, (text) => emit('live', text));
 const busy = computed(() => recorder.state.value !== 'idle');
 const time = computed(() => `${Math.floor(recorder.seconds.value / 60)}:${String(recorder.seconds.value % 60).padStart(2, '0')}`);
 const ring = computed(() => 1 + recorder.level.value * 0.6);

@@ -36,6 +36,8 @@ export type MenuPreview = {
     startsOn: string | null;
     endsOn: string | null;
     sections: { name: T9n; choices: number; items: { name: T9n; supplement: number }[] }[];
+    /** Set when the assistant prepared a print: languages to preselect. */
+    print?: { languages: string[] } | null;
 };
 
 export type StudioMeta = { actions?: StudioAction[]; previews?: (FamilyPreview | MenuPreview)[]; options?: string[] };

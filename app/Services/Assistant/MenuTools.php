@@ -127,6 +127,11 @@ class MenuTools
                 'id' => ['type' => 'integer'],
                 'template' => self::templateParam(),
             ], ['id', 'template']),
+            self::fn('print_set_menu', 'Prepara la impresión de un menú: sale en el chat con la hoja A4 de verdad, los idiomas marcados y el botón para generar el PDF (una hoja por idioma). Úsalo cuando pidan imprimirlo, verlo impreso o sacarlo en otros idiomas.', [
+                'id' => ['type' => 'integer'],
+                'languages' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => MenuDocument::LOCALES], 'description' => 'Idiomas a imprimir: es, ca, fr, en, de, ru, it, nl. Por defecto ca y es.'],
+                'template' => self::templateParam(),
+            ], ['id']),
             self::fn('delete_set_menu', 'Borra un menú del día. SOLO después de que el usuario lo haya confirmado explícitamente.', [
                 'id' => ['type' => 'integer'],
                 'confirmed' => ['type' => 'boolean'],
@@ -196,6 +201,7 @@ class MenuTools
                 'delete_product' => $this->deleteProduct($args),
                 'save_set_menu' => $this->saveMenu($args),
                 'set_menu_template' => $this->menuTemplate($args),
+                'print_set_menu' => $this->printMenu($args),
                 'delete_set_menu' => $this->deleteMenu($args),
                 default => throw new MenuToolError("Herramienta desconocida: {$tool}"),
             });
@@ -541,6 +547,30 @@ class MenuTools
             'result' => ['ok' => true],
             'action' => ['kind' => 'updated', 'label' => 'Disseny del menú: '.$template],
             'preview' => ['type' => 'set_menu'] + $this->menuPreview($menu),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $args
+     * @return array{result: array<string, mixed>, action?: array{kind: string, label: string}, preview?: array<string, mixed>}
+     */
+    private function printMenu(array $args): array
+    {
+        $menu = SetMenu::query()->find((int) ($args['id'] ?? 0)) ?? throw new MenuToolError('No existe ese menú: mira los ids con get_set_menus.');
+        $languages = array_values(array_intersect(MenuDocument::LOCALES, array_map('strval', (array) ($args['languages'] ?? [])))) ?: ['ca', 'es'];
+
+        if (isset($args['template']) && in_array($args['template'], MenuDocument::TEMPLATES, true)) {
+            $menu->forceFill(['template' => $args['template']])->save();
+        }
+
+        // Translate now, so the preview and the PDF are ready when the card shows up.
+        $translated = app(MenuTranslator::class)->ensure($menu, $languages);
+        $menu->load('sections.items.product');
+
+        return [
+            'result' => ['ok' => true, 'languages' => $languages, 'translated' => $translated],
+            'action' => ['kind' => 'updated', 'label' => 'Llest per imprimir: '.strtoupper(implode(', ', $languages))],
+            'preview' => ['type' => 'set_menu', 'print' => ['languages' => $languages]] + $this->menuPreview($menu),
         ];
     }
 

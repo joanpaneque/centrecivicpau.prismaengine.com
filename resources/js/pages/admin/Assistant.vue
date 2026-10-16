@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, usePage } from '@inertiajs/vue3';
-import AssistantChat from '@/components/assistant/AssistantChat.vue';
+import MenuStudio from '@/components/assistant/MenuStudio.vue';
 import { useI18n } from '@/i18n';
 import type { Auth } from '@/types';
 
@@ -15,9 +15,9 @@ defineOptions({
 </script>
 
 <template>
-    <Head :title="t('assistant.title')" />
+    <Head :title="t('studio.title')" />
 
     <div class="-mx-4 -my-6 flex h-[calc(100svh-4rem)] min-h-[32rem] flex-col">
-        <AssistantChat context="admin" class="min-h-0 flex-1 rounded-none border-0" :user-name="page.props.auth.user?.name" />
+        <MenuStudio context="admin" class="min-h-0 flex-1" :user-name="page.props.auth.user?.name" />
     </div>
 </template>

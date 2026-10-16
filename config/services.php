@@ -40,6 +40,8 @@ return [
         'key' => env('ELEVENLABS_API_KEY'),
         'url' => env('ELEVENLABS_URL', 'https://api.elevenlabs.io/v1'),
         'stt_model' => env('ELEVENLABS_STT_MODEL', 'scribe_v2'),
+        'realtime_url' => env('ELEVENLABS_REALTIME_URL', 'wss://api.elevenlabs.io/v1/speech-to-text/realtime'),
+        'realtime_model' => env('ELEVENLABS_REALTIME_MODEL', 'scribe_v2_realtime'),
     ],
 
     'slack' => [

@@ -1,20 +1,22 @@
 <script setup lang="ts">
-import { CalendarDays, ExternalLink, FileText, Printer } from '@lucide/vue';
+import { CalendarDays, ChevronDown, ExternalLink, FileText, Printer } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import type { FamilyPreview, MenuPreview } from '@/assistant/api';
-import MenuPrintDialog from '@/components/menus/MenuPrintDialog.vue';
+import MenuPrintPanel from '@/components/menus/MenuPrintPanel.vue';
 import { t, tl, tr } from '@/i18n';
 import { formatMoney } from '@/pos/money';
 
 /**
- * Card shown in Carta amb IA for what the assistant just made: a family with its products
- * or a set menu laid out like the printed one. "Obrir" opens the printable PDF.
+ * Card shown in the assistant chat for what it just made: a family with its products, or a
+ * set menu with the real printed page right there (design, languages and PDF). `latest`
+ * opens the print panel; older cards keep it folded.
  */
-const props = defineProps<{ preview: FamilyPreview | MenuPreview }>();
+const props = withDefaults(defineProps<{ preview: FamilyPreview | MenuPreview; latest?: boolean }>(), { latest: false });
 
 const TEMPLATE_ICONS: Record<string, string> = { classic: '✨', halloween: '🎃', christmas: '🎄', easter: '🐣', kids: '🎈' };
-const printing = ref(false);
 const template = ref(props.preview.type === 'set_menu' ? props.preview.template || 'classic' : 'classic');
+const printing = ref(props.latest || (props.preview.type === 'set_menu' && !!props.preview.print));
+const printLanguages = computed(() => (props.preview.type === 'set_menu' ? (props.preview.print?.languages ?? null) : null));
 
 const color = computed(() => props.preview.color || '#00056a');
 const text = computed(() => readable(color.value));
@@ -80,25 +82,25 @@ function readable(hex: string): string {
             </ul>
         </template>
 
-        <!-- Set menu, laid out like the printed menu -->
+        <!-- Set menu: header and the printed page itself -->
         <template v-else>
-            <div class="px-5 pt-5 pb-4 text-center" :style="{ borderBottom: `4px solid ${color}` }">
-                <p class="font-serif text-2xl font-bold" :style="{ color }">{{ tr(preview.name) }}</p>
-                <span class="mt-2 inline-block rounded-full px-4 py-1 text-lg font-bold" :style="{ background: color, color: text }">{{ formatMoney(preview.price) }}</span>
-                <p v-if="preview.includes" class="mt-2 text-sm text-slate-600">{{ tr(preview.includes) }}</p>
-                <p class="mt-2 flex items-center justify-center gap-1 text-xs text-slate-500">
-                    <CalendarDays class="size-3.5" /> {{ schedule }}<template v-if="!preview.active"> · {{ t('studio.inactive') }}</template>
-                    · {{ TEMPLATE_ICONS[template] ?? '' }} {{ t(`menuPrint.templates.${template}`) }}
-                </p>
-            </div>
-            <div class="space-y-4 px-5 py-4 text-center">
-                <div v-for="(section, index) in preview.sections" :key="index">
-                    <p class="font-serif text-sm font-bold tracking-wider uppercase" :style="{ color }">{{ tr(section.name) }}</p>
-                    <p v-if="section.choices > 1" class="text-[11px] text-slate-400">{{ t('setMenu.pick', { count: section.choices }) }}</p>
-                    <p v-for="(item, i) in section.items" :key="i" class="mt-1 text-[15px]">
-                        {{ tr(item.name) }}
-                        <span v-if="item.supplement" class="text-xs font-semibold" :style="{ color }">+{{ formatMoney(item.supplement) }}</span>
+            <div class="flex items-center gap-3 px-4 py-3" :style="{ background: color, color: text }">
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-lg font-bold">{{ tr(preview.name) }}</p>
+                    <p class="flex flex-wrap items-center gap-x-1 text-xs opacity-90">
+                        <CalendarDays class="size-3.5" /> {{ schedule }}<template v-if="!preview.active"> · {{ t('studio.inactive') }}</template>
+                        · {{ TEMPLATE_ICONS[template] ?? '' }} {{ t(`menuPrint.templates.${template}`) }}
                     </p>
+                </div>
+                <span class="shrink-0 rounded-full bg-white/90 px-3 py-1 text-base font-bold text-slate-900">{{ formatMoney(preview.price) }}</span>
+            </div>
+            <div v-if="printing" class="p-3">
+                <MenuPrintPanel compact :menu-id="preview.id" :menu-name="tr(preview.name)" :template="template" :languages="printLanguages" @template="(value) => (template = value)" />
+            </div>
+            <div v-else class="space-y-2 px-4 py-3 text-sm">
+                <div v-for="(section, index) in preview.sections" :key="index">
+                    <span class="font-semibold uppercase" :style="{ color }">{{ tr(section.name) }}:</span>
+                    {{ section.items.map((item) => tr(item.name)).join(', ') }}
                 </div>
             </div>
         </template>
@@ -107,10 +109,12 @@ function readable(hex: string): string {
             <button
                 v-if="preview.type === 'set_menu'"
                 type="button"
-                class="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#00056a] text-sm font-semibold text-white active:scale-[0.98]"
-                @click="printing = true"
+                class="flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold active:scale-[0.98]"
+                :class="printing ? 'border bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-100' : 'bg-[#00056a] text-white'"
+                @click="printing = !printing"
             >
-                <Printer class="size-5" /> {{ t('studio.printMenu') }}
+                <component :is="printing ? ChevronDown : Printer" class="size-5" :class="printing ? 'rotate-180' : ''" />
+                {{ printing ? t('studio.hidePrint') : t('studio.printMenu') }}
             </button>
             <a v-else :href="pdfUrl" target="_blank" rel="noopener" class="flex h-12 items-center justify-center gap-2 rounded-xl bg-[#00056a] text-sm font-semibold text-white active:scale-[0.98]">
                 <FileText class="size-5" /> {{ t('studio.openCartaPdf') }}
@@ -119,14 +123,5 @@ function readable(hex: string): string {
                 <ExternalLink class="size-5" /> {{ t('studio.openInAdmin') }}
             </a>
         </div>
-
-        <MenuPrintDialog
-            v-if="printing && preview.type === 'set_menu'"
-            :menu-id="preview.id"
-            :menu-name="tr(preview.name)"
-            :template="template"
-            @template="(value) => (template = value)"
-            @close="printing = false"
-        />
     </div>
 </template>
