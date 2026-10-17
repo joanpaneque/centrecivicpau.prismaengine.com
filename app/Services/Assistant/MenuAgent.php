@@ -4,13 +4,14 @@ namespace App\Services\Assistant;
 
 use App\Events\TpvChanged;
 use App\Models\User;
+use App\Services\Catalog\CartaWriter;
 use App\Services\Catalog\SetMenuWriter;
 use App\Services\TimeTracking\WorkedTime;
 
 /**
  * The AI assistant: a tool-using loop that answers questions about the app and, depending
  * on who asks and from where, takes orders on the POS (everyone except kitchen), manages
- * the carta and menus, and reads reports of the whole business (administrators). Each
+ * the catalog, the set menus and the printable cartas, and reads reports of the whole business (administrators). Each
  * executed step is reported live through $emit; the turn ends with a reply, the cards to
  * show and, optionally, big answer buttons.
  */
@@ -21,6 +22,7 @@ class MenuAgent
     public function __construct(
         private readonly AssistantService $assistant,
         private readonly SetMenuWriter $writer,
+        private readonly CartaWriter $cartaWriter,
         private readonly WorkedTime $worked,
     ) {}
 
@@ -48,6 +50,7 @@ class MenuAgent
     {
         $can = $this->abilities($user, $context);
         $tools = new MenuTools($user, $this->writer);
+        $cartas = new CartaTools($user, $this->cartaWriter);
         $business = new BusinessTools($locale === 'es' ? 'es' : 'ca', $this->worked);
         $orders = new OrderTools;
         $allowed = [MenuTools::ASK => 'menu'];
@@ -60,6 +63,8 @@ class MenuAgent
             foreach (MenuTools::definitions() as $definition) {
                 $allowed[$definition['function']['name']] = 'menu';
             }
+
+            $allowed += array_fill_keys(CartaTools::toolNames(), 'carta');
         }
 
         if ($can['reports']) {
@@ -71,7 +76,7 @@ class MenuAgent
         }
 
         $definitions = array_values(array_filter(
-            [...MenuTools::definitions(), ...BusinessTools::definitions(), ...OrderTools::definitions()],
+            [...MenuTools::definitions(), ...CartaTools::definitions(), ...BusinessTools::definitions(), ...OrderTools::definitions()],
             fn (array $definition) => isset($allowed[$definition['function']['name']]),
         ));
         $messages = [['role' => 'system', 'content' => $this->systemPrompt($user, $locale, $can)], ...$history];
@@ -119,6 +124,7 @@ class MenuAgent
                     $status = match ($allowed[$name] ?? null) {
                         'business' => 'report',
                         'orders' => $name === 'get_floor' ? 'floor' : null,
+                        'carta' => $name === 'get_cartas' ? 'cartas' : null,
                         default => MenuTools::status($name),
                     };
 
@@ -128,6 +134,7 @@ class MenuAgent
 
                     $outcome = match ($allowed[$name] ?? null) {
                         'menu' => $tools->run($name, $args),
+                        'carta' => $cartas->run($name, $args),
                         'business' => $business->run($name, $args),
                         'orders' => $orders->run($name, $args),
                         default => ['result' => ['error' => 'Esta herramienta no está disponible para este usuario.']],
@@ -208,6 +215,10 @@ class MenuAgent
               · Nombres siempre en catalán y castellano, bien escritos, con mayúscula inicial. Precios en euros con IVA; sin precio = null. Posiciones desde 1.
               · Menús: secciones Primers (course 1), Segons (course 2), Postres (course 3); choices = cuántos platos elige el cliente. Si el plato existe en la carta usa su product_id. Para cambiar un menú, mándalo entero con su id.
               · Diseños: classic, halloween, christmas, easter, kids (infantil). Al guardar un menú se traduce solo a francés, inglés, alemán, ruso, italiano y neerlandés. Si piden imprimirlo o verlo en otros idiomas, usa print_set_menu: en el chat sale la hoja A4 con el botón para generar el PDF (una hoja por idioma).
+            - CARTAS IMPRIMIBLES (cosa distinta de los menús y de la carta del TPV): una carta de bebidas, de tapas, de postres, de vinos… con secciones y platos, cada uno con su precio y, si quieren, una descripción corta. Mismos diseños, idiomas e impresión que los menús.
+              · Si dicen «carta» refiriéndose a un documento para imprimir o enseñar al cliente, es esto (save_carta, edit_carta, print_carta). Si dicen «posa'l a la carta» refiriéndose al TPV (para cobrarlo), son productos (create_product).
+              · PRECIOS: si el usuario dice el precio, pásalo en price. Si NO lo dice, mira get_catalog: si el plato está en el TPV pasa su product_id y NO pongas price (se usa el del TPV y lo sigue si cambia). Si no está en el TPV, NO inventes el precio: pregúntalo con ask_user (sin opciones). La herramienta rechaza los platos sin precio y te dice cuáles faltan.
+              · Para cambios sueltos («afegeix les braves a 5 €», «treu el flam», «puja el vermut a 3 €», «canvia el disseny a Nadal») usa edit_carta con la lista de cambios; no reescribas la carta entera. Lee antes los ids con get_cartas. Quitar un plato o sección que piden quitar no necesita confirmación; borrar la carta entera sí.
             TEXT;
         }
 
@@ -230,8 +241,8 @@ class MenuAgent
 
         Reglas generales:
         - Si una petición tiene varias partes, haz todas las que se entiendan y pregunta solo por lo que falte.
-        - Las tarjetas (comanda, familia, menú, informe) salen solas en el chat: no repitas su contenido en el texto. Responde corto.
-        - Usa ask_user cuando falte información o para confirmar algo delicado, y al terminar un encargo para ofrecer 2-4 siguientes pasos útiles. Opciones cortas (máximo 6 palabras), como las diría el usuario, en su idioma.
+        - Las tarjetas (comanda, familia, menú, carta, informe) salen solas en el chat: no repitas su contenido en el texto. Responde corto.
+        - Usa ask_user SOLO cuando falte información o para confirmar algo delicado. Si la respuesta es cerrada (Sí/No, caña o jarra…) pon opciones cortas (máximo 6 palabras) como las diría el usuario; si es abierta (un precio, un nombre) no pongas opciones. Al terminar un encargo NO ofrezcas siguientes pasos ni sugerencias: di lo que has hecho y para.
         - Si piden algo que no puedes hacer, dilo y explica dónde se hace en la aplicación.
         - Responde en el idioma del usuario (por defecto {$language}). Sin tecnicismos ni ids en el texto.
 

@@ -7,11 +7,13 @@ import { t } from '@/i18n';
 import { xsrfToken } from '@/lib/http';
 
 /**
- * Print a set menu: pick the design and the languages, check the live A4 preview, and get
- * one PDF with a page per language. The chosen design is remembered on the menu. Used
- * inline in the assistant chat and inside the print dialog of the back office.
+ * Print a set menu or a carta: pick the design and the languages, check the live A4
+ * preview, and get one PDF with a page per language. The chosen design is remembered on
+ * the menu or carta. Used inline in the assistant chat and inside the print dialog of the
+ * back office.
  */
-const props = withDefaults(defineProps<{ menuId: number; menuName: string; template?: string | null; languages?: string[] | null; compact?: boolean }>(), {
+const props = withDefaults(defineProps<{ menuId: number; menuName: string; kind?: 'menu' | 'carta'; template?: string | null; languages?: string[] | null; compact?: boolean }>(), {
+    kind: 'menu',
     template: null,
     languages: null,
     compact: false,
@@ -51,7 +53,8 @@ const scale = ref(0.4);
 let observer: ResizeObserver | null = null;
 
 const ordered = computed(() => LANGUAGES.map((l) => l.id).filter((id) => selected.value.includes(id)));
-const previewUrl = computed(() => `/gestion/menus/${props.menuId}/vista?template=${template.value}&lang=${previewLang.value}`);
+const base = computed(() => `/gestion/${props.kind === 'carta' ? 'cartas' : 'menus'}/${props.menuId}`);
+const previewUrl = computed(() => `${base.value}/vista?template=${template.value}&lang=${previewLang.value}`);
 const allSelected = computed(() => selected.value.length === LANGUAGES.length);
 
 onMounted(() => {
@@ -73,7 +76,7 @@ async function pickTemplate(id: string): Promise<void> {
     template.value = id;
 
     try {
-        await fetch(`/gestion/menus/${props.menuId}/plantilla`, {
+        await fetch(`${base.value}/plantilla`, {
             method: 'PATCH',
             credentials: 'same-origin',
             headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-XSRF-TOKEN': xsrfToken() },
@@ -117,7 +120,7 @@ async function generate(): Promise<void> {
     generating.value = true;
 
     try {
-        const response = await fetch(`/gestion/menus/${props.menuId}/pdf?template=${template.value}&langs=${ordered.value.join(',')}`, {
+        const response = await fetch(`${base.value}/pdf?template=${template.value}&langs=${ordered.value.join(',')}`, {
             credentials: 'same-origin',
             headers: { Accept: 'application/pdf', 'X-Requested-With': 'XMLHttpRequest' },
         });
@@ -214,13 +217,13 @@ async function generate(): Promise<void> {
                         <span v-if="previewLang === language.id" class="absolute -top-2 right-1 rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-amber-950">{{ t('menuPrint.previewing') }}</span>
                     </button>
                 </div>
-                <p class="mt-2 text-xs text-slate-500">{{ t('menuPrint.languagesHelp') }}</p>
+                <p class="mt-2 text-xs text-slate-500">{{ t(kind === 'carta' ? 'menuPrint.languagesHelpCarta' : 'menuPrint.languagesHelp') }}</p>
             </div>
 
             <Button class="h-14 w-full bg-[#00056a] text-base" :disabled="generating || !ordered.length" @click="generate">
                 <Loader2 v-if="generating" class="size-5 animate-spin" />
                 <FileDown v-else class="size-5" />
-                {{ generating ? t('menuPrint.generating') : t('menuPrint.generate', { count: ordered.length }) }}
+                {{ generating ? t('menuPrint.generating') : t(kind === 'carta' ? 'menuPrint.generateCarta' : 'menuPrint.generate', { count: ordered.length }) }}
             </Button>
         </div>
     </div>

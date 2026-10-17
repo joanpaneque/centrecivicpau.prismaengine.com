@@ -15,6 +15,8 @@ return [
     'saved' => 'Desat.',
     'deleted' => 'Eliminat.',
     'duplicated' => 'Duplicat.',
+    'carta_item_name' => 'Cada plat necessita un nom.',
+    'carta_item_price' => 'Falta el preu: aquest plat no és a la carta del TPV o no hi té preu.',
     'invoice_already_issued' => 'Aquest tiquet ja té una factura emesa.',
     'invoice_issued' => 'Factura emesa correctament.',
     'invoice_subject' => 'La teva factura :number',

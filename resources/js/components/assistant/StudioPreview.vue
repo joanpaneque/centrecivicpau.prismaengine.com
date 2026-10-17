@@ -1,27 +1,28 @@
 <script setup lang="ts">
-import { CalendarDays, ChevronDown, ExternalLink, FileText, Printer } from '@lucide/vue';
+import { CalendarDays, ChevronDown, ExternalLink, FileText, Link2, Printer } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import type { FamilyPreview, MenuPreview } from '@/assistant/api';
+import type { CartaPreview, FamilyPreview, MenuPreview } from '@/assistant/api';
 import MenuPrintPanel from '@/components/menus/MenuPrintPanel.vue';
 import { t, tl, tr } from '@/i18n';
 import { formatMoney } from '@/pos/money';
 
 /**
  * Card shown in the assistant chat for what it just made: a family with its products, or a
- * set menu with the real printed page right there (design, languages and PDF). `latest`
- * opens the print panel; older cards keep it folded.
+ * set menu or carta with the real printed page right there (design, languages and PDF).
+ * `latest` opens the print panel; older cards keep it folded.
  */
-const props = withDefaults(defineProps<{ preview: FamilyPreview | MenuPreview; latest?: boolean }>(), { latest: false });
+const props = withDefaults(defineProps<{ preview: FamilyPreview | MenuPreview | CartaPreview; latest?: boolean }>(), { latest: false });
 
 const TEMPLATE_ICONS: Record<string, string> = { classic: '✨', halloween: '🎃', christmas: '🎄', easter: '🐣', kids: '🎈' };
-const template = ref(props.preview.type === 'set_menu' ? props.preview.template || 'classic' : 'classic');
-const printing = ref(props.latest || (props.preview.type === 'set_menu' && !!props.preview.print));
-const printLanguages = computed(() => (props.preview.type === 'set_menu' ? (props.preview.print?.languages ?? null) : null));
+const printable = computed(() => props.preview.type !== 'family');
+const template = ref(props.preview.type !== 'family' ? props.preview.template || 'classic' : 'classic');
+const printing = ref(props.latest || (props.preview.type !== 'family' && !!props.preview.print));
+const printLanguages = computed(() => (props.preview.type !== 'family' ? (props.preview.print?.languages ?? null) : null));
 
-const color = computed(() => props.preview.color || '#00056a');
+const color = computed(() => (props.preview.type === 'carta' ? '#00056a' : props.preview.color || '#00056a'));
 const text = computed(() => readable(color.value));
 const pdfUrl = '/gestion/carta/pdf';
-const manageUrl = computed(() => (props.preview.type === 'set_menu' ? '/gestion/menus' : '/gestion/carta'));
+const manageUrl = computed(() => ({ set_menu: '/gestion/menus', carta: '/gestion/cartas', family: '/gestion/carta' })[props.preview.type]);
 
 const schedule = computed(() => {
     if (props.preview.type !== 'set_menu') {
@@ -82,6 +83,35 @@ function readable(hex: string): string {
             </ul>
         </template>
 
+        <!-- Carta: header, its dishes with prices, and the printed page itself -->
+        <template v-else-if="preview.type === 'carta'">
+            <div class="flex items-center gap-3 px-4 py-3" :style="{ background: color, color: text }">
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-lg font-bold">{{ tr(preview.name) }}</p>
+                    <p class="flex flex-wrap items-center gap-x-1 text-xs opacity-90">
+                        <template v-if="preview.subtitle">{{ tr(preview.subtitle) }} · </template>
+                        {{ TEMPLATE_ICONS[template] ?? '' }} {{ t(`menuPrint.templates.${template}`) }}<template v-if="!preview.active"> · {{ t('studio.inactive') }}</template>
+                    </p>
+                </div>
+            </div>
+            <div v-if="printing" class="p-3">
+                <MenuPrintPanel compact kind="carta" :menu-id="preview.id" :menu-name="tr(preview.name)" :template="template" :languages="printLanguages" @template="(value) => (template = value)" />
+            </div>
+            <div v-else class="divide-y">
+                <div v-for="(section, index) in preview.sections" :key="index" class="px-4 py-2.5">
+                    <p class="mb-1 text-xs font-bold tracking-wide text-[#00056a] uppercase dark:text-blue-300">{{ tr(section.name) }}</p>
+                    <div v-for="(item, i) in section.items" :key="i" class="flex items-baseline gap-2 py-0.5 text-sm">
+                        <span class="min-w-0 flex-1">
+                            <span class="font-medium">{{ tr(item.name) }}</span>
+                            <span v-if="item.description" class="block text-xs text-slate-500 italic">{{ tr(item.description) }}</span>
+                        </span>
+                        <Link2 v-if="item.fromCatalog" class="size-3.5 shrink-0 text-slate-400" :aria-label="t('studio.priceFromCatalog')" />
+                        <span v-if="item.price !== null" class="font-semibold tabular-nums">{{ formatMoney(item.price) }}</span>
+                    </div>
+                </div>
+            </div>
+        </template>
+
         <!-- Set menu: header and the printed page itself -->
         <template v-else>
             <div class="flex items-center gap-3 px-4 py-3" :style="{ background: color, color: text }">
@@ -107,7 +137,7 @@ function readable(hex: string): string {
 
         <div class="grid grid-cols-2 gap-2 border-t bg-slate-50 p-2 dark:bg-slate-800/50">
             <button
-                v-if="preview.type === 'set_menu'"
+                v-if="printable"
                 type="button"
                 class="flex h-12 items-center justify-center gap-2 rounded-xl text-sm font-semibold active:scale-[0.98]"
                 :class="printing ? 'border bg-white text-slate-700 dark:bg-slate-900 dark:text-slate-100' : 'bg-[#00056a] text-white'"

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ApiTokenController;
 use App\Http\Controllers\Admin\AuditController;
+use App\Http\Controllers\Admin\CartaController;
 use App\Http\Controllers\Admin\CatalogController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DeviceController;
@@ -140,6 +141,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('menus/{menu}/vista', [SetMenuController::class, 'preview'])->name('set-menus.preview');
         Route::patch('menus/{menu}/plantilla', [SetMenuController::class, 'template'])->name('set-menus.template');
         Route::get('carta/pdf', [CatalogController::class, 'pdf'])->name('catalog.pdf');
+
+        Route::get('cartas', [CartaController::class, 'index'])->name('cartas');
+        Route::post('cartas', [CartaController::class, 'store'])->name('cartas.store');
+        Route::patch('cartas/{carta}', [CartaController::class, 'update'])->name('cartas.update');
+        Route::post('cartas/{carta}/duplicar', [CartaController::class, 'duplicate'])->name('cartas.duplicate');
+        Route::delete('cartas/{carta}', [CartaController::class, 'destroy'])->name('cartas.destroy');
+        Route::get('cartas/{carta}/pdf', [CartaController::class, 'pdf'])->name('cartas.pdf');
+        Route::get('cartas/{carta}/vista', [CartaController::class, 'preview'])->name('cartas.preview');
+        Route::patch('cartas/{carta}/plantilla', [CartaController::class, 'template'])->name('cartas.template');
 
         Route::get('impresion', [PrintingController::class, 'index'])->name('printing');
         Route::get('impresion/registro', [PrintingController::class, 'log'])->name('printing.log');

@@ -206,5 +206,7 @@ test('the assistant also answers from the manual', function () {
 
     expect(app(MenuAgent::class)->systemPrompt($admin, 'ca'))
         ->toContain('MANUAL DE LA APLICACIÓN')
-        ->toContain('print_set_menu');
+        ->toContain('print_set_menu')
+        ->toContain('edit_carta')
+        ->not->toContain('ofrecer 2-4 siguientes pasos');
 });

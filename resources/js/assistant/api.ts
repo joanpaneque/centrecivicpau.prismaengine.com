@@ -5,7 +5,7 @@ import './assistant.css';
 
 export type AssistantContext = 'tpv' | 'admin';
 
-/** help: questions about the app. carta: Carta amb IA, the assistant changes the catalog and set menus. */
+/** help: questions about the app. carta: Carta amb IA, the assistant changes the catalog, set menus and printable cartas. */
 export type AssistantKind = 'help' | 'carta';
 
 export type T9n = { ca: string; es: string };
@@ -40,6 +40,19 @@ export type MenuPreview = {
     print?: { languages: string[] } | null;
 };
 
+/** A printable carta (drinks, tapas…); prices in cents, from the POS product when `fromCatalog`. */
+export type CartaPreview = {
+    type: 'carta';
+    id: number;
+    name: T9n;
+    subtitle: T9n | null;
+    template: string;
+    active: boolean;
+    sections: { name: T9n; items: { name: T9n; description: T9n | null; price: number | null; fromCatalog: boolean }[] }[];
+    /** Set when the assistant prepared a print: languages to preselect. */
+    print?: { languages: string[] } | null;
+};
+
 export type ReportFormat = 'eur' | 'int' | 'qty' | 'minutes' | 'text';
 
 /** Business report computed on the server (figures never come from the model). */
@@ -67,7 +80,7 @@ export type OrderPreview = {
     problems: string[];
 };
 
-export type StudioPreviewData = FamilyPreview | MenuPreview | ReportPreview | OrderPreview;
+export type StudioPreviewData = FamilyPreview | MenuPreview | CartaPreview | ReportPreview | OrderPreview;
 
 export type StudioMeta = { actions?: StudioAction[]; previews?: StudioPreviewData[]; options?: string[] };
 
@@ -88,7 +101,7 @@ export type ChatMessage = {
 export type ChatEvent =
     | { type: 'start'; conversation: Conversation; question: ChatMessage }
     | { type: 'delta'; text: string }
-    | { type: 'status'; status: 'catalog' | 'menus' | 'report' | 'floor' }
+    | { type: 'status'; status: 'catalog' | 'menus' | 'cartas' | 'report' | 'floor' }
     | { type: 'action'; action: StudioAction }
     | { type: 'done'; message: ChatMessage; conversation: Conversation; error: string | null }
     | { type: 'error'; message: string; discarded: 'conversation' | 'question' };

@@ -2,14 +2,16 @@
 
 namespace App\Services\Assistant;
 
+use App\Models\Carta;
 use App\Models\SetMenu;
+use App\Services\Catalog\CartaDocument;
 use App\Services\Catalog\MenuDocument;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Translates a set menu (name, what it includes, sections and dishes) into the printing
- * languages in one call. Results are stored on the menu together with a hash of the
- * Catalan/Spanish texts, so a later change to the menu invalidates them.
+ * Translates a set menu or a carta (name, subtitle, sections, dishes and descriptions)
+ * into the printing languages in one call. Results are stored on the model together with
+ * a hash of the Catalan/Spanish texts, so a later change invalidates them.
  */
 class MenuTranslator
 {
@@ -20,17 +22,19 @@ class MenuTranslator
     public function __construct(
         private readonly AssistantService $assistant,
         private readonly MenuDocument $document,
+        private readonly CartaDocument $cartas,
     ) {}
 
     /**
-     * Make sure the menu has up-to-date translations for these languages. Returns false
-     * when some could not be produced (the page then falls back to Spanish).
+     * Make sure the menu or carta has up-to-date translations for these languages. Returns
+     * false when some could not be produced (the page then falls back to Spanish).
      *
      * @param  list<string>  $locales
      */
-    public function ensure(SetMenu $menu, array $locales): bool
+    public function ensure(SetMenu|Carta $menu, array $locales): bool
     {
-        $missing = $this->document->missing($menu, $locales);
+        $document = $menu instanceof Carta ? $this->cartas : $this->document;
+        $missing = $document->missing($menu, $locales);
 
         if ($missing === []) {
             return true;
@@ -40,21 +44,18 @@ class MenuTranslator
             return false;
         }
 
-        $source = $this->document->source($menu);
-        $hash = $this->document->hash($menu);
+        $source = $document->source($menu);
+        $hash = $document->hash($menu);
         $languages = implode(', ', array_map(fn (string $l) => "{$l} = ".self::NAMES[$l], $missing));
-        $shape = [
-            'name' => '…',
-            'includes' => $source['includes'] ? '…' : null,
-            'sections' => array_map(fn (array $s) => ['name' => '…', 'items' => array_fill(0, count($s['items']), '…')], $source['sections']),
-        ];
+        $shape = $this->shape($source);
+        $kind = $menu instanceof Carta ? 'una carta' : 'un menú';
 
         $system = <<<PROMPT
-        Eres traductor de cartas de restaurante. Te paso un menú en catalán (ca) y castellano (es).
+        Eres traductor de cartas de restaurante. Te paso {$kind} en catalán (ca) y castellano (es): cada texto viene como {"ca": …, "es": …}.
         Tradúcelo a: {$languages}.
         - Traducción natural de carta de restaurante, con mayúscula inicial. Platos típicos catalanes o españoles muy conocidos (paella, crema catalana, escalivada, pa amb tomàquet, tortilla…) se dejan en su nombre original o con una aclaración breve si hace falta.
         - No traduzcas nombres propios ni marcas. No añadas precios.
-        - Mantén EXACTAMENTE la estructura: mismo número de secciones y de platos, en el mismo orden.
+        - Mantén EXACTAMENTE la estructura: mismo número de secciones y de platos, en el mismo orden; cada texto pasa a ser una sola cadena y los null siguen siendo null.
         Responde SOLO con un objeto JSON cuyas claves sean los códigos de idioma y cada valor tenga esta forma:
         PROMPT;
 
@@ -64,7 +65,7 @@ class MenuTranslator
                 ['role' => 'user', 'content' => (string) json_encode($source, JSON_UNESCAPED_UNICODE)],
             ], []);
         } catch (AssistantException $e) {
-            Log::warning('Menu translation failed', ['menu' => $menu->id, 'error' => $e->getMessage()]);
+            Log::warning('Menu translation failed', [$menu instanceof Carta ? 'carta' : 'menu' => $menu->id, 'error' => $e->getMessage()]);
 
             return false;
         }
@@ -79,9 +80,10 @@ class MenuTranslator
     }
 
     /**
-     * Keep only well-formed languages whose structure matches the menu.
+     * Keep only well-formed languages whose structure matches the source: same keys, lists
+     * of the same length, and a string (or null) in place of every {ca, es} text.
      *
-     * @param  array{name: array<string, string>, includes: array<string, string>|null, sections: list<array{name: array<string, string>, items: list<array<string, string>>}>}  $source
+     * @param  array<string, mixed>  $source
      * @param  list<string>  $locales
      * @return array<string, array<string, mixed>>
      */
@@ -100,32 +102,72 @@ class MenuTranslator
         foreach ($locales as $locale) {
             $value = $data[$locale] ?? null;
 
-            if (! is_array($value) || ! is_string($value['name'] ?? null) || count((array) ($value['sections'] ?? [])) !== count($source['sections'])) {
+            if (! is_array($value) || ! is_string($value['name'] ?? null)) {
                 continue;
             }
 
-            $sections = [];
+            $matched = $this->match($source, $value);
 
-            foreach ($source['sections'] as $s => $section) {
-                $row = $value['sections'][$s] ?? null;
-
-                if (! is_array($row) || count((array) ($row['items'] ?? [])) !== count($section['items'])) {
-                    continue 2;
-                }
-
-                $sections[] = [
-                    'name' => mb_substr(trim((string) ($row['name'] ?? '')), 0, 120),
-                    'items' => array_map(fn ($item) => mb_substr(trim((string) $item), 0, 160), array_values((array) $row['items'])),
-                ];
+            if (is_array($matched)) {
+                $result[$locale] = $matched;
             }
-
-            $result[$locale] = [
-                'name' => mb_substr(trim($value['name']), 0, 120),
-                'includes' => is_string($value['includes'] ?? null) ? mb_substr(trim($value['includes']), 0, 250) : null,
-                'sections' => $sections,
-            ];
         }
 
         return $result;
+    }
+
+    /**
+     * The source with every text replaced by "…": what the answer has to look like.
+     */
+    private function shape(mixed $source): mixed
+    {
+        if ($this->isText($source)) {
+            return '…';
+        }
+
+        return is_array($source) ? array_map(fn ($node) => $this->shape($node), $source) : null;
+    }
+
+    /**
+     * @return mixed the translated node, or false when its structure does not match
+     */
+    private function match(mixed $source, mixed $value): mixed
+    {
+        if ($source === null) {
+            return null;
+        }
+
+        if ($this->isText($source)) {
+            return is_string($value) && trim($value) !== '' ? mb_substr(trim($value), 0, 250) : null;
+        }
+
+        if (! is_array($source) || ! is_array($value)) {
+            return false;
+        }
+
+        if (array_is_list($source)) {
+            if (! array_is_list($value) || count($value) !== count($source)) {
+                return false;
+            }
+        }
+
+        $result = [];
+
+        foreach ($source as $key => $node) {
+            $matched = $this->match($node, $value[$key] ?? null);
+
+            if ($matched === false) {
+                return false;
+            }
+
+            $result[$key] = $matched;
+        }
+
+        return $result;
+    }
+
+    private function isText(mixed $node): bool
+    {
+        return is_array($node) && array_keys($node) === ['ca', 'es'];
     }
 }

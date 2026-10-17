@@ -269,34 +269,41 @@ Solo administrador.
 - Producto: nombre ca/es, categoría, precio **con IVA incluido** (se puede dejar **vacío** = sin precio; se pondrá desde el TPV), tipo de IVA (por defecto 10 %), foto (recorte cuadrado), color, alérgenos, modificadores, destino, disponible sí/no, orden. Duplicar, reordenar, agotar.
 - Grupos de modificadores: asignables a categoría o producto; obligatorios o de elección múltiple.
 
-### Asistente IA (comandas por voz, informes, carta y menús)
+### Asistente IA (comandas por voz, informes, carta, menús y cartas)
 
 **Assistent IA** (en el menú del TPV y, para administradores, en Gestión) es un solo asistente que se usa **hablando o escribiendo**. Lo que puede hacer depende de quién lo usa:
 
 - **Todos:** resolver dudas de la aplicación (con el manual).
 - **Sala y administradores, en el TPV — comandas por voz:** «posa dues canyes i un tallat a la taula 4», «un cafè amb llet sense lactosa per a la 7 i envia-ho». Añade a la mesa todo lo que entiende (queda **por enviar**, como si se hubiera tocado; con «envia-ho» lo envía a cocina y barra) y **pregunta con botones lo que no tiene claro** (por ejemplo «cervesa»: ¿canya, gerra o quinto?; una mesa que no existe; una opción obligatoria), sin dejar de poner lo demás. La tarjeta verde muestra qué ha puesto, lo que falta, y los botones **Obre la taula** y **Envia**.
 - **Administradores — todo el negocio (solo lectura):** «com anem avui?», «vendes d'aquesta setmana per dia», «què s'ha venut més aquest mes?», «vendes per cambrer de l'agost», «busca el tiquet de l'entrecot d'ahir», «tancaments de caixa amb descuadre», «hores treballades de la Marta», «reserves de dissabte», «anul·lacions i descomptes d'aquesta setmana», «quant hem gastat en proveïdors». Sale una **tarjeta de informe** con las cifras clave, un **gráfico** (tocar una barra muestra su valor), la **tabla** con los datos exactos, botón **CSV** (abre en Excel) y enlaces a Gestión. Las cifras salen siempre de los datos, no las inventa la IA. **No puede modificar** tiquets, cobros, cierres ni fichajes.
-- **Administradores — carta y menús:** familias, productos, precios, menús, diseños e impresión (ver abajo).
+- **Administradores — carta, menús y cartas:** familias, productos, precios, menús, cartas imprimibles, diseños e impresión (ver abajo).
 - **Micrófono grande:** tocar para hablar, volver a tocar para enviar (la ✕ cancela). **Mientras hablas, el texto va apareciendo en directo** en el chat; al tocar otra vez se envía. Necesita `ELEVENLABS_API_KEY` en el `.env` y permiso de micrófono en el navegador (HTTPS). Si el directo fallara, se transcribe la grabación al terminar. El asistente de ayuda también tiene micrófono, y escribe lo dictado en la caja de texto.
 - **Manual** (icono del libro) y **Aturar / Parar** mientras trabaja.
 - Qué puede hacer: crear y cambiar **familias** (nombre, color, orden), **productos** (nombre en catalán y castellano, precio o sin precio, familia, posición, opciones, agotado) y **menús del día** completos (precio, qué incluye, días, secciones y platos con suplementos). También puede retirar productos o borrar menús, pero **siempre pregunta antes**.
+- **Cartas imprimibles** (aparte de los menús): una carta de tapas, de bebidas, de postres, de vinos… con secciones, platos, una descripción corta opcional y el precio de cada uno. Ejemplos: «Fes-me una carta de tapes amb les braves, les croquetes i el pop a 12,90 €», «Afegeix el flam a la carta de postres», «Treu els calamars», «Puja el vermut a 3 €», «Posa-li el disseny de Nadal», «Imprimeix la carta de vins en anglès».
+  - **Precios:** si no se le dice el precio de un plato, lo busca en la carta del TPV y usa el de ese producto (y si después cambia el precio en el TPV, la carta cambia también). Si el plato no está en el TPV, **pregunta el precio**; nunca se lo inventa.
+  - Los cambios se piden de uno en uno (añadir, quitar, cambiar precio, mover, renombrar secciones…) sin repetir toda la carta. Quitar un plato que se le pide quitar lo hace directamente; borrar la carta entera, siempre pregunta antes.
 - Ejemplos: «Crea el menú de dilluns a 13,50 € amb 3 primers i 3 segons», «Crea la família Tapes i posa-hi braves i croquetes», «Posa les croquetes les primeres», «Canvia el segon plat del menú per lluç».
-- Lo que hace aparece en verde (✓) y sale una **tarjeta** en el chat: la familia con sus productos, o el **menú con su hoja A4 de verdad**, con los diseños, los idiomas y **Genera el PDF** ahí mismo (una hoja por idioma). Se le puede pedir directamente: «imprimeix el menú en anglès i francès» y deja la tarjeta lista con esos idiomas marcados. **Obre a Gestió** abre la pantalla correspondiente.
-- Debajo salen **botones grandes** con respuestas (por ejemplo «Està bé així», «Canvia el preu») para seguir con un toque. Se puede seguir pidiendo cambios sobre lo mismo en la misma conversación.
+- Lo que hace aparece en verde (✓) y sale una **tarjeta** en el chat: la familia con sus productos, o el **menú o la carta con su hoja A4 de verdad**, con los diseños, los idiomas y **Genera el PDF** ahí mismo. Se le puede pedir directamente: «imprimeix el menú en anglès i francès» y deja la tarjeta lista con esos idiomas marcados. **Obre a Gestió** abre la pantalla correspondiente.
+- El chat se abre vacío, listo para hablar o escribir (no hay mensajes propuestos). Cuando el asistente necesita una respuesta cerrada (por ejemplo «Sí, esborra-ho» / «No», o canya / gerra) salen **botones grandes** para contestar con un toque. Se puede seguir pidiendo cambios sobre lo mismo en la misma conversación.
 - Todo queda registrado en la **Auditoría** con el usuario que lo pidió. El historial de conversaciones está en el botón de la izquierda.
 
-### Imprimir un menú (plantillas e idiomas)
+### Imprimir un menú o una carta (plantillas e idiomas)
 
-Desde la tarjeta del menú en el **Assistent IA** (dentro del chat) o desde **Gestión → Menús** (botón **Imprimeix / Imprimir**):
+Desde la tarjeta del menú o de la carta en el **Assistent IA** (dentro del chat), o desde **Gestión → Menús** / **Gestión → Cartes** (botón **Imprimeix / Imprimir**):
 
 - **Diseño:** Normal ✨, Halloween 🎃, Nadal/Navidad 🎄, Pasqua/Pascua 🐣 o Infantil 🎈. El elegido queda guardado en el menú. También se le puede pedir a la IA («posa-li el disseny de Nadal»).
 - **Idiomas:** español, catalán, francés, inglés, alemán, ruso, italiano y neerlandés. Al tocar un idioma marcado se ve en la vista previa; tocándolo otra vez se quita. **Tots / Todos** los marca todos.
 - La **vista previa** muestra la hoja tal como saldrá. **Genera el PDF** crea un documento con **una hoja A4 por idioma**, con el logo; se abre en una pestaña nueva para imprimirlo.
-- Cada idioma cabe siempre en una sola hoja: si el menú es largo, la letra se ajusta sola.
+- Cada idioma de un menú cabe siempre en una sola hoja: si el menú es largo, la letra se ajusta sola. Una carta corta también; una carta larga (por ejemplo de vinos) continúa en las hojas necesarias, con la misma letra en todas, y cada idioma empieza en hoja nueva.
 - Las traducciones se hacen solas al guardar el menú (en segundo plano). Si al imprimir aún falta alguna, se hace en ese momento (tarda unos segundos). Si se cambia el menú, se vuelven a traducir.
 - Puede haber tantos menús como se quiera (del día, infantil, de grupo, de Navidad…): cada uno con su precio, días y diseño.
 
 ---
+
+### Cartas para imprimir (Gestión → Cartes)
+
+Cartas para imprimir o enseñar al cliente (bebidas, tapas, postres, vinos…), aparte de los menús del día y de la carta del TPV. Cada carta tiene nombre, subtítulo opcional (horario, «per compartir»…) y secciones con platos. Cada plato puede ser un **producto del TPV** (si se deja el precio vacío usa el del producto y lo sigue si cambia) o un **plato libre** con su precio; además, una descripción corta opcional. Botones: **Imprimeix**, **Edita**, **Duplica**. Lo más cómodo es crearlas y cambiarlas con el **Assistent IA**.
 
 ## 15. Menús del día (Gestión → Menús del día)
 

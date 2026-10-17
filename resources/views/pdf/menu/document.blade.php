@@ -1,8 +1,9 @@
 @php
     /*
-     * Printed set menu: one A4 page per language. $template picks the design; each page
-     * brings its own sizes (smaller type for long menus) so it fits on one sheet. Frame and
-     * drawings are position: fixed, which DomPDF repeats on every sheet.
+     * Printed set menu or carta: one A4 page per language (a long carta may take more).
+     * $template picks the design; each page brings its own sizes (smaller type for long
+     * menus) so it fits on one sheet. Frame and drawings are position: fixed, which
+     * DomPDF repeats on every sheet.
      */
     $svg = fn (string $body, string $box = '0 0 100 100') => 'data:image/svg+xml;base64,'.base64_encode('<svg xmlns="http://www.w3.org/2000/svg" viewBox="'.$box.'">'.$body.'</svg>');
 
@@ -131,6 +132,14 @@
         .vat { margin-top: 6mm; font-size: 8pt; color: {{ $t['soft'] }}; font-family: DejaVu Sans, Arial, sans-serif; }
         .kids-box { margin-left: auto; margin-right: auto; border-radius: 6mm; width: 120mm; background: #ffffff; border: 0.8mm solid #bae6fd; }
         .kids-box h2 { color: #ffffff; display: inline-block; padding: 0.8mm 5mm; border-radius: 5mm; letter-spacing: 0.6pt; }
+        .carta { padding-left: 34mm; padding-right: 34mm; }
+        .carta.more { padding-top: 26mm; }
+        .dishes { width: 100%; border-collapse: collapse; text-align: left; }
+        .dishes td { vertical-align: top; border-bottom: 0.25mm dotted {{ $t['accent'] }}; }
+        .dishes tr.end td { border-bottom: none; }
+        .dish { line-height: 1.25; }
+        .description { color: {{ $t['soft'] }}; font-style: italic; line-height: 1.25; }
+        .cost { width: 24mm; text-align: right; white-space: nowrap; font-weight: bold; font-family: DejaVu Sans, Arial, sans-serif; color: {{ $t['title'] }}; }
         @media screen {
             html, body { width: 210mm; height: 297mm; overflow: hidden; }
         }
@@ -144,6 +153,48 @@
 
 @foreach ($pages as $page)
     @php $z = $page['sizes']; @endphp
+    @if (($page['kind'] ?? 'menu') === 'carta')
+    <div class="sheet carta {{ $page['first'] ? '' : 'more' }} {{ $loop->last ? 'last' : '' }}">
+        @if ($page['first'])
+            @if ($logo)<img src="{{ $logo }}" alt="" style="height: {{ $z['logo'] }}mm; max-width: 60mm"><br>@endif
+            <h1 style="font-size: {{ $z['title'] }}pt; margin-top: {{ $z['titleGap'] }}mm">
+                @if ($template === 'kids')
+                    @foreach (mb_str_split($page['name']) as $i => $char)<span style="color: {{ $kidColors[$i % count($kidColors)] }}">{{ $char }}</span>@endforeach
+                @else
+                    {{ $page['name'] }}
+                @endif
+            </h1>
+            @if ($page['subtitle'])<div class="includes" style="font-size: {{ $z['includes'] }}pt; margin-top: {{ $z['includesGap'] }}mm">{{ $page['subtitle'] }}</div>@endif
+            <div style="margin: {{ $z['dividerTop'] }}mm 0 {{ $z['dividerBottom'] }}mm">
+                @if ($t['divider'])<img class="divider" src="{{ $t['divider'] }}" alt="">@else<div style="height: 4.6mm"></div>@endif
+            </div>
+        @endif
+
+        @foreach ($page['sections'] as $s => $section)
+            @if ($template === 'kids')
+                <div class="kids-box" style="margin-top: {{ $z['sectionGap'] }}mm; padding: {{ $z['boxPadding'] }}mm 6mm">
+                    <h2 style="font-size: {{ $z['section'] }}pt; background: {{ $kidColors[$s % count($kidColors)] }}; margin-bottom: {{ $z['headingGap'] }}mm">{{ $section['name'] }}</h2>
+            @else
+                <div style="margin-top: {{ $z['sectionGap'] }}mm">
+                    <h2 style="font-size: {{ $z['section'] }}pt; margin-bottom: {{ $z['headingGap'] }}mm">{{ $section['name'] }}</h2>
+            @endif
+                    <table class="dishes">
+                        @foreach ($section['items'] as $item)
+                            <tr class="{{ $loop->last ? 'end' : '' }}">
+                                <td style="padding: {{ $z['itemGap'] }}mm 2mm {{ $z['itemGap'] }}mm 0">
+                                    <div class="dish" style="font-size: {{ $z['item'] }}pt">{{ $item['name'] }}</div>
+                                    @if ($item['description'])<div class="description" style="font-size: {{ $z['includes'] }}pt">{{ $item['description'] }}</div>@endif
+                                </td>
+                                <td class="cost" style="font-size: {{ round($z['item'] * 0.9, 1) }}pt; padding: {{ $z['itemGap'] }}mm 0">{{ $item['price'] }}</td>
+                            </tr>
+                        @endforeach
+                    </table>
+                </div>
+        @endforeach
+
+        @if ($page['last'])<div class="vat">{{ $page['vat'] }}@if ($business) · {{ $business }}@endif</div>@endif
+    </div>
+    @else
     <div class="sheet {{ $loop->last ? 'last' : '' }}">
         @if ($logo)<img src="{{ $logo }}" alt="" style="height: {{ $z['logo'] }}mm; max-width: 60mm"><br>@endif
 
@@ -179,6 +230,7 @@
 
         <div class="vat">{{ $page['vat'] }}@if ($business) · {{ $business }}@endif</div>
     </div>
+    @endif
 @endforeach
 </body>
 </html>

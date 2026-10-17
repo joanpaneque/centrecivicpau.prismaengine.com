@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
     BookOpen,
+    BookOpenText,
     CalendarClock,
     Clock,
     KeyRound,
@@ -40,6 +41,7 @@ import {
     apiTokens,
     audit,
     cashSessions,
+    cartas,
     catalog,
     devices,
     invoices,
@@ -78,6 +80,7 @@ const groups = computed<{ label?: string; items: NavItem[] }[]>(() => [
         items: [
             { title: t('nav.catalog'), href: catalog(), icon: BookOpen },
             { title: t('nav.setMenus'), href: setMenus(), icon: Utensils },
+            { title: t('nav.cartas'), href: cartas(), icon: BookOpenText },
             { title: t('nav.printing'), href: printing(), icon: Printer },
             { title: t('nav.printLog'), href: printLog(), icon: ScrollText },
         ],

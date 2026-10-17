@@ -10,10 +10,10 @@ use App\Models\SetMenu;
 use App\Models\SetMenuSection;
 use App\Models\SetMenuSectionItem;
 use App\Models\User;
+use App\Services\Assistant\Concerns\ReadsToolArguments;
 use App\Services\Catalog\MenuDocument;
 use App\Services\Catalog\SetMenuWriter;
 use App\Support\AppSettings;
-use App\Support\Translation;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
@@ -26,6 +26,8 @@ use Illuminate\Support\Facades\DB;
  */
 class MenuTools
 {
+    use ReadsToolArguments;
+
     /** The model asked the user something: the turn ends and the options become buttons. */
     public const ASK = 'ask_user';
 
@@ -136,10 +138,10 @@ class MenuTools
                 'id' => ['type' => 'integer'],
                 'confirmed' => ['type' => 'boolean'],
             ], ['id', 'confirmed']),
-            self::fn(self::ASK, 'Pregunta al usuario y le muestra botones grandes para responder con un toque. Úsalo cuando falte información, para confirmar borrados y, al terminar un encargo, para ofrecer siguientes pasos. Termina tu turno.', [
+            self::fn(self::ASK, 'Pregunta al usuario lo que falta (o confirma un borrado) y termina tu turno. Con respuestas cerradas, las opciones salen como botones; para preguntas abiertas (un precio, un nombre) no pongas opciones. No lo uses para sugerir siguientes pasos.', [
                 'question' => ['type' => 'string', 'description' => 'Pregunta corta.'],
-                'options' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'De 2 a 5 respuestas cortas (máx. 6 palabras), escritas como las diría el usuario.'],
-            ], ['question', 'options']),
+                'options' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Opcional: de 2 a 5 respuestas cortas (máx. 6 palabras), escritas como las diría el usuario.'],
+            ], ['question']),
         ];
     }
 
@@ -656,59 +658,9 @@ class MenuTools
 
     // ------------------------------------------------------------------ helpers
 
-    /**
-     * @param  array<string, mixed>  $args
-     * @return array{ca: string, es: string}|null
-     */
-    private function names(array $args, bool $required): ?array
-    {
-        $ca = is_string($args['name_ca'] ?? null) ? mb_substr(trim($args['name_ca']), 0, 80) : '';
-        $es = is_string($args['name_es'] ?? null) ? mb_substr(trim($args['name_es']), 0, 80) : '';
-
-        if ($ca === '' && $es === '') {
-            if ($required) {
-                throw new MenuToolError('Falta el nombre (name_ca y name_es).');
-            }
-
-            return null;
-        }
-
-        return Translation::normalize(['ca' => $ca !== '' ? $ca : $es, 'es' => $es !== '' ? $es : $ca]);
-    }
-
-    private function cents(mixed $euros): ?int
-    {
-        if ($euros === null || $euros === '') {
-            return null;
-        }
-
-        if (is_string($euros)) {
-            $euros = str_replace(',', '.', $euros);
-        }
-
-        if (! is_numeric($euros) || (float) $euros < 0 || (float) $euros > 10000) {
-            throw new MenuToolError('Precio no válido.');
-        }
-
-        return (int) round((float) $euros * 100);
-    }
-
-    private function euros(int $cents): string
-    {
-        return number_format($cents / 100, 2, ',', '.').' €';
-    }
-
     private function color(mixed $value): ?string
     {
         return is_string($value) && preg_match('/^#[0-9a-fA-F]{6}$/', $value) ? strtolower($value) : null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $args
-     */
-    private function optionalInt(array $args, string $key): ?int
-    {
-        return is_numeric($args[$key] ?? null) ? (int) $args[$key] : null;
     }
 
     /**

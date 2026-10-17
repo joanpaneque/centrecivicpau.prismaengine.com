@@ -20,7 +20,7 @@ class MenuDocument
 
     public const TEMPLATES = ['classic', 'halloween', 'christmas', 'easter', 'kids'];
 
-    private const LABELS = [
+    public const LABELS = [
         'es' => ['vat' => 'IVA incluido', 'choose' => 'Elige :n'],
         'ca' => ['vat' => 'IVA inclòs', 'choose' => 'Tria\'n :n'],
         'fr' => ['vat' => 'TVA incluse', 'choose' => 'Au choix : :n'],
@@ -170,7 +170,7 @@ class MenuDocument
     /**
      * @param  list<array<string, mixed>>  $pages
      */
-    private function view(string $template, array $pages, ?string $logo): string
+    public function view(string $template, array $pages, ?string $logo): string
     {
         return view('pdf.menu.document', [
             'title' => $pages[0]['name'] ?? '',
@@ -252,7 +252,7 @@ class MenuDocument
         return ($h + 8) * 1.06;
     }
 
-    private function money(int $cents, string $locale): string
+    public function money(int $cents, string $locale): string
     {
         return $locale === 'en'
             ? '€'.number_format($cents / 100, 2, '.', ',')
@@ -263,7 +263,7 @@ class MenuDocument
      * @param  array<string, string>|mixed  $value
      * @return array{ca: string, es: string}
      */
-    private function pair(mixed $value): array
+    public function pair(mixed $value): array
     {
         $value = is_array($value) ? $value : [];
 
@@ -273,7 +273,7 @@ class MenuDocument
     /**
      * Inline so the same markup works in the PDF and in the browser preview.
      */
-    private function logo(): ?string
+    public function logo(): ?string
     {
         $path = $this->renderer->logoPath();
 

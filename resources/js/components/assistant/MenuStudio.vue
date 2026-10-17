@@ -9,17 +9,17 @@ import StudioPreview from '@/components/assistant/StudioPreview.vue';
 import VoiceButton from '@/components/assistant/VoiceButton.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { locale, t, tl } from '@/i18n';
+import { locale, t } from '@/i18n';
 import { formatDateTime } from '@/lib/format';
 import { HttpError } from '@/lib/http';
 
 /**
  * The administrators' assistant: talk or type ("crea'm el menú de dilluns", "posa les braves
  * a 5 €", "com tanco la caixa?") and it answers or does it, shows the result right in the
- * chat (with the printable menu) and offers big answer buttons. While speaking, the words
- * appear live.
+ * chat (with the printable menu or carta) and, when it needs an answer, shows big answer
+ * buttons. While speaking, the words appear live.
  */
-const props = withDefaults(defineProps<{ context: 'tpv' | 'admin'; userName?: string | null; admin?: boolean }>(), { userName: null, admin: true });
+const props = defineProps<{ context: 'tpv' | 'admin' }>();
 /** Each finished reply, so the POS can apply the orders it carries. */
 const emit = defineEmits<{ reply: [message: ChatMessage] }>();
 defineSlots<{ order?: (props: { order: OrderPreview }) => unknown }>();
@@ -46,8 +46,6 @@ const textarea = ref<HTMLTextAreaElement | null>(null);
 let controller: AbortController | null = null;
 let localId = -1;
 
-const suggestions = computed(() => tl(props.admin ? 'studio.suggestions' : 'studio.staffSuggestions'));
-const firstName = computed(() => (props.userName ?? '').split(' ')[0]);
 const lastAssistant = computed(() => [...messages.value].reverse().find((m) => m.role === 'assistant') ?? null);
 const options = computed(() => (!working.value && lastAssistant.value === messages.value[messages.value.length - 1] ? (lastAssistant.value?.meta?.options ?? []) : []));
 const canSend = computed(() => online.value && configured.value && !working.value && input.value.trim().length > 0);
@@ -285,24 +283,6 @@ watch(() => messages.value.length, scrollToBottom);
         <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
             <div v-if="loadingConversation" class="flex justify-center py-16"><Loader2 class="size-6 animate-spin text-slate-400" /></div>
 
-            <div v-else-if="!messages.length && !recording" class="mx-auto flex max-w-xl flex-col items-center px-4 pt-8 pb-4 text-center">
-                <div class="mb-4 flex size-16 items-center justify-center rounded-3xl bg-gradient-to-br from-[#00056a] to-violet-600 text-white shadow-lg"><Sparkles class="size-8" /></div>
-                <h3 class="text-xl font-bold">{{ firstName ? t('studio.welcome', { name: firstName }) : t('studio.title') }}</h3>
-                <p class="mt-1 text-sm text-slate-500">{{ t('studio.subtitle') }}</p>
-                <div class="mt-6 grid w-full gap-2">
-                    <button
-                        v-for="suggestion in suggestions"
-                        :key="suggestion"
-                        type="button"
-                        class="min-h-14 rounded-2xl border-2 bg-white px-4 py-3 text-left text-[15px] font-medium shadow-sm transition active:scale-[0.98] disabled:opacity-50 dark:bg-slate-900"
-                        :disabled="!online || !configured || working"
-                        @click="send(suggestion)"
-                    >
-                        {{ suggestion }}
-                    </button>
-                </div>
-            </div>
-
             <div v-else class="mx-auto flex max-w-2xl flex-col gap-4 px-3 py-4">
                 <template v-for="message in messages" :key="message.id">
                     <div v-if="message.role === 'user'" class="flex justify-end">
@@ -317,7 +297,7 @@ watch(() => messages.value.length, scrollToBottom);
                         <template v-for="preview in message.meta?.previews ?? []" :key="`${preview.type}${preview.id}`">
                             <ReportCard v-if="preview.type === 'report'" :report="preview" />
                             <slot v-else-if="preview.type === 'order'" name="order" :order="preview" />
-                            <StudioPreview v-else :preview="preview" :latest="message.id === lastAssistant?.id && preview.type === 'set_menu'" />
+                            <StudioPreview v-else :preview="preview" :latest="message.id === lastAssistant?.id && preview.type !== 'family'" />
                         </template>
                         <div class="flex gap-2.5">
                             <div class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-200"><Sparkles class="size-4" /></div>
