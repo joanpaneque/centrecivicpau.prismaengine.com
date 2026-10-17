@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Pencil, Plus, Printer as PrinterIcon, ScrollText, Trash2 } from '@lucide/vue';
-import { computed, ref } from 'vue';
+import { Check, ChevronDown, Copy, Download, KeyRound, Monitor, Pencil, Plus, Printer as PrinterIcon, ScrollText, Trash2 } from '@lucide/vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import Field from '@/components/admin/Field.vue';
 import PageHeader from '@/components/admin/PageHeader.vue';
@@ -13,10 +14,11 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useI18n } from '@/i18n';
-import { toTrans } from '@/lib/format';
+import { tl, useI18n } from '@/i18n';
+import { formatDateTime, toTrans } from '@/lib/format';
 import { printing as printingRoute } from '@/routes/admin';
 import * as destinationRoutes from '@/routes/admin/destinations';
+import * as agentRoutes from '@/routes/admin/print-agents';
 import * as printerRoutes from '@/routes/admin/printers';
 import { log as logRoute } from '@/routes/admin/printing';
 
@@ -26,6 +28,9 @@ type Printer = {
     id: number;
     name: string;
     type: string;
+    printAgentId: number | null;
+    output: 'escpos' | 'driver';
+    codepage: 'cp858' | 'cp1252' | 'ascii';
     ip: string | null;
     port: number | null;
     model: string | null;
@@ -36,13 +41,88 @@ type Printer = {
     destinationIds: number[];
 };
 
-const props = defineProps<{ destinations: Destination[]; printers: Printer[]; types: string[] }>();
+type Agent = { id: number; name: string; online: boolean; lastSeenAt: string | null; machine: string | null; version: string | null; systemPrinters: string[] };
+
+const props = defineProps<{
+    destinations: Destination[];
+    printers: Printer[];
+    types: string[];
+    agents: Agent[];
+    program: { available: boolean; version: string | null; size: number | null };
+}>();
 
 const { t, tr } = useI18n();
 
 const modeOptions = computed(() => (['printer', 'screen', 'both'] as Mode[]).map((value) => ({ value, label: t(`admin.printing.modes.${value}`) })));
 const typeOptions = computed(() => props.types.map((value) => ({ value, label: t(`admin.printing.types.${value}`) })));
 const widthOptions = [32, 42, 48].map((value) => ({ value, label: `${value} (${value === 32 ? '58mm' : '80mm'})` }));
+const agentOptions = computed(() => props.agents.map((a) => ({ value: a.id as number | null, label: a.name })));
+const outputOptions = computed(() => (['escpos', 'driver'] as const).map((value) => ({ value, label: t(`admin.printing.outputs.${value}`) })));
+const codepageOptions = computed(() => (['cp858', 'cp1252', 'ascii'] as const).map((value) => ({ value, label: t(`admin.printing.codepages.${value}`) })));
+const agentName = (id: number | null) => props.agents.find((a) => a.id === id)?.name ?? '';
+
+// ------------------------------------------------------------ Windows print program
+
+const howToOpen = ref(props.agents.length === 0);
+const agentOpen = ref(false);
+const agentForm = useForm({ name: '' });
+const editingAgent = ref<Agent | null>(null);
+const shownKey = ref<{ name: string; key: string } | null>(null);
+const keyOpen = computed({ get: () => shownKey.value !== null, set: (v) => !v && (shownKey.value = null) });
+const copied = ref(false);
+
+function openAgent(agent: Agent | null): void {
+    editingAgent.value = agent;
+    agentForm.clearErrors();
+    agentForm.name = agent?.name ?? '';
+    agentOpen.value = true;
+}
+
+function saveAgent(): void {
+    const options = { preserveScroll: true, onSuccess: () => (agentOpen.value = false) };
+
+    if (editingAgent.value) {
+        agentForm.patch(agentRoutes.update.url(editingAgent.value.id), options);
+    } else {
+        agentForm.post(agentRoutes.store.url(), options);
+    }
+}
+
+function newKey(agent: Agent): void {
+    if (confirm(t('admin.printing.program.newKeyConfirm'))) {
+        router.post(agentRoutes.key.url(agent.id), {}, { preserveScroll: true });
+    }
+}
+
+async function copyKey(): Promise<void> {
+    if (!shownKey.value) {
+        return;
+    }
+
+    try {
+        await navigator.clipboard.writeText(shownKey.value.key);
+        copied.value = true;
+        toast.success(t('admin.printing.program.copied'));
+    } catch {
+        // Without clipboard access the key stays selectable in the box.
+    }
+}
+
+// The key comes once, as flash data, right after creating the computer or renewing it.
+let stopFlash: (() => void) | null = null;
+
+onMounted(() => {
+    stopFlash = router.on('flash', (event) => {
+        const key = (event as CustomEvent).detail?.flash?.agentKey as { name: string; key: string } | undefined;
+
+        if (key) {
+            copied.value = false;
+            shownKey.value = key;
+        }
+    });
+});
+
+onUnmounted(() => stopFlash?.());
 
 function toggle(list: number[], id: number): void {
     const index = list.indexOf(id);
@@ -83,6 +163,9 @@ const editingPrinter = ref<Printer | null>(null);
 const printerForm = useForm({
     name: '',
     type: 'system',
+    printAgentId: null as number | null,
+    output: 'escpos' as Printer['output'],
+    codepage: 'cp858' as Printer['codepage'],
     ip: '',
     port: 9100 as number | undefined,
     model: '',
@@ -98,6 +181,9 @@ function openPrinter(printer: Printer | null): void {
     printerForm.clearErrors();
     printerForm.name = printer?.name ?? '';
     printerForm.type = printer?.type ?? 'system';
+    printerForm.printAgentId = printer?.printAgentId ?? (props.agents.length === 1 ? props.agents[0].id : null);
+    printerForm.output = printer?.output ?? 'escpos';
+    printerForm.codepage = printer?.codepage ?? 'cp858';
     printerForm.ip = printer?.ip ?? '';
     printerForm.port = printer?.port ?? 9100;
     printerForm.model = printer?.model ?? '';
@@ -125,7 +211,18 @@ function testPrint(printer: Printer): void {
     router.post(printerRoutes.test.url(printer.id), {}, { preserveScroll: true });
 }
 
-const deleting = ref<{ kind: 'destination' | 'printer'; id: number; label: string } | null>(null);
+const formAgent = computed(() => props.agents.find((a) => a.id === printerForm.printAgentId) ?? null);
+const windowsPrinterOptions = computed(() => {
+    const names = [...(formAgent.value?.systemPrinters ?? [])];
+
+    if (printerForm.systemName && !names.includes(printerForm.systemName)) {
+        names.unshift(printerForm.systemName);
+    }
+
+    return names.map((name) => ({ value: name, label: name }));
+});
+
+const deleting = ref<{ kind: 'destination' | 'printer' | 'agent'; id: number; label: string } | null>(null);
 const deleteOpen = computed({ get: () => deleting.value !== null, set: (v) => !v && (deleting.value = null) });
 
 function remove(): void {
@@ -135,12 +232,15 @@ function remove(): void {
         return;
     }
 
-    router.delete(target.kind === 'destination' ? destinationRoutes.destroy.url(target.id) : printerRoutes.destroy.url(target.id), {
+    const url = { destination: destinationRoutes.destroy.url, printer: printerRoutes.destroy.url, agent: agentRoutes.destroy.url }[target.kind](target.id);
+
+    router.delete(url, {
         preserveScroll: true,
         onFinish: () => {
             deleting.value = null;
             destinationOpen.value = false;
             printerOpen.value = false;
+            agentOpen.value = false;
         },
     });
 }
@@ -155,6 +255,65 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
             <Link :href="logRoute()"><ScrollText class="size-4" /> {{ t('admin.printing.log') }}</Link>
         </Button>
     </PageHeader>
+
+    <section class="mb-8 rounded-xl border bg-card p-4 sm:p-5">
+        <div class="flex flex-wrap items-start gap-4">
+            <div class="flex size-11 shrink-0 items-center justify-center rounded-xl bg-[#00056a] text-white"><Monitor class="size-6" /></div>
+            <div class="min-w-0 flex-1 basis-80">
+                <h2 class="text-lg font-semibold">{{ t('admin.printing.program.title') }}</h2>
+                <p class="mt-1 text-sm text-muted-foreground">{{ t('admin.printing.program.intro') }}</p>
+            </div>
+            <div class="flex flex-col items-stretch gap-1 sm:items-end">
+                <Button v-if="program.available" as-child class="bg-[#00056a]">
+                    <a :href="agentRoutes.download.url()"><Download class="size-4" /> {{ t('admin.printing.program.download') }}</a>
+                </Button>
+                <span v-if="program.available" class="text-xs text-muted-foreground">
+                    {{ t('admin.printing.program.downloadInfo', { size: Math.round((program.size ?? 0) / 1048576), version: program.version ?? '—' }) }}
+                </span>
+                <p v-else class="max-w-64 text-xs text-amber-700">{{ t('admin.printing.program.notBuilt') }}</p>
+            </div>
+        </div>
+
+        <button type="button" class="mt-4 flex items-center gap-1 text-sm font-medium text-[#00056a] dark:text-blue-300" @click="howToOpen = !howToOpen">
+            <ChevronDown class="size-4 transition" :class="howToOpen ? 'rotate-180' : ''" /> {{ t('admin.printing.program.howTo') }}
+        </button>
+        <div v-if="howToOpen" class="mt-3 grid gap-4 lg:grid-cols-[3fr_2fr]">
+            <ol class="space-y-2 text-sm">
+                <li v-for="(step, i) in tl('admin.printing.program.steps')" :key="i" class="flex gap-3">
+                    <span class="flex size-6 shrink-0 items-center justify-center rounded-full bg-[#00056a] text-xs font-bold text-white">{{ i + 1 }}</span>
+                    <span>{{ step }}</span>
+                </li>
+            </ol>
+            <ul class="list-disc space-y-1.5 rounded-lg bg-muted/40 p-3 pl-7 text-xs text-muted-foreground">
+                <li v-for="(note, i) in tl('admin.printing.program.notes')" :key="i">{{ note }}</li>
+            </ul>
+        </div>
+
+        <div class="mt-5 mb-2 flex items-center justify-between">
+            <h3 class="font-medium">{{ t('admin.printing.program.computers') }}</h3>
+            <Button size="sm" @click="openAgent(null)"><Plus class="size-4" /> {{ t('admin.printing.program.addComputer') }}</Button>
+        </div>
+        <p v-if="!agents.length" class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">{{ t('admin.printing.program.none') }}</p>
+        <div class="grid gap-2 md:grid-cols-2">
+            <div v-for="agent in agents" :key="agent.id" class="flex items-start gap-3 rounded-xl border p-3">
+                <span class="mt-1.5 size-2.5 shrink-0 rounded-full" :class="agent.online ? 'bg-emerald-500' : 'bg-red-500'" />
+                <div class="min-w-0 flex-1">
+                    <div class="font-medium">{{ agent.name }} <span v-if="agent.machine" class="text-xs font-normal text-muted-foreground">· {{ agent.machine }}</span></div>
+                    <div class="text-xs" :class="agent.online ? 'text-emerald-700' : 'text-red-700'">
+                        {{ agent.online ? t('admin.printing.program.online') : agent.lastSeenAt ? t('admin.printing.program.offline') : t('admin.printing.program.never') }}
+                        <span v-if="agent.lastSeenAt && !agent.online" class="text-muted-foreground">· {{ t('admin.printing.program.lastSeen', { when: formatDateTime(agent.lastSeenAt) }) }}</span>
+                        <span v-if="agent.version" class="text-muted-foreground"> · v{{ agent.version }}</span>
+                        · {{ t('admin.printing.program.printersCount', { count: printers.filter((p) => p.printAgentId === agent.id).length }) }}
+                    </div>
+                    <div v-if="agent.systemPrinters.length" class="mt-1 truncate text-xs text-muted-foreground" :title="agent.systemPrinters.join(', ')">
+                        {{ t('admin.printing.program.windowsPrinters', { list: agent.systemPrinters.join(', ') }) }}
+                    </div>
+                </div>
+                <Button variant="outline" size="sm" @click="newKey(agent)"><KeyRound class="size-4" /> {{ t('admin.printing.program.newKey') }}</Button>
+                <Button variant="ghost" size="icon" @click="openAgent(agent)"><Pencil class="size-4" /></Button>
+            </div>
+        </div>
+    </section>
 
     <div class="mb-6 space-y-2 rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
         <p>{{ t('admin.printing.systemNotice') }}</p>
@@ -201,6 +360,10 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                         <div class="mt-1 flex flex-wrap gap-1 text-xs">
                             <Badge variant="secondary">{{ t(`admin.printing.types.${printer.type}`) }}</Badge>
                             <Badge v-if="printer.isTicketPrinter">{{ t('admin.printing.isTicketPrinter') }}</Badge>
+                            <Badge v-if="printer.printAgentId" variant="outline" class="gap-1">
+                                <span class="size-1.5 rounded-full" :class="agents.find((a) => a.id === printer.printAgentId)?.online ? 'bg-emerald-500' : 'bg-red-500'" />
+                                {{ t('admin.printing.viaBadge', { name: agentName(printer.printAgentId) }) }}
+                            </Badge>
                             <span v-if="printer.type === 'system' && printer.systemName" class="text-muted-foreground">{{ printer.systemName }}</span>
                             <span v-if="printer.ip" class="text-muted-foreground">{{ printer.ip }}:{{ printer.port }}</span>
                             <span class="text-muted-foreground">{{ printer.paperWidth }} col.</span>
@@ -268,14 +431,38 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     <Field :label="t('admin.printing.paperWidth')">
                         <SelectInput v-model="printerForm.paperWidth" :options="widthOptions" />
                     </Field>
+                    <Field v-if="printerForm.type !== 'simulated'" :label="t('admin.printing.via')" :help="t('admin.printing.viaHelp')" class="sm:col-span-2">
+                        <SelectInput v-model="printerForm.printAgentId" :placeholder="t('admin.printing.viaNone')" :options="agentOptions" />
+                    </Field>
                     <Field
-                        v-if="printerForm.type === 'system'"
+                        v-if="printerForm.type === 'system' && formAgent"
+                        :label="t('admin.printing.windowsPrinter')"
+                        :error="printerForm.errors.systemName"
+                        :help="t('admin.printing.windowsPrinterHelp')"
+                        class="sm:col-span-2"
+                    >
+                        <SelectInput v-if="windowsPrinterOptions.length" v-model="printerForm.systemName" :options="windowsPrinterOptions" />
+                        <Input v-else v-model="printerForm.systemName" :placeholder="printerForm.name || t('admin.printing.systemNamePlaceholder')" />
+                    </Field>
+                    <Field
+                        v-else-if="printerForm.type === 'system'"
                         :label="t('admin.printing.systemName')"
                         :error="printerForm.errors.systemName"
                         :help="t('admin.printing.systemNameHelp')"
                         class="sm:col-span-2"
                     >
                         <Input v-model="printerForm.systemName" :placeholder="printerForm.name || t('admin.printing.systemNamePlaceholder')" />
+                    </Field>
+                    <Field v-if="printerForm.type === 'system' && formAgent" :label="t('admin.printing.output')" :help="t('admin.printing.outputHelp')" class="sm:col-span-2">
+                        <SelectInput v-model="printerForm.output" :options="outputOptions" />
+                    </Field>
+                    <Field
+                        v-if="(printerForm.type === 'system' && formAgent && printerForm.output === 'escpos') || printerForm.type === 'escpos_network'"
+                        :label="t('admin.printing.codepage')"
+                        :help="t('admin.printing.codepageHelp')"
+                        class="sm:col-span-2"
+                    >
+                        <SelectInput v-model="printerForm.codepage" :options="codepageOptions" />
                     </Field>
                     <template v-if="printerForm.type === 'escpos_network'">
                         <Field :label="t('admin.printing.host')" :error="printerForm.errors.ip">
@@ -311,6 +498,46 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     <Button type="submit" :disabled="printerForm.processing">{{ t('common.save') }}</Button>
                 </DialogFooter>
             </form>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="agentOpen">
+        <DialogContent class="sm:max-w-md">
+            <form class="space-y-4" @submit.prevent="saveAgent">
+                <DialogHeader>
+                    <DialogTitle>{{ editingAgent ? t('common.edit') : t('admin.printing.program.addComputer') }}</DialogTitle>
+                </DialogHeader>
+                <Field :label="t('admin.printing.program.computerName')" :error="agentForm.errors.name">
+                    <Input v-model="agentForm.name" :placeholder="t('admin.printing.program.computerNamePlaceholder')" required maxlength="60" />
+                </Field>
+                <DialogFooter class="gap-2">
+                    <Button
+                        v-if="editingAgent"
+                        type="button"
+                        variant="ghost"
+                        class="mr-auto text-destructive"
+                        @click="deleting = { kind: 'agent', id: editingAgent.id, label: editingAgent.name }"
+                    >
+                        <Trash2 class="size-4" /> {{ t('common.delete') }}
+                    </Button>
+                    <Button type="submit" :disabled="agentForm.processing">{{ t('common.save') }}</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog v-model:open="keyOpen">
+        <DialogContent class="sm:max-w-xl">
+            <DialogHeader>
+                <DialogTitle class="flex items-center gap-2"><KeyRound class="size-5" /> {{ t('admin.printing.program.keyTitle', { name: shownKey?.name ?? '' }) }}</DialogTitle>
+            </DialogHeader>
+            <p class="text-sm text-muted-foreground">{{ t('admin.printing.program.keyHelp') }}</p>
+            <textarea readonly rows="3" class="w-full resize-none rounded-lg border bg-muted/40 p-3 font-mono text-sm break-all" :value="shownKey?.key" @focus="($event.target as HTMLTextAreaElement).select()" />
+            <DialogFooter>
+                <Button class="h-11 w-full bg-[#00056a] sm:w-auto" @click="copyKey">
+                    <component :is="copied ? Check : Copy" class="size-4" /> {{ copied ? t('admin.printing.program.copied') : t('admin.printing.program.copy') }}
+                </Button>
+            </DialogFooter>
         </DialogContent>
     </Dialog>
 

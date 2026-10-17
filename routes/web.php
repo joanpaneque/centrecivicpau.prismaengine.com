@@ -160,6 +160,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('impresion/impresoras/{printer}', [PrintingController::class, 'updatePrinter'])->name('printers.update');
         Route::delete('impresion/impresoras/{printer}', [PrintingController::class, 'destroyPrinter'])->name('printers.destroy');
         Route::post('impresion/impresoras/{printer}/prueba', [PrintingController::class, 'test'])->name('printers.test');
+        Route::get('impresion/programa', [PrintingController::class, 'download'])->name('print-agents.download');
+        Route::post('impresion/programas', [PrintingController::class, 'storeAgent'])->name('print-agents.store');
+        Route::patch('impresion/programas/{agent}', [PrintingController::class, 'updateAgent'])->name('print-agents.update');
+        Route::post('impresion/programas/{agent}/clau', [PrintingController::class, 'agentKey'])->name('print-agents.key');
+        Route::delete('impresion/programas/{agent}', [PrintingController::class, 'destroyAgent'])->name('print-agents.destroy');
 
         Route::get('tiquets', [TicketController::class, 'index'])->name('tickets');
         Route::get('tiquets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');

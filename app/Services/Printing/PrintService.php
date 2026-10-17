@@ -2,9 +2,11 @@
 
 namespace App\Services\Printing;
 
+use App\Events\PrintJobsWaiting;
 use App\Models\Printer;
 use App\Models\PrintJob;
 use App\Services\Sync\OperationContext;
+use Illuminate\Support\Facades\DB;
 
 class PrintService
 {
@@ -70,6 +72,14 @@ class PrintService
             'created_by' => $userId,
             'device_id' => $deviceId,
         ]);
+
+        // The Windows print program of the bar prints it: wake it up once the job is saved.
+        if ($printer?->agent !== null && $printer->active) {
+            $agent = $printer->agent;
+            DB::afterCommit(fn () => PrintJobsWaiting::notify($agent));
+
+            return $job;
+        }
 
         try {
             $status = $this->driverFor($printer)->send($job, $printer);

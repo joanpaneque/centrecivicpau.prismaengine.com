@@ -11,7 +11,41 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The Windows print program (print-agent/). Its version only changes when print-agent/
+  # changes, so the PCs of the bar update themselves only when there is something new.
+  print-agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build the program
+        run: |
+          VERSION="1.0.$(git rev-list --count HEAD -- print-agent)"
+          dotnet publish print-agent/App -c Release -o print-agent/dist -p:Version="$VERSION"
+          echo "$VERSION" > print-agent/dist/version.txt
+
+      - name: Upload it to the server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          password: ${{ secrets.SSH_PASSWORD }}
+          port: 22
+          source: print-agent/dist/CentreCivicImpressio.exe,print-agent/dist/version.txt
+          target: /root/centrecivicpau.prismaengine.com/storage/app/private/print-agent/incoming
+          strip_components: 2
+          overwrite: true
+
   deploy:
+    needs: print-agent
+    # Deploy the app even if the print program could not be built.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Deploy over SSH
@@ -61,3 +95,12 @@ jobs:
             $COMPOSE exec -T $SERVICE php artisan optimize:clear
             $COMPOSE exec -T $SERVICE php artisan queue:restart
             $COMPOSE restart $SERVICE queue scheduler
+
+            # Publish the print program: the .exe first, then its version (the PCs update
+            # when they see the new version, so the file must already be complete).
+            AGENT=storage/app/private/print-agent
+            if [ -f "$AGENT/incoming/CentreCivicImpressio.exe" ] && [ -f "$AGENT/incoming/version.txt" ]; then
+              mv -f "$AGENT/incoming/CentreCivicImpressio.exe" "$AGENT/CentreCivicImpressio.exe"
+              mv -f "$AGENT/incoming/version.txt" "$AGENT/version.txt"
+              chown -R 1000:1000 "$AGENT"
+            fi

@@ -7,17 +7,20 @@ use App\Models\PrintJob;
 
 /**
  * Sends ESC/POS bytes to a network thermal printer (usually TCP 9100).
- * The server must be able to reach the printer IP; a cloud host cannot print to a venue LAN.
+ * The server must be able to reach the printer IP; a cloud host cannot print to a venue LAN
+ * (for that, the printer is assigned to the Windows print program of the bar).
  */
 class EscPosPrinterDriver implements PrinterDriver
 {
+    public function __construct(private readonly PrintDocumentEncoder $encoder) {}
+
     public function send(PrintJob $job, ?Printer $printer): string
     {
         if ($printer === null || $printer->ip === null || $printer->ip === '') {
             return 'failed';
         }
 
-        $bytes = $this->encode($job->document);
+        $bytes = $this->encode($job->document, $printer);
         $port = $printer->port ?? 9100;
         $errno = 0;
         $errstr = '';
@@ -37,50 +40,8 @@ class EscPosPrinterDriver implements PrinterDriver
     /**
      * @param  array<string, mixed>  $document
      */
-    public function encode(array $document): string
+    public function encode(array $document, ?Printer $printer = null): string
     {
-        $esc = "\x1B";
-        $gs = "\x1D";
-        $out = $esc.'@';
-        $width = (int) ($document['width'] ?? 48);
-
-        /** @var list<array<string, mixed>> $lines */
-        $lines = $document['lines'] ?? [];
-
-        foreach ($lines as $line) {
-            $type = $line['type'] ?? 'text';
-            $bold = ! empty($line['bold']);
-            $out .= $esc.'E'.($bold ? "\x01" : "\x00");
-            $out .= $gs.'!'.(($line['size'] ?? 1) > 1 ? "\x11" : "\x00");
-
-            $out .= match ($type) {
-                'divider' => str_repeat('-', $width)."\n",
-                'row' => $this->row((string) ($line['left'] ?? ''), (string) ($line['right'] ?? ''), $width)."\n",
-                'feed' => "\n",
-                'cut' => $gs.'V'."\x41\x03",
-                'qr' => (string) ($line['data'] ?? '')."\n",
-                default => $this->align((string) ($line['text'] ?? ''), (string) ($line['align'] ?? 'left'), $width)."\n",
-            };
-        }
-
-        return $out;
-    }
-
-    private function row(string $left, string $right, int $width): string
-    {
-        $space = max(1, $width - mb_strlen($left) - mb_strlen($right));
-
-        return $left.str_repeat(' ', $space).$right;
-    }
-
-    private function align(string $text, string $align, int $width): string
-    {
-        $pad = max(0, $width - mb_strlen($text));
-
-        return match ($align) {
-            'center' => str_repeat(' ', intdiv($pad, 2)).$text,
-            'right' => str_repeat(' ', $pad).$text,
-            default => $text,
-        };
+        return $this->encoder->escpos($document, $printer?->paper_width, $printer->codepage ?? 'cp858');
     }
 }

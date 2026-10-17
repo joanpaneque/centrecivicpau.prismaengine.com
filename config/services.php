@@ -51,4 +51,13 @@ return [
         ],
     ],
 
+    // Where the Windows print program connects its websocket (the public Reverb address).
+    'print_agent' => [
+        'ws_host' => env('PRINT_AGENT_WS_HOST', env('VITE_REVERB_HOST')),
+        'ws_port' => env('PRINT_AGENT_WS_PORT', env('VITE_REVERB_PORT')),
+        'ws_scheme' => env('PRINT_AGENT_WS_SCHEME', env('VITE_REVERB_SCHEME')),
+        // Where the deploy publishes the built .exe and its version.txt (default storage/app/private/print-agent).
+        'release_path' => env('PRINT_AGENT_RELEASE_PATH'),
+    ],
+
 ];

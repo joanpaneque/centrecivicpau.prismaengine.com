@@ -76,6 +76,8 @@ export type Printer = {
     active: boolean;
     destinationIds: number[];
     isTicketPrinter?: boolean;
+    /** Prints by itself (Windows print program of the bar, or network): no dialog or PDF. */
+    direct?: boolean;
     paperWidth?: number;
     systemName?: string | null;
 };

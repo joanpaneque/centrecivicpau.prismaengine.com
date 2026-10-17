@@ -18,6 +18,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $created_by
  * @property int|null $device_id
  * @property int|null $claimed_by_device_id
+ * @property int|null $claimed_by_agent_id
+ * @property string|null $error
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User|null $creator

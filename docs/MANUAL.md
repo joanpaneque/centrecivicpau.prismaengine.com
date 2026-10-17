@@ -147,7 +147,7 @@ Las líneas iguales enviadas en rondas distintas (2 cañas y luego 1 más) se ve
 - **Descompte / Descuento:** a una línea o a todo el cuenta (porcentaje o importe), con motivo.
 - **Anul·la / Anular:** tocar la línea → anular. **No pide motivo** y cualquier camarero puede hacerlo. Si hay más de una unidad, se elige cuántas. Imprime la anulación en el destino que la preparaba (cocina o barra).
 - **Demana el compte / Pedir la cuenta:** la mesa pasa a ámbar y aparece en caja como pendiente. En **caja**, además abre la **proforma** en PDF (no es factura). **Las tablets no cobran.**
-- **Imprimeix la proforma / Imprimir la proforma** (solo caja): abre el PDF de la cuenta pendiente, sin cobrar. Desde la pestaña, se imprime con Windows.
+- **Imprimeix la proforma / Imprimir la proforma** (solo caja): con el **programa de impresión** (ver sección 16) sale directamente por la impresora de tiquets; sin él, abre el PDF de la cuenta pendiente para imprimirlo con Windows.
 - **Tanca el compte buit / Cerrar el cuenta vacío:** si no hay líneas.
 
 Alérgenos (los 14 de la UE) visibles en cada producto.
@@ -182,11 +182,14 @@ Registrar el aparato como **Caja**. Si no lo es, sale el aviso «Este dispositiv
    - **Cobra-ho tot / Cobrarlo todo**
    - **Divideix per productes / Dividir por productos**
    - **Divideix a parts iguals / Dividir a partes iguales** (cada parte genera un ticket; el progreso vive en esa caja). Si alguien paga más que su parte, el extra se resta de lo que queda.
-   - Antes de cobrar, **Proforma** abre el PDF de la cuenta (no es factura) para imprimirlo desde Windows.
+   - Antes de cobrar, **Proforma** imprime la cuenta (no es factura): directa con el programa de impresión, o en PDF sin él.
    - Mientras no se haya emitido el tiquet, en **Cobrarlo todo** (y en **Partes iguales** antes de cobrar la primera parte) cada línea tiene **− / +** para corregir la cantidad; con una sola unidad, el botón de papelera la quita. No imprime nada en cocina ni barra. No se puede bajar de lo que ya está cobrado, y los menús del día no se pueden cambiar desde aquí.
    - Si la cuenta tiene productos **sin precio**, al entrar a cobrar sale **Falten preus / Faltan precios**: hay que poner el precio de cada uno (**Desa i continua / Guardar y seguir**) antes de poder cobrar. Si el producto no tenía precio en la carta, se guarda en la carta por defecto. **Cancelar** vuelve a la cuenta.
 4. En los tres modos, **Ha pagat de més / Ha pagado de más** abre un teclado numérico en pantalla (no el del sistema) para marcar un importe superior al que toca. Forma de pago: **Efectiu** (entregado y cambio), **Targeta** o **Mixt**. Si el importe supera lo cobrado, abajo aparece **Sobren / Sobran X €**. En **tarjeta**, el extra es propina y el tiquet lleva la línea **X € de més — Propina / de más — Propina**. En **efectivo** esa diferencia es cambio y no sale como propina. No hay datáfono integrado: la tarjeta solo registra el importe.
-5. Se emite el **tiquet** (factura simplificada). Sale un recuadro con el número y la vista previa. **Obre el PDF / Abrir PDF** abre el ticket en una pestaña nueva; desde ahí se imprime con el diálogo de Windows. **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra sin abrir el PDF.
+5. Se emite el **tiquet** (factura simplificada). Sale un recuadro con el número y la vista previa.
+   - Con el **programa de impresión** instalado (sección 16), el tiquet **sale solo por la impresora de tiquets** al cobrar; el recuadro lo confirma y tiene **Torna a imprimir / Volver a imprimir** por si hace falta otra copia.
+   - Sin el programa, **Obre el PDF / Abrir PDF** abre el ticket en una pestaña nueva y desde ahí se imprime con el diálogo de Windows.
+   - **Fet / Hecho** (o **Següent part / Siguiente parte** si queda cuenta) cierra el recuadro.
 
 ### Qué lleva el ticket
 
@@ -194,9 +197,9 @@ Logo, datos del emisor, serie y número, fecha y hora, mesa y camarero, líneas,
 
 La numeración es correlativa **por caja** (serie del dispositivo), para poder emitir sin conexión. Si el número ya existiera, el servidor lo corrige.
 
-**Reimprimeix / Reimprimir:** tocar un tiquet de la sesión actual en esa caja → **Obre el PDF / Abrir PDF**. Los antiguos se reimprimen desde Gestión (PDF).
+**Reimprimeix / Reimprimir:** tocar un tiquet de la sesión actual en esa caja → **Imprimeix / Imprimir** (directo con el programa de impresión) u **Obre el PDF / Abrir PDF** (sin él). Los antiguos se reimprimen desde Gestión (PDF).
 
-**Informe X** y el **cierre Z** también salen en una vista previa con **Obre el PDF / Abrir PDF**: se abre en una pestaña nueva y desde ahí se imprime con el diálogo de Windows, igual que los tiquets.
+**Informe X** y el **cierre Z** también salen en una vista previa: con el programa de impresión, **Imprimeix / Imprimir** los saca directamente por la impresora de tiquets; sin él, **Obre el PDF / Abrir PDF** y se imprime con el diálogo de Windows.
 
 **Informe X:** parcial sin cerrar. **Tanca la caixa (Z) / Cerrar la caja (Z):** recuento por billetes y monedas, esperado, diferencia, totales por forma de pago, IVA, descuentos, suplemento y anulaciones. El Z definitivo lo calcula el servidor.
 
@@ -323,10 +326,31 @@ Destinos de producción (cocina, barra…): modo **impresora**, **pantalla** o a
 
 Impresoras: nombre, tipo y destinos asignados. Marca una como **Imprimeix tiquets de caixa / Imprime tickets de caja**.
 
-Tipos:
+### Programa de impresión para Windows (impresión directa, sin diálogos)
 
-- **Del PC (Windows)** (el habitual): el ticket sale por el TPV de **caja**, en el PC donde ya están los drivers. Deja ese TPV abierto. Aparece el diálogo de imprimir de Windows: elige la impresora con el mismo nombre que en Gestión (campo **Nom a Windows / Nombre en Windows**). La primera vez, papel de 80 mm y sin cabeceras ni pies del navegador. El Chrome no puede elegir solo la impresora: hay que seleccionarla en el diálogo (luego Windows suele recordar la última).
-- **ESC/POS en red**: IP y puerto (9100). Solo si el servidor puede alcanzar esa IP (en la nube del local, no).
+El servidor está en Internet (en Alemania) y no puede llegar a las impresoras del bar. Para que todo salga **solo, al instante y sin diálogos ni PDF**, se instala el **programa de impresión** en el ordenador del bar que tiene las impresoras (conectadas por USB) o en cualquiera de la misma red (si son de red). Lo hace todo él:
+
+- **No hay que abrir puertos del router ni poner IPs del servidor**: el programa se conecta él al servidor (como un navegador) y el servidor le avisa al instante (por la misma conexión en tiempo real que usa el TPV) cada vez que hay algo para imprimir. Si esa conexión fallara, igualmente mira cada pocos segundos.
+- Imprime **tiquets de caja, proformas, comandas de cocina y barra, marchas, anulaciones, informes X/Z y pruebas**, con acentos y €, el logo, el QR de la factura y el corte de papel.
+- Se instala para el usuario de Windows (sin ser administrador), **se abre solo al encender el ordenador** y queda en un icono junto al reloj. Cerrar la ventana no lo para. Se **actualiza solo** cuando hay versión nueva.
+- Si el ordenador estaba apagado o sin Internet, al volver imprime lo pendiente de los **últimos 30 minutos** (lo anterior queda como «Caducat» en el registro, para no sacar comandas viejas).
+
+**Instalarlo** (Gestión → Impressió, apartado **Programa d'impressió per a Windows**, donde están los mismos pasos):
+
+1. En el ordenador del bar: **Descarrega el programa**, ábrelo y pulsa **Instal·la**. Si Windows avisa «Windows protegió su PC», pulsar **Más información → Ejecutar de todas formas**.
+2. En Gestión → Impressió: **Afegeix ordinador**, ponerle nombre («PC barra») y **copiar la clave** que sale (solo se muestra esa vez; si se pierde, **Nova clau**).
+3. En el programa: pegar la clave en **Clau de connexió** → **Connecta**. Debe salir en verde **Connectat i a punt d'imprimir**. El ordenador aparece en Gestión como **Connectat**, con la lista de impresoras de Windows que tiene.
+4. Editar cada impresora en Gestión → Impressió: **Imprimeix a través de** = ese ordenador; **Impressora de Windows** (de la lista) o la IP si es de red; **Format**: **ESC/POS directe** (impresoras de tiquets: lo más rápido, corta el papel) o **Driver de Windows** (cualquier impresora, o si con ESC/POS sale en blanco o con símbolos raros); **Joc de caràcters** (si los acentos salen mal, probar el otro). Guardar y **Imprimeix una prova**.
+5. Marcar la impresora de **tiquets de caja** y asignar las demás a los destinos (cocina, barra…).
+
+En el propio programa se ve si está conectado, qué impresoras imprime, las **últimas impresiones** (con el error si alguna falla, que también sale como aviso junto al reloj) y un botón para **imprimir una prueba** en cualquier impresora del ordenador sin pasar por el servidor. **Obre el registre** abre el fichero con todo lo que ha hecho. Se desinstala desde el propio programa o desde Configuración de Windows → Aplicaciones.
+
+Las **impresoras de red** conviene tenerlas con **IP fija** (reserva DHCP en el router), para que no cambie. Las **USB** tienen que estar instaladas en Windows con su driver (o el «Generic / Text Only») para que salgan en la lista.
+
+### Tipos de impresora
+
+- **Del PC (Windows)**: con el programa de impresión, imprime directamente en esa impresora de Windows. Sin programa, el ticket sale por el TPV de **caja** con el diálogo de imprimir del navegador (hay que dejar ese TPV abierto y elegir la impresora con el mismo nombre que en **Nom a Windows / Nombre en Windows**; la primera vez, papel de 80 mm y sin cabeceras ni pies).
+- **ESC/POS en red**: IP y puerto (9100). Se asigna a un ordenador con el programa (que está en la misma red); el servidor por sí solo no llega a la red del bar.
 - **Simulada**: no sale papel; queda en el registro.
 
 Botón **Imprimeix una prova / Imprimir una prueba**. El historial está en **Registre d'impressions / Registro de impresiones**.

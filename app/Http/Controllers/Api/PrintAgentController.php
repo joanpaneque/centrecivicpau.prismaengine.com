@@ -1,0 +1,187 @@
+<?php
+
+namespace App\Http\Controllers\Api;
+
+use App\Events\TpvChanged;
+use App\Http\Controllers\Controller;
+use App\Models\PrintAgent;
+use App\Models\Printer;
+use App\Models\PrintJob;
+use App\Services\Printing\PrintAgentRelease;
+use App\Services\Printing\PrintDocumentEncoder;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+
+/**
+ * What the Windows print program talks to. It only ever calls out (no ports to open in the
+ * bar): it says hello, pulls the jobs of its printers when woken up by the websocket (and
+ * every few seconds anyway), and acknowledges each one.
+ */
+class PrintAgentController extends Controller
+{
+    public function __construct(private readonly PrintDocumentEncoder $encoder) {}
+
+    /**
+     * Check in: report the PC and its Windows printers, get the printers to serve and how to
+     * listen for new jobs.
+     */
+    public function hello(Request $request, PrintAgentRelease $release): JsonResponse
+    {
+        $agent = $this->agent($request);
+        $this->checkIn($agent, $request);
+
+        $key = config('broadcasting.connections.reverb.key');
+        $host = (string) config('services.print_agent.ws_host');
+        $scheme = (string) (config('services.print_agent.ws_scheme') ?: $request->getScheme());
+
+        return response()->json([
+            'agent' => ['id' => $agent->id, 'name' => $agent->name],
+            'latestVersion' => $release->version(),
+            'realtime' => is_string($key) && $key !== '' ? [
+                'key' => $key,
+                'host' => $host === '' || $host === 'localhost' ? $request->getHost() : $host,
+                'port' => (int) (config('services.print_agent.ws_port') ?: ($scheme === 'https' ? 443 : 80)),
+                'scheme' => $scheme,
+                'channel' => 'print-agent.'.$agent->channel,
+                'event' => 'jobs',
+            ] : null,
+            'printers' => $agent->printers()->orderBy('name')->get()->map(fn (Printer $p) => $this->printer($p))->values(),
+        ]);
+    }
+
+    /**
+     * Claim and return the jobs waiting for this program's printers.
+     */
+    public function jobs(Request $request): JsonResponse
+    {
+        $agent = $this->agent($request);
+        $this->checkIn($agent, $request);
+
+        $printers = $agent->printers()->where('active', true)->get()->keyBy('id');
+        $stale = now()->subMinutes(PrintJob::STALE_CLAIM_MINUTES);
+        // In-progress jobs come back only if never acknowledged (the program closed while
+        // printing); never while it may still be printing them, or they would come out twice.
+        $waiting = fn (Builder $query) => $query
+            ->whereIn('printer_id', $printers->keys())
+            ->where(fn ($q) => $q->where('status', 'pending')->orWhere(fn ($q) => $q->where('status', 'printing')->where('updated_at', '<', $stale)));
+
+        // Orders from long ago would only confuse the kitchen: they are not printed late.
+        $expired = PrintJob::query()->tap($waiting)->where('created_at', '<', now()->subMinutes(PrintAgent::MAX_JOB_AGE_MINUTES))
+            ->update(['status' => 'failed', 'error' => 'Caducat: el programa d\'impressió no estava connectat.', 'updated_at' => now()]);
+
+        $jobs = [];
+
+        foreach (PrintJob::query()->tap($waiting)->orderBy('id')->limit(20)->get() as $job) {
+            $claimed = PrintJob::query()->tap($waiting)->whereKey($job->id)
+                ->update(['status' => 'printing', 'claimed_by_agent_id' => $agent->id, 'updated_at' => now()]);
+
+            if ($claimed === 0) {
+                continue;
+            }
+
+            $printer = $printers->get($job->printer_id);
+
+            if ($printer instanceof Printer) {
+                $jobs[] = $this->job($job, $printer);
+            }
+        }
+
+        if ($jobs !== [] || $expired > 0) {
+            TpvChanged::notify(['prints']);
+        }
+
+        return response()->json(['jobs' => $jobs]);
+    }
+
+    public function ack(Request $request, PrintJob $printJob): JsonResponse
+    {
+        $agent = $this->agent($request);
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['printed', 'failed'])],
+            'error' => ['nullable', 'string', 'max:250'],
+        ]);
+
+        if ($printJob->claimed_by_agent_id !== $agent->id || $printJob->status !== 'printing') {
+            return response()->json(['ok' => false, 'status' => $printJob->status], 409);
+        }
+
+        $printJob->forceFill([
+            'status' => $data['status'],
+            'error' => $data['status'] === 'failed' ? ($data['error'] ?? 'Error') : null,
+        ])->save();
+
+        TpvChanged::notify(['prints']);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * The latest version of the program, for its automatic update.
+     */
+    public function download(Request $request, PrintAgentRelease $release): BinaryFileResponse
+    {
+        $this->agent($request);
+
+        return $release->response();
+    }
+
+    private function agent(Request $request): PrintAgent
+    {
+        return PrintAgent::findByToken($request->bearerToken()) ?? abort(401, 'Clau no vàlida. Torna a connectar el programa amb una clau nova de Gestió → Impressió.');
+    }
+
+    private function checkIn(PrintAgent $agent, Request $request): void
+    {
+        $data = $request->validate([
+            'machine' => ['nullable', 'string', 'max:120'],
+            'version' => ['nullable', 'string', 'max:20'],
+            'printers' => ['nullable', 'array', 'max:50'],
+            'printers.*' => ['string', 'max:200'],
+        ]);
+
+        $agent->forceFill(array_filter([
+            'machine' => $data['machine'] ?? null,
+            'version' => $data['version'] ?? null,
+            'system_printers' => isset($data['printers']) ? array_values($data['printers']) : null,
+        ], fn ($value) => $value !== null) + ['last_seen_at' => now()])->save();
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function printer(Printer $printer): array
+    {
+        return [
+            'id' => $printer->id,
+            'name' => $printer->name,
+            'active' => $printer->active,
+            'target' => $printer->type === 'escpos_network' ? 'network' : 'windows',
+            'systemName' => $printer->system_name,
+            'ip' => $printer->ip,
+            'port' => $printer->port ?? 9100,
+            'output' => $printer->type === 'escpos_network' ? 'escpos' : $printer->output,
+            'paperWidth' => $printer->paper_width,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function job(PrintJob $job, Printer $printer): array
+    {
+        $config = $this->printer($printer);
+
+        return [
+            'uuid' => $job->uuid,
+            'kind' => $job->kind,
+            'title' => $job->title,
+            'createdAt' => $job->created_at?->toIso8601String(),
+            'printer' => $config,
+            'escpos' => $config['output'] === 'escpos' ? base64_encode($this->encoder->escpos($job->document, $printer->paper_width, $printer->codepage)) : null,
+            'document' => $config['output'] === 'driver' ? $this->encoder->forDriver($job->document, $printer->paper_width) : null,
+        ];
+    }
+}

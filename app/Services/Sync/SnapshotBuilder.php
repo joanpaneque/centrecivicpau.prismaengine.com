@@ -78,6 +78,7 @@ class SnapshotBuilder
                 'type' => $p->type,
                 'active' => $p->active,
                 'isTicketPrinter' => $p->is_ticket_printer,
+                'direct' => $p->printsDirectly(),
                 'paperWidth' => $p->paper_width,
                 'systemName' => $p->system_name,
                 'destinationIds' => $p->destinations->pluck('id')->all(),
@@ -102,7 +103,8 @@ class SnapshotBuilder
     }
 
     /**
-     * Pending (and this device's in-progress) jobs for the cashier print station.
+     * Pending (and this device's in-progress) jobs for the cashier print station. Printers
+     * handled by the Windows print program are left to it.
      *
      * @return list<array<string, mixed>>
      */
@@ -112,6 +114,7 @@ class SnapshotBuilder
 
         $jobs = PrintJob::query()
             ->with('printer:id,system_name,paper_width')
+            ->whereDoesntHave('printer', fn ($printer) => $printer->whereNotNull('print_agent_id'))
             ->where(function ($query) use ($device, $stale) {
                 $query->where('status', 'pending')
                     ->orWhere(function ($query) use ($device, $stale) {

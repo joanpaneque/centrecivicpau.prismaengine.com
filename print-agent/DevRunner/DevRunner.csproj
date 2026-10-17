@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Runs the print program core on any OS against a server, printing to the console.
+       From print-agent/DevRunner: dotnet run "http://localhost/api/print-agent/KEY" [seconds] -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/PrintAgent.Core.csproj" />
+  </ItemGroup>
+</Project>

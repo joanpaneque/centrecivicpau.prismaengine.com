@@ -2,7 +2,7 @@ import { t, tr } from '@/i18n';
 import { uuid } from './crypto';
 import { formatMoney, formatRate, netTotal } from './money';
 import { state } from './store';
-import type { Order, OrderLine, PrintDocument, PrintJobPayload, PrintLine, VatRow } from './types';
+import type { Order, OrderLine, PrintDocument, Printer, PrintJobPayload, PrintLine, VatRow } from './types';
 
 export const DEFAULT_WIDTH = 48;
 
@@ -46,6 +46,14 @@ export function ticketPrinterId(): number | null {
     const printer = Object.values(state.printers).find((p) => p.active && p.isTicketPrinter);
 
     return printer?.id ?? null;
+}
+
+/** The ticket printer when it prints by itself (Windows print program or network), so no PDF is needed. */
+export function directTicketPrinter(): Printer | null {
+    const id = ticketPrinterId();
+    const printer = id ? state.printers[id] : null;
+
+    return printer?.direct ? printer : null;
 }
 
 export function widthFor(printerId: number | null): number {

@@ -13,6 +13,7 @@ import TablePicker from '@/components/pos/TablePicker.vue';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { t, tr } from '@/i18n';
+import { printOrOpen } from '@/pos/cashier';
 import { productModifierGroups } from '@/pos/catalog';
 import { formatMoney } from '@/pos/money';
 import {
@@ -36,9 +37,9 @@ import {
     sendDraft,
 } from '@/pos/orders';
 import type { Draft, DraftLine, InventedProduct, LineEdit, LineGroup } from '@/pos/orders';
+import { directTicketPrinter } from '@/pos/print';
 import { go, route } from '@/pos/router';
 import { activeOrderForTable, followOrder, isActive, state } from '@/pos/store';
-import { openTicketPdf } from '@/pos/ticketPdf';
 import { enqueue } from '@/pos/sync';
 import type { DiningTable, LineModifier, OrderLine, Product, SetMenu } from '@/pos/types';
 
@@ -253,7 +254,9 @@ async function printProforma(): Promise<void> {
     printingProforma.value = true;
 
     try {
-        await openTicketPdf(proformaTitle(order.value), proformaDocument(order.value));
+        if ((await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value))) === 'printed') {
+            toast.success(t('cashier.sentTo', { name: directTicketPrinter()?.name ?? '' }));
+        }
     } catch {
         toast.error(t('common.error'));
     } finally {
@@ -511,7 +514,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                     </Button>
                     <Button v-if="canCharge && !draft.lines.length" variant="outline" class="h-12" :disabled="printingProforma" @click="printProforma">
                         <FileText class="size-5" />
-                        {{ printingProforma ? t('cashier.openingPdf') : t('order.printProforma') }}
+                        {{ printingProforma ? (directTicketPrinter() ? t('cashier.sending') : t('cashier.openingPdf')) : t('order.printProforma') }}
                     </Button>
                     <Button v-if="canCharge && !draft.lines.length" class="h-12 bg-[#00056a]" @click="go(`/caixa/${order!.uuid}`)">
                         <Receipt class="size-5" />

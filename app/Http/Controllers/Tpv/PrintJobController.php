@@ -22,6 +22,7 @@ class PrintJobController extends Controller
 
         $claimed = PrintJob::query()
             ->whereKey($printJob->id)
+            ->whereDoesntHave('printer', fn ($printer) => $printer->whereNotNull('print_agent_id'))
             ->where(function ($query) use ($device) {
                 $query->where('status', 'pending')
                     ->orWhere(function ($query) use ($device) {

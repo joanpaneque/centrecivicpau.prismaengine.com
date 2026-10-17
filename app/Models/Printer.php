@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
@@ -10,6 +11,9 @@ use Illuminate\Support\Carbon;
  * @property int $id
  * @property string $name
  * @property string $type simulated|escpos_network|system
+ * @property int|null $print_agent_id the Windows program that prints it (null = the server or the cashier browser)
+ * @property string $output escpos (raw bytes, thermal printers)|driver (through the Windows driver)
+ * @property string $codepage cp858|cp1252|ascii (accents on ESC/POS printers)
  * @property string|null $ip
  * @property int|null $port
  * @property string|null $model
@@ -19,10 +23,15 @@ use Illuminate\Support\Carbon;
  * @property bool $active
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ * @property-read PrintAgent|null $agent
  */
 class Printer extends Model
 {
     public const TYPES = ['system', 'escpos_network', 'simulated'];
+
+    public const OUTPUTS = ['escpos', 'driver'];
+
+    public const CODEPAGES = ['cp858', 'cp1252', 'ascii'];
 
     protected $guarded = ['id'];
 
@@ -32,6 +41,23 @@ class Printer extends Model
             'active' => 'boolean',
             'is_ticket_printer' => 'boolean',
         ];
+    }
+
+    /**
+     * @return BelongsTo<PrintAgent, $this>
+     */
+    public function agent(): BelongsTo
+    {
+        return $this->belongsTo(PrintAgent::class, 'print_agent_id');
+    }
+
+    /**
+     * Prints without any dialog: through the Windows program, or straight to a network
+     * printer the server can reach.
+     */
+    public function printsDirectly(): bool
+    {
+        return $this->print_agent_id !== null || $this->type === 'escpos_network';
     }
 
     /**

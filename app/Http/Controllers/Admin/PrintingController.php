@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Admin;
 
 use App\Events\TpvChanged;
 use App\Http\Controllers\Controller;
+use App\Models\PrintAgent;
 use App\Models\Printer;
 use App\Models\PrintJob;
 use App\Models\ProductionDestination;
+use App\Services\Printing\PrintAgentRelease;
 use App\Services\Printing\PrintService;
 use App\Support\Translation;
 use Illuminate\Http\RedirectResponse;
@@ -15,10 +17,11 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PrintingController extends Controller
 {
-    public function index(): Response
+    public function index(PrintAgentRelease $release): Response
     {
         return Inertia::render('admin/Printing', [
             'destinations' => ProductionDestination::query()->with('printers:id')->orderBy('sort')->get()->map(fn (ProductionDestination $d) => [
@@ -32,6 +35,9 @@ class PrintingController extends Controller
                 'id' => $p->id,
                 'name' => $p->name,
                 'type' => $p->type,
+                'printAgentId' => $p->print_agent_id,
+                'output' => $p->output,
+                'codepage' => $p->codepage,
                 'ip' => $p->ip,
                 'port' => $p->port,
                 'model' => $p->model,
@@ -42,6 +48,16 @@ class PrintingController extends Controller
                 'destinationIds' => $p->destinations->pluck('id'),
             ]),
             'types' => Printer::TYPES,
+            'agents' => PrintAgent::query()->orderBy('name')->get()->map(fn (PrintAgent $a) => [
+                'id' => $a->id,
+                'name' => $a->name,
+                'online' => $a->isOnline(),
+                'lastSeenAt' => $a->last_seen_at?->toIso8601String(),
+                'machine' => $a->machine,
+                'version' => $a->version,
+                'systemPrinters' => $a->system_printers ?? [],
+            ]),
+            'program' => ['available' => $release->available(), 'version' => $release->version(), 'size' => $release->size()],
         ]);
     }
 
@@ -150,9 +166,56 @@ class PrintingController extends Controller
         ], $printer->id, $request->user()?->id, null);
 
         TpvChanged::notify(['prints', 'printing']);
-        $this->toast($printer->type === 'system' ? __('tpv.test_print_queued') : __('tpv.test_printed'));
+        $this->toast(match (true) {
+            $printer->agent !== null => __('tpv.test_print_agent', ['name' => $printer->agent->name]),
+            $printer->type === 'system' => __('tpv.test_print_queued'),
+            default => __('tpv.test_printed'),
+        });
 
         return back();
+    }
+
+    public function download(PrintAgentRelease $release): BinaryFileResponse
+    {
+        return $release->response();
+    }
+
+    /**
+     * Register a PC with the print program; its key is shown once, to paste in the program.
+     */
+    public function storeAgent(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:60']]);
+        [$agent, $token] = PrintAgent::issue($data['name']);
+        Inertia::flash('agentKey', ['id' => $agent->id, 'name' => $agent->name, 'key' => PrintAgent::connectionKey($token)]);
+
+        return back();
+    }
+
+    public function updateAgent(Request $request, PrintAgent $agent): RedirectResponse
+    {
+        $agent->update($request->validate(['name' => ['required', 'string', 'max:60']]));
+
+        return $this->changed();
+    }
+
+    /**
+     * A new key (lost key, or a new PC): the old one stops working at once.
+     */
+    public function agentKey(PrintAgent $agent): RedirectResponse
+    {
+        $token = $agent->newToken();
+        $agent->save();
+        Inertia::flash('agentKey', ['id' => $agent->id, 'name' => $agent->name, 'key' => PrintAgent::connectionKey($token)]);
+
+        return back();
+    }
+
+    public function destroyAgent(PrintAgent $agent): RedirectResponse
+    {
+        $agent->delete();
+
+        return $this->changed(__('tpv.deleted'));
     }
 
     private function singleTicketPrinter(Printer $printer): void
@@ -195,6 +258,9 @@ class PrintingController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:60'],
             'type' => ['required', Rule::in(Printer::TYPES)],
+            'printAgentId' => ['nullable', 'integer', 'exists:print_agents,id'],
+            'output' => ['nullable', Rule::in(Printer::OUTPUTS)],
+            'codepage' => ['nullable', Rule::in(Printer::CODEPAGES)],
             'ip' => ['nullable', 'required_if:type,escpos_network', 'ip'],
             'port' => ['nullable', 'integer', 'between:1,65535'],
             'model' => ['nullable', 'string', 'max:60'],
@@ -210,6 +276,9 @@ class PrintingController extends Controller
             'attributes' => [
                 'name' => $data['name'],
                 'type' => $data['type'],
+                'print_agent_id' => $data['type'] === 'simulated' ? null : ($data['printAgentId'] ?? null),
+                'output' => $data['output'] ?? 'escpos',
+                'codepage' => $data['codepage'] ?? 'cp858',
                 'ip' => $data['ip'] ?? null,
                 'port' => $data['port'] ?? ($data['type'] === 'escpos_network' ? 9100 : null),
                 'model' => $data['model'] ?? null,

@@ -3,10 +3,11 @@ import { t } from '@/i18n';
 import { randomToken, uuid } from './crypto';
 import { computeTax, discountAmount, grossTotal } from './money';
 import { childLines, ticketViewFor } from './orders';
-import { job, lineAmount, ticketDocument, ticketPrinterId, widthFor, zDocument } from './print';
+import { directTicketPrinter, job, lineAmount, ticketDocument, ticketPrinterId, widthFor, zDocument } from './print';
 import type { TicketView, ZSummary } from './print';
 import { setKv, state } from './store';
 import { enqueue } from './sync';
+import { openTicketPdf } from './ticketPdf';
 import type { Order, OrderLine, PrintDocument } from './types';
 
 export type PaymentInput = { method: 'cash' | 'card'; amount: number; tendered?: number | null };
@@ -224,6 +225,24 @@ export async function issueTicket(
 export async function reprint(title: string, document: PrintDocument): Promise<void> {
     const printerId = ticketPrinterId();
     await enqueue('print.job', {}, [job('reprint', `${t('cashier.reprint')} · ${title}`, printerId, document)]);
+}
+
+/**
+ * "Print the ticket": straight to the ticket printer when it prints by itself; otherwise the
+ * PDF opens in a new tab to print it from the computer.
+ */
+export async function printOrOpen(kind: string, title: string, document: PrintDocument): Promise<'printed' | 'pdf'> {
+    const printer = directTicketPrinter();
+
+    if (printer) {
+        await enqueue('print.job', {}, [job(kind, title, printer.id, document)]);
+
+        return 'printed';
+    }
+
+    await openTicketPdf(title, document);
+
+    return 'pdf';
 }
 
 export async function openSession(openingFloat: number): Promise<void> {
