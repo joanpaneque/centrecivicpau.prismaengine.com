@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property string $name
  * @property string $type simulated|escpos_network|system
  * @property int|null $print_agent_id the Windows program that prints it (null = the server or the cashier browser)
+ * @property string|null $agent_key its id in that program, which is where it is set up
  * @property string $output escpos (raw bytes, thermal printers)|driver (through the Windows driver)
  * @property string $codepage cp858|cp1252|ascii (accents on ESC/POS printers)
  * @property string|null $ip
@@ -58,6 +59,15 @@ class Printer extends Model
     public function printsDirectly(): bool
     {
         return $this->print_agent_id !== null || $this->type === 'escpos_network';
+    }
+
+    /**
+     * Set up in the Windows print program (name, where and how it prints); the web only
+     * chooses what it prints.
+     */
+    public function managedByAgent(): bool
+    {
+        return $this->print_agent_id !== null && $this->agent_key !== null;
     }
 
     /**

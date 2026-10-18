@@ -28,6 +28,7 @@ return [
     'test_printed' => 'Se ha enviado la impresión de prueba.',
     'test_print_queued' => 'Prueba enviada. Abre el TPV de caja en el PC de las impresoras y confirma el diálogo de imprimir.',
     'test_print_agent' => 'Prueba enviada al programa de impresión «:name». Debe salir en unos segundos.',
+    'printer_managed_by_agent' => 'Esta impresora se configura en el programa de impresión del ordenador: elimínala desde allí.',
     'shifts_copied' => 'Se han copiado :count turnos.',
     'roles' => ['admin' => 'Administrador', 'staff' => 'Camarero / trabajador', 'kitchen' => 'Pantalla de cocina'],
     'time_types' => ['clock_in' => 'Entrada', 'clock_out' => 'Salida', 'break_start' => 'Inicio pausa', 'break_end' => 'Fin pausa'],

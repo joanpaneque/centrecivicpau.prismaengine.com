@@ -25,13 +25,15 @@ class PrintAgentController extends Controller
     public function __construct(private readonly PrintDocumentEncoder $encoder) {}
 
     /**
-     * Check in: report the PC and its Windows printers, get the printers to serve and how to
-     * listen for new jobs.
+     * Check in: report the PC, its Windows printers and the printers set up in the program;
+     * get those printers back (with what the web decides about them) and how to listen for
+     * new jobs.
      */
     public function hello(Request $request, PrintAgentRelease $release): JsonResponse
     {
         $agent = $this->agent($request);
         $this->checkIn($agent, $request);
+        $this->syncPrinters($agent, $request);
 
         $key = config('broadcasting.connections.reverb.key');
         $host = (string) config('services.print_agent.ws_host');
@@ -150,12 +152,78 @@ class PrintAgentController extends Controller
     }
 
     /**
+     * The printers are set up in the program: create, update and remove them to match its
+     * list. Older programs (or one that has not adopted the existing printers yet) send no
+     * list, and then nothing changes.
+     */
+    private function syncPrinters(PrintAgent $agent, Request $request): void
+    {
+        if (! is_array($request->input('definitions'))) {
+            return;
+        }
+
+        $data = $request->validate([
+            'definitions' => ['array', 'max:30'],
+            'definitions.*.key' => ['required', 'string', 'max:40', 'distinct'],
+            'definitions.*.name' => ['required', 'string', 'max:60'],
+            'definitions.*.target' => ['required', Rule::in(['windows', 'network'])],
+            'definitions.*.systemName' => ['nullable', 'required_if:definitions.*.target,windows', 'string', 'max:80'],
+            'definitions.*.ip' => ['nullable', 'required_if:definitions.*.target,network', 'ip'],
+            'definitions.*.port' => ['nullable', 'integer', 'between:1,65535'],
+            'definitions.*.output' => ['required', Rule::in(Printer::OUTPUTS)],
+            'definitions.*.codepage' => ['nullable', Rule::in(Printer::CODEPAGES)],
+            'definitions.*.paperWidth' => ['required', 'integer', Rule::in([32, 42, 48])],
+        ]);
+
+        $changed = false;
+        $keys = [];
+
+        foreach ($data['definitions'] as $definition) {
+            $network = $definition['target'] === 'network';
+            $keys[] = $definition['key'];
+            $printer = Printer::query()->firstOrNew(['print_agent_id' => $agent->id, 'agent_key' => $definition['key']]);
+
+            if (! $printer->exists) {
+                $printer->forceFill(['active' => true, 'is_ticket_printer' => false]);
+            }
+
+            $printer->forceFill([
+                'name' => $definition['name'],
+                'type' => $network ? 'escpos_network' : 'system',
+                'output' => $network ? 'escpos' : $definition['output'],
+                'codepage' => $definition['codepage'] ?? 'cp858',
+                'system_name' => $network ? null : $definition['systemName'],
+                'ip' => $network ? $definition['ip'] : null,
+                'port' => $network ? ($definition['port'] ?? 9100) : null,
+                'paper_width' => (int) $definition['paperWidth'],
+            ]);
+
+            if ($printer->isDirty()) {
+                $printer->save();
+                $changed = true;
+            }
+        }
+
+        $removed = $agent->printers()->where(fn ($q) => $q->whereNull('agent_key')->orWhereNotIn('agent_key', $keys))->get();
+
+        foreach ($removed as $printer) {
+            $printer->delete();
+            $changed = true;
+        }
+
+        if ($changed) {
+            TpvChanged::notify(['printing']);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function printer(Printer $printer): array
     {
         return [
             'id' => $printer->id,
+            'key' => $printer->agent_key,
             'name' => $printer->name,
             'active' => $printer->active,
             'target' => $printer->type === 'escpos_network' ? 'network' : 'windows',
@@ -163,7 +231,9 @@ class PrintAgentController extends Controller
             'ip' => $printer->ip,
             'port' => $printer->port ?? 9100,
             'output' => $printer->type === 'escpos_network' ? 'escpos' : $printer->output,
+            'codepage' => $printer->codepage,
             'paperWidth' => $printer->paper_width,
+            'isTicketPrinter' => $printer->is_ticket_printer,
         ];
     }
 

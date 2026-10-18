@@ -36,6 +36,7 @@ class PrintingController extends Controller
                 'name' => $p->name,
                 'type' => $p->type,
                 'printAgentId' => $p->print_agent_id,
+                'managed' => $p->managedByAgent(),
                 'output' => $p->output,
                 'codepage' => $p->codepage,
                 'ip' => $p->ip,
@@ -132,6 +133,21 @@ class PrintingController extends Controller
 
     public function updatePrinter(Request $request, Printer $printer): RedirectResponse
     {
+        // Name, where and how it prints are set up in the print program; here only what it prints.
+        if ($printer->managedByAgent()) {
+            $data = $request->validate([
+                'isTicketPrinter' => ['boolean'],
+                'active' => ['boolean'],
+                'destinationIds' => ['array'],
+                'destinationIds.*' => ['integer', 'exists:production_destinations,id'],
+            ]);
+            $printer->update(['is_ticket_printer' => $data['isTicketPrinter'] ?? false, 'active' => $data['active'] ?? true]);
+            $printer->destinations()->sync(array_values(array_map('intval', $data['destinationIds'] ?? [])));
+            $this->singleTicketPrinter($printer);
+
+            return $this->changed();
+        }
+
         $data = $this->printerData($request);
         $printer->update($data['attributes']);
         $printer->destinations()->sync($data['destinationIds']);
@@ -142,6 +158,12 @@ class PrintingController extends Controller
 
     public function destroyPrinter(Printer $printer): RedirectResponse
     {
+        if ($printer->managedByAgent()) {
+            $this->toast(__('tpv.printer_managed_by_agent'), 'error');
+
+            return back();
+        }
+
         $printer->delete();
 
         return $this->changed(__('tpv.deleted'));
@@ -258,7 +280,6 @@ class PrintingController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:60'],
             'type' => ['required', Rule::in(Printer::TYPES)],
-            'printAgentId' => ['nullable', 'integer', 'exists:print_agents,id'],
             'output' => ['nullable', Rule::in(Printer::OUTPUTS)],
             'codepage' => ['nullable', Rule::in(Printer::CODEPAGES)],
             'ip' => ['nullable', 'required_if:type,escpos_network', 'ip'],
@@ -276,7 +297,9 @@ class PrintingController extends Controller
             'attributes' => [
                 'name' => $data['name'],
                 'type' => $data['type'],
-                'print_agent_id' => $data['type'] === 'simulated' ? null : ($data['printAgentId'] ?? null),
+                // Printers of the print program are created in the program.
+                'print_agent_id' => null,
+                'agent_key' => null,
                 'output' => $data['output'] ?? 'escpos',
                 'codepage' => $data['codepage'] ?? 'cp858',
                 'ip' => $data['ip'] ?? null,

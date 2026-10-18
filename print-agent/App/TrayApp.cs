@@ -12,13 +12,15 @@ internal sealed class TrayApp : ApplicationContext
     private readonly CancellationTokenSource stop = new();
     private readonly SynchronizationContext ui;
     private AgentState? announced;
+    private string? announcedVersion;
+    private DateTime nextAutoUpdate = DateTime.MinValue;
 
     public TrayApp(bool showWindow)
     {
         ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         var config = AgentConfig.Load();
         runner = new AgentRunner(config, new WindowsBackend());
-        window = new MainForm(runner, config, Quit);
+        window = new MainForm(runner, () => _ = UpdateAsync(manual: true));
 
         var menu = new ContextMenuStrip();
         menu.Items.Add("Obre", null, (_, _) => ShowWindow());
@@ -30,6 +32,7 @@ internal sealed class TrayApp : ApplicationContext
 
         runner.StatusChanged += () => ui.Post(_ => OnStatus(), null);
         runner.JobFinished += result => ui.Post(_ => OnJob(result), null);
+        runner.PrintersChanged += () => ui.Post(_ => window.RefreshPrinters(), null);
         SingleInstance.Listen(SingleInstance.ShowEvent, () => ui.Post(_ => ShowWindow(), null));
         SingleInstance.Listen(SingleInstance.QuitEvent, () => ui.Post(_ => Quit(), null));
 
@@ -75,15 +78,42 @@ internal sealed class TrayApp : ApplicationContext
 
         if (runner.State == AgentState.Online && Updater.IsNewer(runner.LatestVersion))
         {
-            _ = UpdateAsync(runner.LatestVersion!);
+            if (runner.Config.AutoUpdate && DateTime.UtcNow >= nextAutoUpdate)
+            {
+                _ = UpdateAsync(manual: false);
+            }
+            else if (announcedVersion != runner.LatestVersion)
+            {
+                announcedVersion = runner.LatestVersion;
+                tray.ShowBalloonTip(10000, "Hi ha una versió nova del programa", $"Versió {runner.LatestVersion}. Obre el programa i clica «Actualitza ara».", ToolTipIcon.Info);
+            }
         }
     }
 
-    private async Task UpdateAsync(string version)
+    private async Task UpdateAsync(bool manual)
     {
-        if (await Updater.TryUpdateAsync(runner, version, stop.Token))
+        var version = runner.LatestVersion;
+
+        if (!Updater.IsNewer(version) || Updater.Busy)
+        {
+            return;
+        }
+
+        window.SetUpdating(true);
+        var error = await Updater.TryUpdateAsync(runner, version!, stop.Token);
+
+        if (error is null)
         {
             Quit();
+            return;
+        }
+
+        window.SetUpdating(false);
+        nextAutoUpdate = DateTime.UtcNow.AddMinutes(30); // do not retry on every status change
+
+        if (manual)
+        {
+            MessageBox.Show(window, "No s'ha pogut actualitzar: " + error + "\n\nTambé pots descarregar el programa de nou a Gestió → Impressió i obrir-lo: s'actualitza amb la mateixa configuració.", Installer.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 

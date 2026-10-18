@@ -23,6 +23,7 @@ public sealed class AgentRunner : IDisposable
     private readonly IPrintBackend backend;
     private readonly SemaphoreSlim wake = new(0, 1);
     private readonly RealtimeSocket realtime;
+    private readonly object gate = new();
     private ServerApi? api;
     private AgentConfig config;
     private DateTime lastHello = DateTime.MinValue;
@@ -48,10 +49,28 @@ public sealed class AgentRunner : IDisposable
 
     public IReadOnlyList<PrinterConfig> Printers { get; private set; } = [];
 
-    /// <summary>A newer program is published on the server.</summary>
+    /// <summary>The latest program published on the server.</summary>
     public string? LatestVersion { get; private set; }
 
+    /// <summary>When the server last told which version is the latest.</summary>
+    public DateTime? CheckedAt { get; private set; }
+
+    /// <summary>The configuration in use (the window edits it through this runner).</summary>
+    public AgentConfig Config
+    {
+        get
+        {
+            lock (gate)
+            {
+                return config;
+            }
+        }
+    }
+
     public event Action? StatusChanged;
+
+    /// <summary>The local printer list changed from here (taken over from the server).</summary>
+    public event Action? PrintersChanged;
 
     public event Action<JobResult>? JobFinished;
 
@@ -70,11 +89,44 @@ public sealed class AgentRunner : IDisposable
     /// <summary>New key or server: reconnect from scratch.</summary>
     public void Reconfigure(AgentConfig next)
     {
-        config = next;
+        lock (gate)
+        {
+            config = next;
+        }
+
         api?.Dispose();
         api = null;
         lastHello = DateTime.MinValue;
         realtime.Stop();
+        Wake();
+    }
+
+    /// <summary>Save the printers set up in the window and send them to the server now.</summary>
+    public void SetPrinters(List<LocalPrinter> printers)
+    {
+        lock (gate)
+        {
+            config.Printers = printers;
+            config.Save();
+        }
+
+        Log.Write($"Impressores: {string.Join(", ", printers.Select(p => $"«{p.Name}» ({p.Where})"))}.");
+        CheckNow();
+    }
+
+    public void SetAutoUpdate(bool enabled)
+    {
+        lock (gate)
+        {
+            config.AutoUpdate = enabled;
+            config.Save();
+        }
+    }
+
+    /// <summary>Say hello right away: sends the printers and asks for the latest version.</summary>
+    public void CheckNow()
+    {
+        lastHello = DateTime.MinValue;
         Wake();
     }
 
@@ -149,7 +201,14 @@ public sealed class AgentRunner : IDisposable
     private async Task HelloAsync(CancellationToken ct)
     {
         var printers = DateTime.UtcNow - lastPrinterList > TimeSpan.FromMinutes(5) || lastHello == DateTime.MinValue ? backend.InstalledPrinters() : null;
-        var hello = await api!.HelloAsync(new { machine = Environment.MachineName, version = Version, printers }, ct);
+        List<LocalPrinter>? definitions;
+
+        lock (gate)
+        {
+            definitions = config.PrintersAdopted ? [.. config.Printers] : null;
+        }
+
+        var hello = await api!.HelloAsync(new { machine = Environment.MachineName, version = Version, printers, definitions }, ct);
 
         if (printers is not null)
         {
@@ -160,8 +219,42 @@ public sealed class AgentRunner : IDisposable
         AgentName = hello.Agent.Name;
         Printers = hello.Printers;
         LatestVersion = hello.LatestVersion;
+        CheckedAt = DateTime.Now;
         realtime.Configure(hello.Realtime);
+
+        if (definitions is null)
+        {
+            Adopt(hello.Printers);
+        }
+
         StatusChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// First hello of this version: the printers set up on the web for this computer become
+    /// the program's own, and from then on the program's list is the one that counts.
+    /// </summary>
+    private void Adopt(List<PrinterConfig> server)
+    {
+        // An older server does not know about printers set up here yet.
+        if (server.Any(p => p.Key is null))
+        {
+            return;
+        }
+
+        lock (gate)
+        {
+            var list = config.Printers.ToList();
+            list.AddRange(server.Where(p => list.All(l => l.Key != p.Key)).Select(LocalPrinter.From));
+            config.Printers = list;
+            config.PrintersAdopted = true;
+            config.Save();
+        }
+
+        Log.Write($"Impressores de la web incorporades al programa: {server.Count}.");
+        lastHello = DateTime.MinValue; // send the list back right away
+        Wake();
+        PrintersChanged?.Invoke();
     }
 
     private async Task PrintAsync(PrintJob job, CancellationToken ct)

@@ -8,7 +8,7 @@ namespace CentreCivic.PrintAgent.App;
 /// </summary>
 internal static class Updater
 {
-    private static bool busy;
+    public static bool Busy { get; private set; }
 
     private static string NewPath => Installer.ExePath + ".new";
 
@@ -52,15 +52,23 @@ internal static class Updater
         }
     }
 
-    /// <summary>Returns true when the new version has been started and this one must exit.</summary>
-    public static async Task<bool> TryUpdateAsync(AgentRunner runner, string version, CancellationToken ct)
+    /// <summary>
+    /// Returns null when the new version has been started and this one must exit, or why it
+    /// could not update (this version keeps running).
+    /// </summary>
+    public static async Task<string?> TryUpdateAsync(AgentRunner runner, string version, CancellationToken ct)
     {
-        if (busy || !Installer.IsRunningInstalled)
+        if (Busy)
         {
-            return false;
+            return "Ja s'està actualitzant.";
         }
 
-        busy = true;
+        if (!Installer.IsRunningInstalled)
+        {
+            return "Aquest programa no és el que està instal·lat.";
+        }
+
+        Busy = true;
 
         try
         {
@@ -79,7 +87,7 @@ internal static class Updater
             Program.ReleaseInstance();
             Process.Start(new ProcessStartInfo(Installer.ExePath, "--background --updated") { UseShellExecute = false, WorkingDirectory = Installer.InstallDir });
 
-            return true;
+            return null;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -91,11 +99,11 @@ internal static class Updater
                 File.Move(OldPath, Installer.ExePath);
             }
 
-            return false;
+            return e.Message;
         }
         finally
         {
-            busy = false;
+            Busy = false;
         }
     }
 }

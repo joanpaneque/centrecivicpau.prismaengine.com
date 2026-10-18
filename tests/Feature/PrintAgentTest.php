@@ -175,3 +175,50 @@ test('the cashier browser leaves the jobs of the program alone and knows the tic
         ->postJson(route('tpv.print-jobs.claim', $job))
         ->assertStatus(409);
 });
+
+test('the printers are set up in the program: it adopts the existing ones and then its list is mirrored on the web', function () {
+    Event::fake([PrintJobsWaiting::class]);
+    [$agent, $token, $printer] = agentWithPrinter();
+    $printer->forceFill(['agent_key' => 'existing-key'])->save();
+
+    // A program that has not adopted them yet sends no list: nothing changes.
+    $this->withToken($token)->postJson(route('api.print-agent.hello'))
+        ->assertJsonPath('printers.0.key', 'existing-key')
+        ->assertJsonPath('printers.0.isTicketPrinter', true);
+
+    $definitions = [
+        ['key' => 'existing-key', 'name' => 'Tiquets caixa', 'target' => 'windows', 'systemName' => 'POS-80C', 'output' => 'driver', 'codepage' => 'cp858', 'paperWidth' => 48],
+        ['key' => 'kitchen', 'name' => 'Cuina', 'target' => 'network', 'ip' => '192.168.1.50', 'port' => 9100, 'output' => 'escpos', 'codepage' => 'cp1252', 'paperWidth' => 42],
+    ];
+
+    $this->withToken($token)->postJson(route('api.print-agent.hello'), ['definitions' => $definitions])
+        ->assertOk()
+        ->assertJsonCount(2, 'printers');
+
+    $printer->refresh();
+    $kitchen = Printer::query()->where('agent_key', 'kitchen')->firstOrFail();
+
+    // What the web decides (ticket printer, active) stays; the rest comes from the program.
+    expect($printer->name)->toBe('Tiquets caixa')
+        ->and($printer->output)->toBe('driver')
+        ->and($printer->is_ticket_printer)->toBeTrue()
+        ->and($kitchen->type)->toBe('escpos_network')
+        ->and($kitchen->ip)->toBe('192.168.1.50')
+        ->and($kitchen->print_agent_id)->toBe($agent->id)
+        ->and($kitchen->managedByAgent())->toBeTrue();
+
+    // The web only chooses what it prints, and cannot delete it.
+    $admin = User::factory()->admin()->create();
+    $this->actingAs($admin)->patch(route('admin.printers.update', $kitchen), ['name' => 'Hackejada', 'isTicketPrinter' => false, 'active' => false, 'destinationIds' => []])->assertRedirect();
+    expect($kitchen->refresh()->name)->toBe('Cuina')->and($kitchen->active)->toBeFalse();
+    $this->actingAs($admin)->delete(route('admin.printers.destroy', $kitchen))->assertRedirect();
+    expect($kitchen->exists)->toBeTrue();
+
+    // Removed in the program: removed on the web.
+    $this->withToken($token)->postJson(route('api.print-agent.hello'), ['definitions' => [$definitions[1]]])->assertJsonCount(1, 'printers');
+    expect(Printer::query()->whereKey($printer->id)->exists())->toBeFalse()
+        ->and($kitchen->refresh()->active)->toBeFalse();
+
+    $this->withToken($token)->postJson(route('api.print-agent.hello'), ['definitions' => [['key' => 'x', 'name' => 'Sense IP', 'target' => 'network', 'output' => 'escpos', 'paperWidth' => 48]]])
+        ->assertUnprocessable();
+});

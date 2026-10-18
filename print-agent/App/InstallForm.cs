@@ -22,12 +22,15 @@ internal sealed class InstallForm : Form
 
         var installed = Installer.InstalledVersion;
         var updating = installed is not null;
+        var same = installed == AgentRunner.Version;
 
         var header = Ui.Header("Programa d'impressió", "Centre Cívic Pau");
         var text = new Label
         {
-            Text = updating
-                ? $"Ja hi ha la versió {installed} instal·lada en aquest ordinador. S'actualitzarà a la {AgentRunner.Version} i es tornarà a obrir sola, amb la mateixa configuració."
+            Text = same
+                ? $"La versió {installed} ja està instal·lada en aquest ordinador. Es tornarà a instal·lar i s'obrirà sola, amb la mateixa configuració i les mateixes impressores."
+                : updating
+                ? $"Ja hi ha la versió {installed} instal·lada en aquest ordinador. S'actualitzarà a la {AgentRunner.Version} i es tornarà a obrir sola, amb la mateixa configuració i les mateixes impressores."
                 : "Imprimeix directament els tiquets i les comandes del TPV, sense diàlogs ni PDF.\n\n"
                   + "• S'instal·la només per a aquest usuari de Windows (no cal ser administrador).\n"
                   + "• S'obre sol cada cop que s'encén l'ordinador i es queda al costat del rellotge.\n"
@@ -38,7 +41,7 @@ internal sealed class InstallForm : Form
 
         install = new Button
         {
-            Text = updating ? "Actualitza" : "Instal·la",
+            Text = same ? "Reinstal·la" : updating ? "Actualitza" : "Instal·la",
             Size = new Size(170, 44),
             Location = new Point(366, 262),
             BackColor = Ui.Brand,

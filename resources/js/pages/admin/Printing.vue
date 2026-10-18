@@ -29,6 +29,7 @@ type Printer = {
     name: string;
     type: string;
     printAgentId: number | null;
+    managed: boolean;
     output: 'escpos' | 'driver';
     codepage: 'cp858' | 'cp1252' | 'ascii';
     ip: string | null;
@@ -56,8 +57,6 @@ const { t, tr } = useI18n();
 const modeOptions = computed(() => (['printer', 'screen', 'both'] as Mode[]).map((value) => ({ value, label: t(`admin.printing.modes.${value}`) })));
 const typeOptions = computed(() => props.types.map((value) => ({ value, label: t(`admin.printing.types.${value}`) })));
 const widthOptions = [32, 42, 48].map((value) => ({ value, label: `${value} (${value === 32 ? '58mm' : '80mm'})` }));
-const agentOptions = computed(() => props.agents.map((a) => ({ value: a.id as number | null, label: a.name })));
-const outputOptions = computed(() => (['escpos', 'driver'] as const).map((value) => ({ value, label: t(`admin.printing.outputs.${value}`) })));
 const codepageOptions = computed(() => (['cp858', 'cp1252', 'ascii'] as const).map((value) => ({ value, label: t(`admin.printing.codepages.${value}`) })));
 const agentName = (id: number | null) => props.agents.find((a) => a.id === id)?.name ?? '';
 
@@ -163,7 +162,6 @@ const editingPrinter = ref<Printer | null>(null);
 const printerForm = useForm({
     name: '',
     type: 'system',
-    printAgentId: null as number | null,
     output: 'escpos' as Printer['output'],
     codepage: 'cp858' as Printer['codepage'],
     ip: '',
@@ -181,7 +179,6 @@ function openPrinter(printer: Printer | null): void {
     printerForm.clearErrors();
     printerForm.name = printer?.name ?? '';
     printerForm.type = printer?.type ?? 'system';
-    printerForm.printAgentId = printer?.printAgentId ?? (props.agents.length === 1 ? props.agents[0].id : null);
     printerForm.output = printer?.output ?? 'escpos';
     printerForm.codepage = printer?.codepage ?? 'cp858';
     printerForm.ip = printer?.ip ?? '';
@@ -211,16 +208,9 @@ function testPrint(printer: Printer): void {
     router.post(printerRoutes.test.url(printer.id), {}, { preserveScroll: true });
 }
 
-const formAgent = computed(() => props.agents.find((a) => a.id === printerForm.printAgentId) ?? null);
-const windowsPrinterOptions = computed(() => {
-    const names = [...(formAgent.value?.systemPrinters ?? [])];
-
-    if (printerForm.systemName && !names.includes(printerForm.systemName)) {
-        names.unshift(printerForm.systemName);
-    }
-
-    return names.map((name) => ({ value: name, label: name }));
-});
+// Printers of the print program are set up in the program; here only what they print.
+const managed = computed(() => editingPrinter.value?.managed === true);
+const isOutdated = (agent: Agent) => !!agent.version && !!props.program.version && agent.version !== props.program.version;
 
 const deleting = ref<{ kind: 'destination' | 'printer' | 'agent'; id: number; label: string } | null>(null);
 const deleteOpen = computed({ get: () => deleting.value !== null, set: (v) => !v && (deleting.value = null) });
@@ -303,6 +293,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                         {{ agent.online ? t('admin.printing.program.online') : agent.lastSeenAt ? t('admin.printing.program.offline') : t('admin.printing.program.never') }}
                         <span v-if="agent.lastSeenAt && !agent.online" class="text-muted-foreground">· {{ t('admin.printing.program.lastSeen', { when: formatDateTime(agent.lastSeenAt) }) }}</span>
                         <span v-if="agent.version" class="text-muted-foreground"> · v{{ agent.version }}</span>
+                        <span v-if="isOutdated(agent)" class="text-amber-700"> ({{ t('admin.printing.program.outdated', { version: program.version ?? '' }) }})</span>
                         · {{ t('admin.printing.program.printersCount', { count: printers.filter((p) => p.printAgentId === agent.id).length }) }}
                     </div>
                     <div v-if="agent.systemPrinters.length" class="mt-1 truncate text-xs text-muted-foreground" :title="agent.systemPrinters.join(', ')">
@@ -347,6 +338,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                 <h2 class="font-medium">{{ t('admin.printing.printers') }}</h2>
                 <Button size="sm" @click="openPrinter(null)"><Plus class="size-4" /> {{ t('common.new') }}</Button>
             </div>
+            <p v-if="agents.length" class="mb-3 text-xs text-muted-foreground">{{ t('admin.printing.printersFromProgram') }}</p>
             <div class="space-y-2">
                 <div
                     v-for="printer in printers"
@@ -421,7 +413,15 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                 <DialogHeader>
                     <DialogTitle>{{ t('admin.printing.printer') }}</DialogTitle>
                 </DialogHeader>
-                <div class="grid gap-4 sm:grid-cols-2">
+                <div v-if="managed && editingPrinter" class="rounded-lg border bg-muted/40 p-3 text-sm">
+                    <div class="font-medium">{{ editingPrinter.name }}</div>
+                    <div class="mt-0.5 text-muted-foreground">
+                        {{ editingPrinter.type === 'escpos_network' ? `${editingPrinter.ip}:${editingPrinter.port}` : editingPrinter.systemName }}
+                        · {{ t(`admin.printing.outputs.${editingPrinter.output}`) }} · {{ editingPrinter.paperWidth }} col.
+                    </div>
+                    <p class="mt-2 text-xs text-muted-foreground">{{ t('admin.printing.managedHelp', { name: agentName(editingPrinter.printAgentId) }) }}</p>
+                </div>
+                <div v-else class="grid gap-4 sm:grid-cols-2">
                     <Field :label="t('common.name')" :error="printerForm.errors.name" class="sm:col-span-2">
                         <Input v-model="printerForm.name" required />
                     </Field>
@@ -431,21 +431,8 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     <Field :label="t('admin.printing.paperWidth')">
                         <SelectInput v-model="printerForm.paperWidth" :options="widthOptions" />
                     </Field>
-                    <Field v-if="printerForm.type !== 'simulated'" :label="t('admin.printing.via')" :help="t('admin.printing.viaHelp')" class="sm:col-span-2">
-                        <SelectInput v-model="printerForm.printAgentId" :placeholder="t('admin.printing.viaNone')" :options="agentOptions" />
-                    </Field>
                     <Field
-                        v-if="printerForm.type === 'system' && formAgent"
-                        :label="t('admin.printing.windowsPrinter')"
-                        :error="printerForm.errors.systemName"
-                        :help="t('admin.printing.windowsPrinterHelp')"
-                        class="sm:col-span-2"
-                    >
-                        <SelectInput v-if="windowsPrinterOptions.length" v-model="printerForm.systemName" :options="windowsPrinterOptions" />
-                        <Input v-else v-model="printerForm.systemName" :placeholder="printerForm.name || t('admin.printing.systemNamePlaceholder')" />
-                    </Field>
-                    <Field
-                        v-else-if="printerForm.type === 'system'"
+                        v-if="printerForm.type === 'system'"
                         :label="t('admin.printing.systemName')"
                         :error="printerForm.errors.systemName"
                         :help="t('admin.printing.systemNameHelp')"
@@ -453,11 +440,8 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     >
                         <Input v-model="printerForm.systemName" :placeholder="printerForm.name || t('admin.printing.systemNamePlaceholder')" />
                     </Field>
-                    <Field v-if="printerForm.type === 'system' && formAgent" :label="t('admin.printing.output')" :help="t('admin.printing.outputHelp')" class="sm:col-span-2">
-                        <SelectInput v-model="printerForm.output" :options="outputOptions" />
-                    </Field>
                     <Field
-                        v-if="(printerForm.type === 'system' && formAgent && printerForm.output === 'escpos') || printerForm.type === 'escpos_network'"
+                        v-if="printerForm.type === 'escpos_network'"
                         :label="t('admin.printing.codepage')"
                         :help="t('admin.printing.codepageHelp')"
                         class="sm:col-span-2"
@@ -487,7 +471,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                 </Field>
                 <DialogFooter class="gap-2">
                     <Button
-                        v-if="editingPrinter"
+                        v-if="editingPrinter && !managed"
                         type="button"
                         variant="ghost"
                         class="mr-auto text-destructive"

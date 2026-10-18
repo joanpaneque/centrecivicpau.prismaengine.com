@@ -12,7 +12,33 @@ public sealed class AgentConfig
     public string Token { get; set; } = "";
     public bool StartWithWindows { get; set; } = true;
 
+    /// <summary>Install new versions on its own as soon as the server has them.</summary>
+    public bool AutoUpdate { get; set; } = true;
+
+    /// <summary>The printers set up in this program; the server mirrors them.</summary>
+    public List<LocalPrinter> Printers { get; set; } = [];
+
+    /// <summary>
+    /// The printers that already existed on the server have been taken over. Until then the
+    /// list is not sent, so an empty list never deletes them.
+    /// </summary>
+    public bool PrintersAdopted { get; set; }
+
     public bool IsComplete => ServerUrl != "" && Token != "";
+
+    /// <summary>
+    /// The same settings with another key. The printers stay; they are merged with the ones
+    /// that program already has on the server and sent again.
+    /// </summary>
+    public AgentConfig WithKey(string serverUrl, string token) => new()
+    {
+        ServerUrl = serverUrl,
+        Token = token,
+        StartWithWindows = StartWithWindows,
+        AutoUpdate = AutoUpdate,
+        Printers = Printers,
+        PrintersAdopted = false,
+    };
 
     public static string Folder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CentreCivicImpressio");
 
@@ -37,10 +63,17 @@ public sealed class AgentConfig
         return new AgentConfig();
     }
 
+    private static readonly object SaveGate = new();
+
     public void Save()
     {
-        Directory.CreateDirectory(Folder);
-        File.WriteAllText(FilePath, JsonSerializer.Serialize(this, Json));
+        lock (SaveGate)
+        {
+            Directory.CreateDirectory(Folder);
+            var temp = FilePath + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(this, Json));
+            File.Move(temp, FilePath, true);
+        }
     }
 
     /// <summary>

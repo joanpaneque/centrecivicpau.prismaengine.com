@@ -28,6 +28,7 @@ return [
     'test_printed' => 'S\'ha enviat la impressió de prova.',
     'test_print_queued' => 'Prova enviada. Obre el TPV de caixa al PC de les impressores i confirma el diàleg d\'imprimir.',
     'test_print_agent' => 'Prova enviada al programa d\'impressió «:name». Ha de sortir en uns segons.',
+    'printer_managed_by_agent' => 'Aquesta impressora es configura al programa d\'impressió de l\'ordinador: elimina-la des d\'allà.',
     'shifts_copied' => 'S\'han copiat :count torns.',
     'roles' => ['admin' => 'Administrador', 'staff' => 'Cambrer / treballador', 'kitchen' => 'Pantalla de cuina'],
     'time_types' => ['clock_in' => 'Entrada', 'clock_out' => 'Sortida', 'break_start' => 'Inici pausa', 'break_end' => 'Fi pausa'],

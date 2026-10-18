@@ -3,31 +3,36 @@ using System.Diagnostics;
 namespace CentreCivic.PrintAgent.App;
 
 /// <summary>
-/// The program's window: paste the key, see whether it is connected, which printers it
-/// serves, the last prints, and print a test on any printer of this computer.
+/// The program's window: paste the key, see whether it is connected, set up the printers of
+/// this computer (they show up on the web with their names), the last prints, and updates.
 /// </summary>
 internal sealed class MainForm : Form
 {
     private readonly AgentRunner runner;
-    private readonly Action quit;
-    private AgentConfig config;
+    private readonly Action updateNow;
     private bool allowClose;
     private bool hintShown;
+    private bool updating;
 
     private readonly Label statusDot = new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 16f) };
     private readonly Label statusText = new() { AutoSize = true, Font = Ui.BoldFont, MaximumSize = new Size(640, 0) };
     private readonly Label statusDetail = new() { AutoSize = true, ForeColor = Color.DimGray, MaximumSize = new Size(640, 0) };
     private readonly TextBox keyBox = new() { Width = 520, PlaceholderText = "https://…/api/print-agent/…" };
-    private readonly ListView assigned = List(("Al TPV", 170), ("On imprimeix", 250), ("Format", 190));
+    private readonly ListView printers = List(("Nom", 150), ("On és", 210), ("Format", 120), ("A la web", 180));
+    private readonly Button editPrinter = new() { Text = "Edita…", AutoSize = true, Height = 32, Enabled = false };
+    private readonly Button removePrinter = new() { Text = "Elimina", AutoSize = true, Height = 32, Enabled = false };
+    private readonly Button testPrinter = new() { Text = "Imprimeix una prova", AutoSize = true, Height = 32, Enabled = false };
     private readonly ListView history = List(("Hora", 70), ("Impressora", 150), ("Document", 260), ("Resultat", 140));
-    private readonly ComboBox localPrinters = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 300 };
-    private readonly ComboBox localFormat = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 170 };
+    private readonly Label updateDot = new() { Text = "●", AutoSize = true, Font = new Font("Segoe UI", 12f), Margin = new Padding(0, 4, 4, 0) };
+    private readonly Label updateText = new() { AutoSize = true, MaximumSize = new Size(600, 0), Margin = new Padding(0, 8, 0, 0) };
+    private readonly Button updateButton = Primary("Actualitza ara");
+    private readonly Button checkButton = new() { Text = "Comprova si n'hi ha", AutoSize = true, Height = 32 };
 
-    public MainForm(AgentRunner runner, AgentConfig config, Action quit)
+    public MainForm(AgentRunner runner, Action updateNow)
     {
         this.runner = runner;
-        this.config = config;
-        this.quit = quit;
+        this.updateNow = updateNow;
+        var config = runner.Config;
 
         Text = Installer.AppName;
         Icon = Ui.AppIcon;
@@ -61,35 +66,49 @@ internal sealed class MainForm : Form
         keyRow.Controls.AddRange([keyBox, connect]);
         body.Controls.Add(keyRow);
 
-        // Printers it serves
-        body.Controls.Add(Ui.Section("Impressores que imprimeix aquest ordinador"));
-        body.Controls.Add(Hint("Es trien a la web, a cada impressora: «Imprimeix a través de» aquest ordinador."));
-        assigned.Height = 120;
-        body.Controls.Add(assigned);
+        // Printers of this computer
+        body.Controls.Add(Ui.Section("Impressores d'aquest ordinador"));
+        body.Controls.Add(Hint("Afegeix-hi cada impressora amb un nom (Cuina, Barra, Tiquets…). Surten soles a la web, a Gestió → Impressió, on tries què imprimeix cadascuna."));
+        printers.Height = 150;
+        printers.MultiSelect = false;
+        printers.SelectedIndexChanged += (_, _) => UpdatePrinterButtons();
+        printers.DoubleClick += (_, _) => EditPrinter();
+        body.Controls.Add(printers);
+        var addPrinter = Primary("Afegeix…");
+        addPrinter.Margin = new Padding(0, 3, 6, 3);
+        addPrinter.Click += (_, _) => AddPrinter();
+        editPrinter.Click += (_, _) => EditPrinter();
+        removePrinter.Click += (_, _) => RemovePrinter();
+        testPrinter.Click += (_, _) => TestPrinter();
+        body.Controls.Add(new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 0), Controls = { addPrinter, editPrinter, removePrinter, testPrinter } });
 
         // History
         body.Controls.Add(Ui.Section("Darreres impressions"));
         history.Height = 170;
         body.Controls.Add(history);
 
-        // Local test
-        body.Controls.Add(Ui.Section("Prova una impressora d'aquest ordinador"));
-        body.Controls.Add(Hint("Imprimeix un tiquet de prova sense passar pel servidor. Si amb «ESC/POS directe» els accents i el tall surten bé, és el format a triar a la web."));
-        localFormat.Items.AddRange(["ESC/POS directe", "Driver de Windows"]);
-        localFormat.SelectedIndex = 0;
-        var test = new Button { Text = "Imprimeix prova", AutoSize = true, Height = 32 };
-        test.Click += (_, _) => PrintLocalTest();
-        var testRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
-        testRow.Controls.AddRange([localPrinters, localFormat, test]);
-        body.Controls.Add(testRow);
+        // Updates
+        body.Controls.Add(Ui.Section("Actualitzacions"));
+        updateButton.Margin = new Padding(12, 3, 6, 3);
+        updateButton.Click += (_, _) => updateNow();
+        checkButton.Click += (_, _) =>
+        {
+            runner.CheckNow();
+            updateText.Text = "Comprovant…";
+        };
+        body.Controls.Add(new FlowLayoutPanel { AutoSize = true, WrapContents = false, Controls = { updateDot, updateText, updateButton, checkButton } });
+        var autoUpdate = new CheckBox { Text = "Instal·la les versions noves automàticament", AutoSize = true, Checked = config.AutoUpdate, Margin = new Padding(0, 6, 0, 0) };
+        autoUpdate.CheckedChanged += (_, _) => runner.SetAutoUpdate(autoUpdate.Checked);
+        body.Controls.Add(autoUpdate);
 
         // Footer
         var autostart = new CheckBox { Text = "Obre'l automàticament en encendre l'ordinador", AutoSize = true, Checked = Installer.Autostart, Margin = new Padding(0, 18, 0, 0) };
         autostart.CheckedChanged += (_, _) =>
         {
             Installer.SetAutostart(autostart.Checked);
-            this.config.StartWithWindows = autostart.Checked;
-            this.config.Save();
+            var current = runner.Config;
+            current.StartWithWindows = autostart.Checked;
+            current.Save();
         };
         body.Controls.Add(autostart);
 
@@ -119,7 +138,7 @@ internal sealed class MainForm : Form
         };
 
         AcceptButton = connect;
-        Shown += (_, _) => { RefreshStatus(); LoadLocalPrinters(); };
+        Shown += (_, _) => RefreshStatus();
         RefreshStatus();
     }
 
@@ -160,35 +179,153 @@ internal sealed class MainForm : Form
         statusDot.ForeColor = color;
         statusText.Text = title;
         statusDetail.Text = runner.State == AgentState.Online
-            ? $"Servidor: {config.ServerUrl}"
+            ? $"Servidor: {runner.Config.ServerUrl}"
             : runner.Message ?? "";
 
-        assigned.BeginUpdate();
-        assigned.Items.Clear();
+        RefreshPrinters();
+        RefreshUpdate();
+    }
 
-        foreach (var printer in runner.Printers)
+    /// <summary>The printers set up here, and what the web says about each one.</summary>
+    public void RefreshPrinters()
+    {
+        var selected = (printers.SelectedItems.Count > 0 ? printers.SelectedItems[0].Tag as LocalPrinter : null)?.Key;
+        var config = runner.Config;
+        printers.BeginUpdate();
+        printers.Items.Clear();
+
+        foreach (var printer in config.Printers)
         {
+            var server = runner.Printers.FirstOrDefault(p => p.Key == printer.Key);
+            var web = server is null
+                ? (runner.State == AgentState.Online ? "Enviant…" : "Pendent d'enviar")
+                : !server.Active ? "Desactivada"
+                : server.IsTicketPrinter ? "Tiquets de caixa"
+                : "A punt";
             var item = new ListViewItem([
                 printer.Name,
-                printer.Target == "network" ? $"Xarxa {printer.Ip}:{printer.Port}" : printer.SystemName ?? printer.Name,
-                printer.Output == "driver" ? "Driver de Windows" : "ESC/POS directe",
-            ]);
-
-            if (!printer.Active)
+                printer.Target == "network" ? $"Xarxa {printer.Ip}:{printer.Port}" : printer.SystemName ?? "",
+                printer.Target == "network" || printer.Output == "escpos" ? "ESC/POS directe" : "Driver de Windows",
+                web,
+            ])
             {
-                item.ForeColor = Color.Gray;
-                item.SubItems[0].Text += " (desactivada)";
-            }
+                Tag = printer,
+                ForeColor = server is { Active: false } ? Color.Gray : Color.Black,
+            };
 
-            assigned.Items.Add(item);
+            printers.Items.Add(item);
+            item.Selected = printer.Key == selected;
         }
 
-        if (runner.Printers.Count == 0 && runner.State == AgentState.Online)
+        if (config.Printers.Count == 0)
         {
-            assigned.Items.Add(new ListViewItem(["Cap encara", "Assigna-les a la web, a Gestió → Impressió", ""]) { ForeColor = Color.Gray });
+            printers.Items.Add(new ListViewItem(["Cap encara", "Clica «Afegeix…» per posar-ne una", "", ""]) { ForeColor = Color.Gray });
         }
 
-        assigned.EndUpdate();
+        printers.EndUpdate();
+        UpdatePrinterButtons();
+    }
+
+    public void SetUpdating(bool value)
+    {
+        updating = value;
+        RefreshUpdate();
+    }
+
+    private void RefreshUpdate()
+    {
+        var latest = runner.LatestVersion;
+        var newer = Updater.IsNewer(latest);
+
+        updateButton.Visible = newer;
+        updateButton.Enabled = !updating;
+        checkButton.Enabled = !updating;
+        checkButton.Visible = !newer;
+
+        (updateDot.ForeColor, updateText.Text) = (updating, newer, runner.CheckedAt) switch
+        {
+            (true, _, _) => (Ui.Warn, $"Actualitzant a la versió {latest}… El programa es tornarà a obrir sol."),
+            (_, true, _) => (Ui.Warn, $"Hi ha una versió nova: {latest} (tens la {AgentRunner.Version})."),
+            (_, _, null) => (Color.Gray, $"Tens la versió {AgentRunner.Version}. Es comprovarà quan es connecti al servidor."),
+            (_, _, { } at) => (Ui.Ok, $"Tens la darrera versió ({AgentRunner.Version}). Comprovat a les {at:HH:mm}."),
+        };
+    }
+
+    private void UpdatePrinterButtons()
+    {
+        var any = printers.SelectedItems.Count > 0 && printers.SelectedItems[0].Tag is LocalPrinter;
+        editPrinter.Enabled = any;
+        removePrinter.Enabled = any;
+        testPrinter.Enabled = any;
+    }
+
+    private LocalPrinter? SelectedPrinter => printers.SelectedItems.Count > 0 ? printers.SelectedItems[0].Tag as LocalPrinter : null;
+
+    private void AddPrinter()
+    {
+        var list = runner.Config.Printers;
+        using var form = new PrinterForm(null, list);
+
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            runner.SetPrinters([.. list, form.Result]);
+            RefreshPrinters();
+        }
+    }
+
+    private void EditPrinter()
+    {
+        if (SelectedPrinter is not { } printer)
+        {
+            return;
+        }
+
+        var list = runner.Config.Printers;
+        using var form = new PrinterForm(printer, list);
+
+        if (form.ShowDialog(this) == DialogResult.OK)
+        {
+            var result = form.Result;
+            runner.SetPrinters([.. list.Select(p => p.Key == result.Key ? result : p)]);
+            RefreshPrinters();
+        }
+    }
+
+    private void RemovePrinter()
+    {
+        if (SelectedPrinter is not { } printer)
+        {
+            return;
+        }
+
+        if (MessageBox.Show(this, $"Vols eliminar la impressora «{printer.Name}»?\n\nTambé desapareixerà de la web, amb els destins que tenia assignats.", Installer.AppName, MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+        {
+            return;
+        }
+
+        runner.SetPrinters([.. runner.Config.Printers.Where(p => p.Key != printer.Key)]);
+        RefreshPrinters();
+    }
+
+    private void TestPrinter()
+    {
+        if (SelectedPrinter is not { } printer)
+        {
+            return;
+        }
+
+        try
+        {
+            TestTicket.Print(printer);
+            Log.Write($"Prova local enviada a «{printer.Name}» ({printer.Where}).");
+            AddResult(new JobResult(DateTime.Now, printer.Name, "Prova local", true, null));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Prova local a «{printer.Name}» ({printer.Where}) fallida: {e.Message}");
+            AddResult(new JobResult(DateTime.Now, printer.Name, "Prova local", false, e.Message));
+            MessageBox.Show(this, e.Message, Installer.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     public void AddResult(JobResult result)
@@ -221,54 +358,12 @@ internal sealed class MainForm : Form
             return;
         }
 
-        config = new AgentConfig { ServerUrl = server, Token = token, StartWithWindows = config.StartWithWindows };
+        var config = runner.Config.WithKey(server, token);
         config.Save();
         keyBox.Text = $"{server}/api/print-agent/••••••••";
         Log.Write($"Nova clau de connexió per a {server}.");
         runner.Reconfigure(config);
         RefreshStatus();
-    }
-
-    private void LoadLocalPrinters()
-    {
-        var selected = localPrinters.SelectedItem as string;
-        localPrinters.Items.Clear();
-        localPrinters.Items.AddRange([.. new WindowsBackend().InstalledPrinters()]);
-
-        if (localPrinters.Items.Count > 0)
-        {
-            localPrinters.SelectedItem = selected is not null && localPrinters.Items.Contains(selected) ? selected : localPrinters.Items[0];
-        }
-    }
-
-    private void PrintLocalTest()
-    {
-        if (localPrinters.SelectedItem is not string name)
-        {
-            MessageBox.Show(this, "No hi ha cap impressora instal·lada a Windows. Instal·la-la primer (amb el seu driver) i torna a obrir aquesta finestra.", Installer.AppName);
-            return;
-        }
-
-        try
-        {
-            if (localFormat.SelectedIndex == 0)
-            {
-                RawPrinter.Send(name, TestTicket.Escpos(), "Prova d'impressió");
-            }
-            else
-            {
-                DriverPrinter.Print(name, TestTicket.Driver(), "Prova d'impressió");
-            }
-
-            Log.Write($"Prova local enviada a «{name}» ({localFormat.Text}).");
-            AddResult(new JobResult(DateTime.Now, name, "Prova local · " + localFormat.Text, true, null));
-        }
-        catch (Exception e)
-        {
-            Log.Write($"Prova local a «{name}» fallida: {e.Message}");
-            AddResult(new JobResult(DateTime.Now, name, "Prova local · " + localFormat.Text, false, e.Message));
-            MessageBox.Show(this, e.Message, Installer.AppName, MessageBoxButtons.OK, MessageBoxIcon.Error);
-        }
     }
 
     private static void OpenLog()
