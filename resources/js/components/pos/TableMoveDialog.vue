@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRightLeft } from '@lucide/vue';
+import { ArrowRightLeft, Combine } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import FloorCanvas from '@/components/pos/FloorCanvas.vue';
@@ -11,15 +11,18 @@ import { activeOrderForTable, sorted, state } from '@/pos/store';
 import type { DiningTable } from '@/pos/types';
 
 /**
- * Pick the new table on the floor plan (any room), then confirm. Occupied tables cannot be
- * chosen: joining two bills is a separate action ("Junta").
+ * Pick a table on the floor plan (any room), then confirm.
+ * - move: the whole bill to a free table (occupied ones cannot be chosen).
+ * - merge: everything to an occupied table, which pays it all ("Junta").
+ * - line: some products (`what`) to any other table, free or not.
  */
-const props = defineProps<{ fromTableId: number }>();
+const props = withDefaults(defineProps<{ fromTableId: number | null; mode?: 'move' | 'merge' | 'line'; what?: string }>(), { mode: 'move', what: '' });
 const emit = defineEmits<{ move: [table: DiningTable]; close: [] }>();
 
 const open = ref(true);
-const from = computed(() => state.tables[props.fromTableId]);
+const from = computed(() => (props.fromTableId ? state.tables[props.fromTableId] : undefined));
 const zoneId = ref<number | null>(from.value?.zoneId ?? sorted.zones.value[0]?.id ?? null);
+const fromLabel = computed(() => from.value?.label ?? '');
 const target = ref<DiningTable | null>(null);
 const now = Date.now();
 
@@ -27,6 +30,7 @@ const tables = computed(() => sorted.tables.value.filter((table) => table.zoneId
 const elements = computed(() => sorted.floorElements.value.filter((element) => element.zoneId === zoneId.value));
 const statuses = computed(() => {
     const map: Record<number, ReturnType<typeof tableStatus>> = {};
+
 
     for (const table of tables.value) {
         map[table.id] = tableStatus(table.id);
@@ -40,8 +44,16 @@ function pick(table: DiningTable): void {
         return;
     }
 
-    if (activeOrderForTable(table.id)) {
+    const occupied = !!activeOrderForTable(table.id);
+
+    if (props.mode === 'move' && occupied) {
         toast.error(t('order.tableOccupied', { label: table.label }));
+
+        return;
+    }
+
+    if (props.mode === 'merge' && !occupied) {
+        toast.error(t('order.mergeNeedsOccupied', { label: table.label }));
 
         return;
     }
@@ -67,8 +79,10 @@ function close(): void {
     <Dialog :open="open" @update:open="(v) => !v && close()">
         <DialogContent class="flex h-[94svh] max-w-6xl flex-col gap-3 sm:max-w-6xl">
             <DialogHeader class="shrink-0">
-                <DialogTitle>{{ t('order.moveTitle', { label: from?.label ?? '' }) }}</DialogTitle>
-                <DialogDescription>{{ t('order.moveHelp') }}</DialogDescription>
+                <DialogTitle>
+                    {{ mode === 'merge' ? t('order.mergeTitle', { label: fromLabel }) : mode === 'line' ? t('order.moveLineTitle', { what }) : t('order.moveTitle', { label: fromLabel }) }}
+                </DialogTitle>
+                <DialogDescription>{{ mode === 'merge' ? t('order.mergeHelp') : mode === 'line' ? t('order.moveLineHelp') : t('order.moveHelp') }}</DialogDescription>
             </DialogHeader>
             <div class="flex shrink-0 gap-2 overflow-x-auto">
                 <button
@@ -91,9 +105,16 @@ function close(): void {
     <Dialog :open="!!target" @update:open="(v) => !v && (target = null)">
         <DialogContent v-if="target" class="max-w-md">
             <DialogHeader>
-                <DialogTitle class="flex items-center gap-2"><ArrowRightLeft class="size-5" /> {{ t('order.moveTable') }}</DialogTitle>
+                <DialogTitle class="flex items-center gap-2">
+                    <component :is="mode === 'merge' ? Combine : ArrowRightLeft" class="size-5" />
+                    {{ mode === 'merge' ? t('order.merge') : mode === 'line' ? t('order.moveLine') : t('order.moveTable') }}
+                </DialogTitle>
                 <DialogDescription class="text-base text-slate-700">
-                    {{ t('order.moveConfirm', { from: from?.label ?? '', to: target.label }) }}
+                    <template v-if="mode === 'merge'">{{ t('order.mergeConfirm', { from: fromLabel, to: target.label }) }}</template>
+                    <template v-else-if="mode === 'line'">
+                        {{ activeOrderForTable(target.id) ? t('order.moveLineConfirm', { what, to: target.label }) : t('order.moveLineConfirmNew', { what, to: target.label }) }}
+                    </template>
+                    <template v-else>{{ t('order.moveConfirm', { from: fromLabel, to: target.label }) }}</template>
                 </DialogDescription>
             </DialogHeader>
             <DialogFooter class="gap-2">

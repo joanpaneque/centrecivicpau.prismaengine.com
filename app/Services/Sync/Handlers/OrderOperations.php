@@ -31,7 +31,7 @@ class OrderOperations implements OperationHandler
         return [
             'order.open', 'order.send', 'order.march', 'order.update', 'order.move', 'order.merge',
             'order.requestBill', 'order.reopen', 'order.cancel', 'order.discount',
-            'line.void', 'line.discount', 'line.edit', 'line.quantity', 'product.soldOut', 'product.edit', 'print.job',
+            'line.void', 'line.discount', 'line.edit', 'line.quantity', 'line.move', 'product.soldOut', 'product.edit', 'print.job',
         ];
     }
 
@@ -56,6 +56,7 @@ class OrderOperations implements OperationHandler
             'line.discount' => $this->discountLine($payload, $context),
             'line.edit' => $this->editLines($payload, $context),
             'line.quantity' => $this->setQuantity($payload, $context),
+            'line.move' => $this->moveLine($payload, $context),
             'product.soldOut' => $this->soldOut($payload, $context),
             'product.edit' => $this->editProduct($payload, $context),
             'print.job' => [],
@@ -711,6 +712,99 @@ class OrderOperations implements OperationHandler
         $context->touch('orders', 'kitchen');
 
         return [];
+    }
+
+    /**
+     * Move one product (or some units of it) to another table, which pays for it there.
+     * If the table has no bill yet one is opened; if the source bill is left with nothing,
+     * it is joined into the target. Paid units never move.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function moveLine(array $payload, OperationContext $context): array
+    {
+        $line = OrderLine::query()->with('children')->where('uuid', $this->requireString($payload, 'lineUuid'))->lockForUpdate()->first();
+
+        if ($line === null) {
+            throw new OperationRejected('line_not_found');
+        }
+
+        $source = $line->order;
+
+        if ($line->voided_at !== null || $line->parent_line_id !== null || ! $source->isActive()) {
+            throw new OperationRejected('order_closed');
+        }
+
+        $tableId = (int) ($payload['toTableId'] ?? 0);
+
+        if (! DiningTable::query()->whereKey($tableId)->exists()) {
+            throw new OperationRejected('table_not_found');
+        }
+
+        if ($source->dining_table_id === $tableId) {
+            return ['orderUuid' => $source->uuid];
+        }
+
+        $movable = $line->quantity - $line->paid_quantity;
+        $quantity = max(1, min($movable, (int) ($payload['quantity'] ?? $movable)));
+
+        if ($movable < 1) {
+            throw new OperationRejected('line_paid');
+        }
+
+        $whole = $quantity === $line->quantity;
+
+        // A menu or a product with its choices moves whole: the choices belong to all units.
+        if (! $whole && $line->children->isNotEmpty()) {
+            throw new OperationRejected('line_has_children');
+        }
+
+        $target = $this->openOrder(['orderUuid' => $this->requireString($payload, 'newOrderUuid'), 'tableId' => $tableId], $context);
+
+        if ($target->is($source)) {
+            return ['orderUuid' => $source->uuid];
+        }
+
+        if ($whole) {
+            OrderLine::query()->whereKey($line->id)->orWhere('parent_line_id', $line->id)->update(['order_id' => $target->id, 'updated_at' => now()]);
+            $moved = $line->uuid;
+        } else {
+            $copy = $line->replicate(['paid_quantity']);
+            $copy->forceFill([
+                'uuid' => $this->requireString($payload, 'newLineUuid'),
+                'order_id' => $target->id,
+                'quantity' => $quantity,
+                'paid_quantity' => 0,
+            ]);
+
+            // A fixed amount off stays with the units that stay; a percentage goes with both.
+            if ($copy->discount_type !== 'percent') {
+                $copy->forceFill(['discount_type' => null, 'discount_value' => 0, 'discount_reason' => null, 'discounted_by' => null]);
+            }
+
+            $copy->save();
+            $line->forceFill(['quantity' => $line->quantity - $quantity])->save();
+            $moved = $copy->uuid;
+        }
+
+        AuditLog::record('line.move', $line, [
+            'name' => $line->translated(),
+            'quantity' => $quantity,
+            'from' => $source->dining_table_id,
+            'to' => $tableId,
+        ], userId: $context->operator->id, deviceId: $context->device?->id);
+
+        // Nothing left to pay at the source table: it is one bill now.
+        if (! OrderLine::query()->where('order_id', $source->id)->whereNull('voided_at')->exists()) {
+            $this->mergeInto($source, $target, $context);
+        }
+
+        $source->touch();
+        $target->touch();
+        $context->touch('orders', 'kitchen');
+
+        return ['orderUuid' => $target->uuid, 'lineUuid' => $moved];
     }
 
     /**

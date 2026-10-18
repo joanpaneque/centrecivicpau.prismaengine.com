@@ -35,7 +35,14 @@ const unit = computed(() => {
     return base + extras;
 });
 
+/** The tap that opened this window must not also choose an option. */
+const openedAt = Date.now();
+
 function toggle(groupId: number, modifierId: number, multiple: boolean): void {
+    if (Date.now() - openedAt < 350) {
+        return;
+    }
+
     const current = selected[groupId] ?? [];
 
     if (multiple) {

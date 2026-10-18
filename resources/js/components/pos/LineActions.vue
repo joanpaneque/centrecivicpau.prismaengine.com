@@ -1,23 +1,27 @@
 <script setup lang="ts">
-import { Minus, Plus, Settings } from '@lucide/vue';
+import { ArrowRightLeft, Minus, Plus, Settings } from '@lucide/vue';
 import { computed, reactive, ref } from 'vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tl, tr } from '@/i18n';
 import { formatMoney, parseMoney } from '@/pos/money';
-import { voidLines } from '@/pos/orders';
+import { movableUnits, voidLines } from '@/pos/orders';
 import type { LineGroup } from '@/pos/orders';
 import { enqueue } from '@/pos/sync';
 import type { Order } from '@/pos/types';
 
 /** Actions on a (grouped) sent line, or on the whole order when `group` is null (discount). */
 const props = defineProps<{ order: Order; group: LineGroup | null }>();
-const emit = defineEmits<{ close: []; edit: [group: LineGroup] }>();
+const emit = defineEmits<{ close: []; edit: [group: LineGroup]; move: [group: LineGroup, quantity: number] }>();
 
 const open = ref(true);
-const mode = ref<'menu' | 'void' | 'discount'>(props.group ? 'menu' : 'discount');
+const mode = ref<'menu' | 'void' | 'discount' | 'move'>(props.group ? 'menu' : 'discount');
 const line = computed(() => props.group?.first ?? null);
+/** Units that can go to another table (not paid). */
+const movable = computed(() => (props.group ? movableUnits(props.order, props.group.lines) : 0));
+const moveQuantity = ref(movable.value);
+
 const available = computed(() => (props.group ? props.group.lines.reduce((sum, l) => sum + (l.voided ? 0 : l.quantity - l.paidQuantity), 0) : 0));
 
 const form = reactive({
@@ -40,6 +44,23 @@ async function confirmVoid(): Promise<void> {
     }
 
     await voidLines(props.order, props.group.lines, form.quantity);
+    close();
+}
+
+function startMove(): void {
+    if (movable.value === 1) {
+        confirmMove();
+    } else {
+        moveQuantity.value = movable.value;
+        mode.value = 'move';
+    }
+}
+
+function confirmMove(): void {
+    if (props.group && movable.value > 0) {
+        emit('move', props.group, movable.value === 1 ? 1 : moveQuantity.value);
+    }
+
     close();
 }
 
@@ -90,9 +111,23 @@ async function confirmDiscount(remove = false): Promise<void> {
                 <Button variant="outline" class="h-14 justify-start text-base text-red-700" :disabled="available <= 0" @click="available === 1 ? confirmVoid() : (mode = 'void')">
                     {{ available === 1 ? t('order.voidOne') : t('order.voidLine') }}
                 </Button>
+                <Button variant="outline" class="h-14 justify-start gap-2 text-base" :disabled="movable <= 0" @click="startMove">
+                    <ArrowRightLeft class="size-5" /> {{ t('order.moveLine') }}
+                </Button>
                 <Button variant="outline" class="h-14 justify-start gap-2 text-base" @click="edit"><Settings class="size-5" /> {{ t('order.editLine') }}</Button>
                 <Button variant="outline" class="h-14 justify-start text-base" @click="mode = 'discount'">{{ t('order.discountLine') }}</Button>
                 <Button v-if="line?.discountType" variant="outline" class="h-14 justify-start text-base" @click="confirmDiscount(true)">{{ t('order.removeDiscount') }}</Button>
+            </div>
+
+            <div v-else-if="mode === 'move'" class="grid gap-4">
+                <div class="flex items-center justify-between">
+                    <span class="text-sm font-semibold">{{ t('order.moveQuantity') }}</span>
+                    <div class="flex items-center gap-3">
+                        <button type="button" class="flex size-12 items-center justify-center rounded-xl bg-slate-100" @click="moveQuantity = Math.max(1, moveQuantity - 1)"><Minus class="size-5" /></button>
+                        <span class="w-8 text-center text-2xl font-bold">{{ moveQuantity }}</span>
+                        <button type="button" class="flex size-12 items-center justify-center rounded-xl bg-slate-100" @click="moveQuantity = Math.min(movable, moveQuantity + 1)"><Plus class="size-5" /></button>
+                    </div>
+                </div>
             </div>
 
             <div v-else-if="mode === 'void'" class="grid gap-4">
@@ -128,6 +163,9 @@ async function confirmDiscount(remove = false): Promise<void> {
 
             <DialogFooter v-if="mode !== 'menu'">
                 <Button v-if="mode === 'void'" variant="destructive" class="h-12 w-full" @click="confirmVoid">{{ t('order.void') }} {{ form.quantity }}</Button>
+                <Button v-else-if="mode === 'move'" class="h-12 w-full bg-[#00056a]" @click="confirmMove">
+                    <ArrowRightLeft class="size-5" /> {{ t('order.moveLineChoose', { count: moveQuantity }) }}
+                </Button>
                 <Button v-else class="h-12 w-full bg-[#00056a]" :disabled="!form.reason.trim() || !form.value" @click="confirmDiscount()">{{ t('common.apply') }}</Button>
             </DialogFooter>
         </DialogContent>

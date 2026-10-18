@@ -110,13 +110,21 @@ function pressCancel(): void {
     }
 }
 
-function pressEnd(product: Product): void {
-    const wasPressing = pressTimer !== null;
+/**
+ * The product is picked on click, not when the finger lifts: the options window opens in
+ * that moment, and picking on pointerup let the same tap's click land on the option that
+ * happened to be under the finger (it looked like an option was chosen at random).
+ */
+function tap(product: Product): void {
     pressCancel();
 
-    if (wasPressing && !longPressed) {
-        pick(product);
+    if (longPressed) {
+        longPressed = false;
+
+        return;
     }
+
+    pick(product);
 }
 
 // ------------------------------------------------------------ Move products and families
@@ -449,8 +457,9 @@ async function toggleSoldOut(product: Product): Promise<void> {
                         :class="[product.soldOut ? 'opacity-50' : '', moving?.step === 'place' && moving.kind === 'product' && moving.id === product.id ? 'ring-4 ring-violet-500' : '']"
                         :style="{ background: tileColor(product), color: product.photoUrl ? '#ffffff' : readableText(tileColor(product)) }"
                         @pointerdown="pressStart(product)"
-                        @pointerup="pressEnd(product)"
+                        @pointerup="pressCancel"
                         @pointerleave="pressCancel"
+                        @click="tap(product)"
                         @contextmenu.prevent="info = product"
                     >
                         <template v-if="product.photoUrl">

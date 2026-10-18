@@ -30,7 +30,14 @@ const chosen = computed(() => groups.value.flatMap((g) => g.modifiers.filter((m)
 const unit = computed(() => (props.product.price ?? 0) + chosen.value.reduce((sum, m) => sum + m.priceDelta, 0));
 const color = computed(() => productColor(props.product) ?? '#00056a');
 
+/** The tap that opened this window must not also choose an option. */
+const openedAt = Date.now();
+
 function toggle(modifierId: number): void {
+    if (Date.now() - openedAt < 350) {
+        return;
+    }
+
     const g = group.value;
 
     if (!g) {

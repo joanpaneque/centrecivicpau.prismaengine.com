@@ -9,7 +9,6 @@ import ProductPicker from '@/components/pos/ProductPicker.vue';
 import ProductWizard from '@/components/pos/ProductWizard.vue';
 import SetMenuWizard from '@/components/pos/SetMenuWizard.vue';
 import TableMoveDialog from '@/components/pos/TableMoveDialog.vue';
-import TablePicker from '@/components/pos/TablePicker.vue';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { t, tr } from '@/i18n';
@@ -30,6 +29,7 @@ import {
     marchCourse,
     billViewFor,
     moveDraft,
+    moveLinesToTable,
     orderTotal,
     proformaDocument,
     proformaTitle,
@@ -77,8 +77,11 @@ const menuWizard = ref<SetMenu | true | null>(null);
 const wizard = ref<Product | null>(null);
 const lineAction = ref<LineGroup | null | undefined>(undefined);
 const priceEdit = ref<{ draft: DraftLine } | { group: LineGroup } | null>(null);
-const picker = ref<'merge' | null>(null);
 const moving = ref(false);
+/** Joining this table into another one, which will pay for everything. */
+const merging = ref(false);
+/** Some units of a line going to another table. */
+const lineMove = ref<{ group: LineGroup; quantity: number } | null>(null);
 const sending = ref(false);
 const printingProforma = ref(false);
 const showPicker = ref(true);
@@ -285,18 +288,42 @@ async function setGuests(): Promise<void> {
     }
 }
 
-async function pickTable(target: DiningTable): Promise<void> {
-    if (!order.value) {
+async function mergeWith(target: DiningTable): Promise<void> {
+    const into = activeOrderForTable(target.id);
+    const from = tableId.value;
+
+    if (!order.value || !into || into.uuid === order.value.uuid) {
         return;
     }
 
-    if (picker.value === 'merge') {
-        const into = activeOrderForTable(target.id);
+    await enqueue('order.merge', { orderUuid: order.value.uuid, intoOrderUuid: into.uuid });
 
-        if (into) {
-            await enqueue('order.merge', { orderUuid: order.value.uuid, intoOrderUuid: into.uuid });
-            go(`/taula/${target.id}`);
-        }
+    // What was not sent yet goes along too.
+    if (from) {
+        moveDraft(from, target.id);
+    }
+
+    toast.success(t('order.merged', { from: state.tables[from ?? 0]?.label ?? '', to: target.label }));
+    go(`/taula/${target.id}`);
+}
+
+async function moveLineTo(target: DiningTable): Promise<void> {
+    const move = lineMove.value;
+    lineMove.value = null;
+
+    if (!order.value || !move) {
+        return;
+    }
+
+    const moved = await moveLinesToTable(order.value, move.group.lines, move.quantity, target.id);
+
+    if (moved > 0) {
+        toast.success(t('order.lineMoved', { what: `${moved} × ${tr(move.group.first.name)}`, to: target.label }));
+    }
+
+    // The whole bill went: this table is free now.
+    if (!isActive(followOrder(order.value.uuid)) && !draft.value.lines.length) {
+        go(`/taula/${target.id}`);
     }
 }
 
@@ -367,6 +394,10 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                     <ArrowRightLeft class="size-4" />
                     <span class="max-sm:hidden">{{ t('order.moveTable') }}</span>
                 </Button>
+                <Button v-if="tableId && order" variant="outline" class="h-11 gap-1 px-3" @click="merging = true">
+                    <Combine class="size-4" />
+                    <span class="max-sm:hidden">{{ t('order.merge') }}</span>
+                </Button>
                 <Button variant="outline" class="h-11 gap-1" @click="setGuests">
                     <Users class="size-4" />
                     {{ order?.guests ?? draft.guests ?? '–' }}
@@ -376,7 +407,6 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <Button variant="outline" size="icon" class="size-11"><MoreHorizontal class="size-5" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" class="w-56">
-                        <DropdownMenuItem :disabled="!order" @select="picker = 'merge'"><Combine class="size-4" /> {{ t('order.merge') }}</DropdownMenuItem>
                         <DropdownMenuItem :disabled="!order" @select="lineAction = null"><Percent class="size-4" /> {{ t('order.discountOrder') }}</DropdownMenuItem>
                         <DropdownMenuItem v-if="order?.status === 'bill_requested'" @select="reopen"><Undo2 class="size-4" /> {{ t('order.reopen') }}</DropdownMenuItem>
                         <DropdownMenuSeparator />
@@ -542,7 +572,14 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
         />
         <ProductWizard v-if="wizard" :product="wizard" :course="course" @add="(data) => addFromWizard(wizard!, data)" @close="wizard = null" />
         <SetMenuWizard v-if="menuWizard" :initial="menuWizard === true ? null : menuWizard" @add="(line) => addToDraft(draft, line)" @close="menuWizard = null" />
-        <LineActions v-if="lineAction !== undefined && order" :order="order" :group="lineAction" @edit="(group) => (priceEdit = { group })" @close="lineAction = undefined" />
+        <LineActions
+            v-if="lineAction !== undefined && order"
+            :order="order"
+            :group="lineAction"
+            @edit="(group) => (priceEdit = { group })"
+            @move="(group, quantity) => (lineMove = { group, quantity })"
+            @close="lineAction = undefined"
+        />
         <LinePriceDialog
             v-if="priceEdit"
             :name="'draft' in priceEdit ? priceEdit.draft.name : priceEdit.group.first.name"
@@ -553,6 +590,14 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             @close="priceEdit = null"
         />
         <TableMoveDialog v-if="moving && tableId" :from-table-id="tableId" @move="moveTo" @close="moving = false" />
-        <TablePicker v-if="picker" :title="t('floor.mergeWith')" :only-occupied="true" :exclude="order?.tableId" @pick="pickTable" @close="picker = null" />
+        <TableMoveDialog v-if="merging && tableId" :from-table-id="tableId" mode="merge" @move="mergeWith" @close="merging = false" />
+        <TableMoveDialog
+            v-if="lineMove"
+            :from-table-id="tableId"
+            mode="line"
+            :what="`${lineMove.quantity} × ${tr(lineMove.group.first.name)}`"
+            @move="moveLineTo"
+            @close="lineMove = null"
+        />
     </div>
 </template>

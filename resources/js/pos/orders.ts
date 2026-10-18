@@ -698,3 +698,49 @@ export function moveDraft(fromTableId: number, toTableId: number): void {
         drafts[`table:${toTableId}`] = from;
     }
 }
+
+/**
+ * Units of a (grouped) line that can go to another table: what is not paid yet. A line with
+ * choices (a menu) only moves whole, so it counts only while none of it is paid.
+ */
+export function movableUnits(order: Order, lines: OrderLine[]): number {
+    return lines.reduce((sum, line) => {
+        if (line.voided) {
+            return sum;
+        }
+
+        return sum + (childLines(order, line).length ? (line.paidQuantity === 0 ? line.quantity : 0) : line.quantity - line.paidQuantity);
+    }, 0);
+}
+
+/**
+ * Move `quantity` units of a (grouped) line to another table, which will pay for them. All
+ * parts go to the same bill there (one is opened if the table has none).
+ */
+export async function moveLinesToTable(order: Order, lines: OrderLine[], quantity: number, toTableId: number): Promise<number> {
+    const newOrderUuid = uuid();
+    let remaining = quantity;
+
+    for (const line of [...lines].reverse()) {
+        if (remaining <= 0) {
+            break;
+        }
+
+        if (line.voided) {
+            continue;
+        }
+
+        const whole = childLines(order, line).length > 0;
+        const available = whole ? (line.paidQuantity === 0 ? line.quantity : 0) : line.quantity - line.paidQuantity;
+        const take = whole ? (remaining >= line.quantity ? available : 0) : Math.min(available, remaining);
+
+        if (take <= 0) {
+            continue;
+        }
+
+        await enqueue('line.move', { lineUuid: line.uuid, quantity: take, toTableId, newOrderUuid, newLineUuid: uuid() });
+        remaining -= take;
+    }
+
+    return quantity - remaining;
+}

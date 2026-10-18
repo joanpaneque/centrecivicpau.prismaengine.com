@@ -80,6 +80,9 @@ o.label = p.label;
         case 'line.edit':
             editLines(p);
             break;
+        case 'line.move':
+            moveLine(p, op);
+            break;
         case 'line.quantity': {
             const found = findLine(p.lineUuid);
 
@@ -347,6 +350,64 @@ function move(p: Payload): void {
     }
 
     markDirty('orders', order.uuid);
+}
+
+/** Mirror of OrderOperations::moveLine: one product (or some units) to another table. */
+function moveLine(p: Payload, op: Pick<Operation, 'createdAt' | 'operatorId'>): void {
+    const found = findLine(p.lineUuid);
+    const tableId = Number(p.toTableId);
+
+    if (!found || found.line.voided || found.line.parentUuid || !state.tables[tableId]) {
+        return;
+    }
+
+    const { order: source, line } = found;
+
+    // Already applied (re-applied on top of a pull): nothing to do.
+    if (source.tableId === tableId || (p.newLineUuid && findLine(p.newLineUuid))) {
+        return;
+    }
+
+    const movable = line.quantity - line.paidQuantity;
+    const quantity = Math.max(1, Math.min(movable, Math.round(Number(p.quantity ?? movable))));
+    const children = source.lines.filter((l) => l.parentUuid === line.uuid);
+    const whole = quantity === line.quantity;
+
+    if (movable < 1 || (!whole && children.length)) {
+        return;
+    }
+
+    const target = openOrder({ orderUuid: p.newOrderUuid, tableId }, op);
+
+    if (target.uuid === source.uuid) {
+        return;
+    }
+
+    if (whole) {
+        const moving = new Set([line.uuid, ...children.map((c) => c.uuid)]);
+        target.lines.push(...source.lines.filter((l) => moving.has(l.uuid)));
+        source.lines = source.lines.filter((l) => !moving.has(l.uuid));
+    } else {
+        const percent = line.discountType === 'percent';
+        target.lines.push({
+            ...line,
+            uuid: p.newLineUuid,
+            quantity,
+            paidQuantity: 0,
+            discountType: percent ? line.discountType : null,
+            discountValue: percent ? line.discountValue : 0,
+            discountReason: percent ? line.discountReason : null,
+            modifiers: [...line.modifiers],
+        });
+        line.quantity -= quantity;
+    }
+
+    markDirty('orders', source.uuid);
+    markDirty('orders', target.uuid);
+
+    if (!source.lines.some((l) => !l.voided)) {
+        mergeOrders(source.uuid, target.uuid);
+    }
 }
 
 function mergeOrders(sourceUuid: string, targetUuid: string): void {
