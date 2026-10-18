@@ -129,12 +129,53 @@ export const menusToday = computed(() =>
         .sort((a, b) => a.sort - b.sort),
 );
 
-export const frequentProducts = computed(() =>
-    [...sorted.products.value]
-        .filter((p) => p.orderCount > 0)
-        .sort((a, b) => b.orderCount - a.orderCount)
-        .slice(0, 18),
-);
+/**
+ * Where a product sits in the catalog: its family's place (main family, then subfamily),
+ * then its own place. Products always appear in this order, so a tile never moves because
+ * something was ordered (the order is the one dragged in Gestió → Carta).
+ */
+function catalogPosition(product: Product): number[] {
+    const family = product.categoryId ? state.categories[product.categoryId] : undefined;
+    const parent = family?.parentId ? state.categories[family.parentId] : undefined;
+    const main = parent ?? family;
+
+    return [main?.sort ?? Number.MAX_SAFE_INTEGER, main?.id ?? 0, parent ? (family?.sort ?? 0) : -1, parent ? (family?.id ?? 0) : -1, product.sort, product.id];
+}
+
+export function byCatalogOrder(a: Product, b: Product): number {
+    const pa = catalogPosition(a);
+    const pb = catalogPosition(b);
+
+    for (let i = 0; i < pa.length; i++) {
+        if (pa[i] !== pb[i]) {
+            return pa[i] - pb[i];
+        }
+    }
+
+    return 0;
+}
+
+/** Which products are "frequent" is chosen once a day, so the tiles do not change during service. */
+let frequentPick: { day: string; ids: number[] } | null = null;
+
+/** The most ordered products (chosen once a day), shown in catalog order so they keep their place. */
+export const frequentProducts = computed(() => {
+    const products = sorted.products.value;
+    const day = localDate(new Date());
+
+    if (!frequentPick || frequentPick.day !== day || frequentPick.ids.length === 0) {
+        const ids = [...products]
+            .filter((p) => p.orderCount > 0)
+            .sort((a, b) => b.orderCount - a.orderCount || a.id - b.id)
+            .slice(0, 18)
+            .map((p) => p.id);
+        frequentPick = { day, ids };
+    }
+
+    const chosen = new Set(frequentPick.ids);
+
+    return products.filter((p) => chosen.has(p.id)).sort(byCatalogOrder);
+});
 
 export function searchProducts(query: string): Product[] {
     const q = normalize(query.trim());
@@ -143,7 +184,10 @@ export function searchProducts(query: string): Product[] {
         return [];
     }
 
-    return sorted.products.value.filter((p) => normalize(`${p.name.ca} ${p.name.es}`).includes(q)).slice(0, 60);
+    return sorted.products.value
+        .filter((p) => normalize(`${p.name.ca} ${p.name.es}`).includes(q))
+        .sort(byCatalogOrder)
+        .slice(0, 60);
 }
 
 export function categoryProducts(categoryId: number): Product[] {
@@ -161,7 +205,7 @@ export function categoryProducts(categoryId: number): Product[] {
         }
     }
 
-    return sorted.products.value.filter((p) => p.categoryId !== null && ids.has(p.categoryId)).sort((a, b) => b.orderCount - a.orderCount || a.sort - b.sort);
+    return sorted.products.value.filter((p) => p.categoryId !== null && ids.has(p.categoryId)).sort(byCatalogOrder);
 }
 
 export function productName(product: Product): string {
