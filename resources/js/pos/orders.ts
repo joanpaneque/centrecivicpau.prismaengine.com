@@ -297,6 +297,33 @@ function previewOrder(draft: Draft): Order {
 }
 
 /**
+ * The order tickets of a send: the lines split by destination (bar, kitchen…), one job per
+ * printer of each destination. Used when sending and by the simulation in Gestió → Tiquets.
+ */
+export function orderPrintJobs(order: Order, lines: OrderLine[], allLines: OrderLine[], held = false): PrintJobPayload[] {
+    const byDestination = new Map<number, OrderLine[]>();
+
+    for (const line of lines) {
+        if (line.destinationId) {
+            byDestination.set(line.destinationId, [...(byDestination.get(line.destinationId) ?? []), line]);
+        }
+    }
+
+    const jobs: PrintJobPayload[] = [];
+
+    for (const [destinationId, destinationLines] of byDestination) {
+        const destination = state.destinations[destinationId];
+
+        for (const printerId of printersFor(destinationId)) {
+            const doc = kitchenDocument(order, tr(destination?.name), destinationLines, allLines, { held, width: widthFor(printerId) });
+            jobs.push(job('order', `${tr(destination?.name)} · ${order.tableId ? state.tables[order.tableId]?.label : (order.label ?? '')}`, printerId, doc));
+        }
+    }
+
+    return jobs;
+}
+
+/**
  * Send the draft: one operation carrying the lines, the kitchen tickets for screen
  * destinations and the print jobs for printer destinations. `silent` ("charge without
  * sending") only adds the lines to the order: nothing reaches the kitchen or the bar.
@@ -361,14 +388,7 @@ export async function sendDraft(draft: Draft, holdSecond = false, silent = false
         byDestination.set(group.destinationId, [...(byDestination.get(group.destinationId) ?? []), ...group.lines]);
     }
 
-    for (const [destinationId, lines] of byDestination) {
-        const destination = state.destinations[destinationId];
-
-        for (const printerId of printersFor(destinationId)) {
-            const doc = kitchenDocument(order, tr(destination?.name), lines, allLines, { held: holdSecond, width: widthFor(printerId) });
-            printJobs.push(job('order', `${tr(destination?.name)} · ${order.tableId ? state.tables[order.tableId]?.label : (order.label ?? '')}`, printerId, doc));
-        }
-    }
+    printJobs.push(...orderPrintJobs(order, [...byDestination.values()].flat(), allLines, holdSecond));
 
     await enqueue(
         'order.send',

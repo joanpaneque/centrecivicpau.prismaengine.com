@@ -13,6 +13,7 @@ use App\Models\Reservation;
 use App\Services\Sync\OperationContext;
 use App\Services\Sync\OperationHandler;
 use App\Services\Sync\OperationRejected;
+use App\Support\ClientTime;
 use App\Support\Translation;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
@@ -775,7 +776,7 @@ class OrderOperations implements OperationHandler
     {
         if (is_string($value)) {
             try {
-                $time = CarbonImmutable::parse($value);
+                $time = ClientTime::parse($value);
 
                 return $time->isAfter(now()->addMinutes(5)) ? CarbonImmutable::now() : $time;
             } catch (\Throwable) {

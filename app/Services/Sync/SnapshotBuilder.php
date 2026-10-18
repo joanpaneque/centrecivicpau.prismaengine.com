@@ -113,7 +113,7 @@ class SnapshotBuilder
         $stale = now()->subMinutes(PrintJob::STALE_CLAIM_MINUTES);
 
         $jobs = PrintJob::query()
-            ->with('printer:id,system_name,paper_width')
+            ->with('printer:id,system_name,paper_width,margin_top,margin_bottom')
             ->whereDoesntHave('printer', fn ($printer) => $printer->whereNotNull('print_agent_id'))
             ->where(function ($query) use ($device, $stale) {
                 $query->where('status', 'pending')
@@ -135,7 +135,7 @@ class SnapshotBuilder
                 'systemName' => $job->printer?->system_name,
                 'kind' => $job->kind,
                 'title' => $job->title,
-                'document' => $job->document,
+                'document' => $job->printer?->withMargins($job->document) ?? $job->document,
                 'paperWidth' => $job->printer?->paper_width,
                 'createdAt' => $job->created_at?->toIso8601String(),
             ])

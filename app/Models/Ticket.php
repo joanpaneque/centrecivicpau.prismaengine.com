@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property-read Invoice|null $invoice
  * @property-read User|null $waiter
  * @property-read User|null $cashier
+ * @property-read Order|null $order
  */
 class Ticket extends Model
 {
@@ -87,6 +88,14 @@ class Ticket extends Model
     public function invoice(): HasOne
     {
         return $this->hasOne(Invoice::class);
+    }
+
+    /**
+     * @return BelongsTo<Order, $this>
+     */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 
     /**

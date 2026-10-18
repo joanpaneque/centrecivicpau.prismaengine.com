@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\TimeTracking\TimeEntryRecorder;
 use App\Services\TimeTracking\TimeReportExporter;
 use App\Services\TimeTracking\WorkedTime;
+use App\Support\ClientTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -115,7 +116,7 @@ class TimeTrackingController extends Controller
             'action' => $data['action'],
             'time_entry_id' => $data['time_entry_id'] ?? null,
             'new_type' => $data['new_type'] ?? null,
-            'new_occurred_at' => isset($data['new_occurred_at']) ? CarbonImmutable::parse($data['new_occurred_at']) : null,
+            'new_occurred_at' => isset($data['new_occurred_at']) ? ClientTime::parse($data['new_occurred_at']) : null,
             'reason' => $data['reason'],
         ]);
 

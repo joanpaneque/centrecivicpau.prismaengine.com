@@ -8,7 +8,7 @@ use App\Models\Zone;
 use App\Services\Sync\OperationContext;
 use App\Services\Sync\OperationHandler;
 use App\Services\Sync\OperationRejected;
-use Carbon\CarbonImmutable;
+use App\Support\ClientTime;
 
 class ReservationOperations implements OperationHandler
 {
@@ -51,7 +51,7 @@ class ReservationOperations implements OperationHandler
         $name = trim((string) ($payload['name'] ?? ''));
 
         try {
-            $reservedAt = CarbonImmutable::parse((string) ($payload['reservedAt'] ?? ''));
+            $reservedAt = ClientTime::parse((string) ($payload['reservedAt'] ?? ''));
         } catch (\Throwable) {
             throw new OperationRejected('invalid_payload', ['field' => 'reservedAt']);
         }

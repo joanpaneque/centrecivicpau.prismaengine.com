@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { ArrowLeft, FileText, Mail } from '@lucide/vue';
+import { ArrowLeft, FileText, Mail, Send, Wallet } from '@lucide/vue';
 import QRCode from 'qrcode';
 import { onMounted, ref } from 'vue';
 import Field from '@/components/admin/Field.vue';
 import PageHeader from '@/components/admin/PageHeader.vue';
 import TextArea from '@/components/admin/TextArea.vue';
+import TicketPaymentsDialog from '@/components/admin/TicketPaymentsDialog.vue';
+import TicketSimulateDialog from '@/components/admin/TicketSimulateDialog.vue';
+import type { SimulationDevice } from '@/components/admin/TicketSimulateDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useI18n } from '@/i18n';
@@ -33,7 +36,8 @@ type Ticket = {
     verifactu: { simulated?: boolean; status?: string; qr_url?: string; generated_at?: string } | null;
     publicUrl: string;
     lines: { name: string; quantity: number; unitPrice: number; vatRate: number; discountAmount: number; total: number; modifiers: { name: unknown; priceDelta?: number }[] }[];
-    payments: { method: 'cash' | 'card'; amount: number; tendered: number | null; change: number | null }[];
+    payments: { id: number; method: 'cash' | 'card'; amount: number; tendered: number | null; change: number | null }[];
+    hasOrder: boolean;
     invoice: {
         id: number;
         fullNumber: string;
@@ -46,7 +50,9 @@ type Ticket = {
     } | null;
 };
 
-const props = defineProps<{ ticket: Ticket }>();
+const props = defineProps<{ ticket: Ticket; devices: SimulationDevice[]; currentDeviceId: number | null }>();
+const editingPayments = ref(false);
+const simulating = ref(false);
 const { t, tr } = useI18n();
 
 const verifactuQr = ref('');
@@ -78,7 +84,11 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Tiquets', href: ticketsRoute()
         <Button variant="outline" as-child>
             <a :href="pdf.url(ticket.id)" target="_blank"><FileText class="size-4" /> {{ t('admin.tickets.viewPdf') }}</a>
         </Button>
+        <Button variant="outline" @click="editingPayments = true"><Wallet class="size-4" /> {{ t('admin.tickets.changePayment') }}</Button>
+        <Button variant="outline" @click="simulating = true"><Send class="size-4" /> {{ t('admin.tickets.simulate') }}</Button>
     </PageHeader>
+    <TicketPaymentsDialog :ticket="editingPayments ? ticket : null" @close="editingPayments = false" />
+    <TicketSimulateDialog :ticket="simulating ? ticket : null" :devices="devices" :current-device-id="currentDeviceId" @close="simulating = false" />
 
     <div class="grid gap-6 lg:grid-cols-[1fr_22rem]">
         <section class="space-y-4">

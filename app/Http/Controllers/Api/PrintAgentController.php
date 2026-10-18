@@ -243,6 +243,7 @@ class PrintAgentController extends Controller
     private function job(PrintJob $job, Printer $printer): array
     {
         $config = $this->printer($printer);
+        $document = $printer->withMargins($job->document);
 
         return [
             'uuid' => $job->uuid,
@@ -250,8 +251,8 @@ class PrintAgentController extends Controller
             'title' => $job->title,
             'createdAt' => $job->created_at?->toIso8601String(),
             'printer' => $config,
-            'escpos' => $config['output'] === 'escpos' ? base64_encode($this->encoder->escpos($job->document, $printer->paper_width, $printer->codepage)) : null,
-            'document' => $config['output'] === 'driver' ? $this->encoder->forDriver($job->document, $printer->paper_width) : null,
+            'escpos' => $config['output'] === 'escpos' ? base64_encode($this->encoder->escpos($document, $printer->paper_width, $printer->codepage)) : null,
+            'document' => $config['output'] === 'driver' ? $this->encoder->forDriver($document, $printer->paper_width) : null,
         ];
     }
 }

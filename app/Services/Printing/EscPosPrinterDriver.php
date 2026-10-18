@@ -42,6 +42,6 @@ class EscPosPrinterDriver implements PrinterDriver
      */
     public function encode(array $document, ?Printer $printer = null): string
     {
-        return $this->encoder->escpos($document, $printer?->paper_width, $printer->codepage ?? 'cp858');
+        return $this->encoder->escpos($printer?->withMargins($document) ?? $document, $printer?->paper_width, $printer->codepage ?? 'cp858');
     }
 }

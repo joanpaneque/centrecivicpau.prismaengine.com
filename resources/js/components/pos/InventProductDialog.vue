@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Loader2, Sparkles } from '@lucide/vue';
+import { AlertTriangle, ArrowLeft, Loader2, Sparkles } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
@@ -8,8 +8,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
-import { api } from '@/lib/http';
-import { categoryColor, categoryDestination, NEUTRAL_TILE, normalize, readableText } from '@/pos/catalog';
+import { api, HttpError } from '@/lib/http';
+import { categoryColor, categoryDestination, familyPath, findDuplicateProduct, NEUTRAL_TILE, normalize, readableText } from '@/pos/catalog';
 import { formatMoney, parseMoney } from '@/pos/money';
 import type { InventedProduct } from '@/pos/orders';
 import { sorted, state, upsert } from '@/pos/store';
@@ -25,7 +25,9 @@ const emit = defineEmits<{ close: []; add: [product: InventedProduct]; created: 
 
 type Suggestion = { ca: string; es: string; categoryId: number | null };
 
-const step = ref<'form' | 'checking' | 'suggestion' | 'family' | 'saving'>('form');
+const step = ref<'form' | 'checking' | 'suggestion' | 'family' | 'saving' | 'duplicate'>('form');
+/** A product with this name already exists: offer it instead of a duplicate. */
+const duplicate = ref<Product | null>(null);
 const name = ref('');
 const priceRaw = ref('');
 const addToCatalog = ref(false);
@@ -55,6 +57,10 @@ async function next(): Promise<void> {
     const typed = name.value.trim();
     finalName.value = { ca: typed, es: typed };
     suggestion.value = null;
+
+    if (showDuplicate([typed])) {
+        return;
+    }
 
     if (sync.online) {
         step.value = 'checking';
@@ -91,7 +97,29 @@ function useSuggestion(accept: boolean): void {
     afterName();
 }
 
+function showDuplicate(names: string[]): boolean {
+    duplicate.value = findDuplicateProduct(names);
+
+    if (duplicate.value) {
+        step.value = 'duplicate';
+    }
+
+    return !!duplicate.value;
+}
+
+function useExisting(): void {
+    if (duplicate.value) {
+        emit('created', duplicate.value);
+        emit('close');
+    }
+}
+
 function afterName(): void {
+    // The AI may have turned "croq. jamon" into the name of a product that already exists.
+    if (showDuplicate([finalName.value.ca, finalName.value.es])) {
+        return;
+    }
+
     if (!addToCatalog.value) {
         finish();
 
@@ -126,7 +154,17 @@ async function createProduct(): Promise<void> {
         toast.success(t('order.productCreated'));
         emit('created', response.product);
         emit('close');
-    } catch {
+    } catch (error) {
+        const existing = error instanceof HttpError && error.status === 422 ? (error.body as { duplicate?: Product }).duplicate : undefined;
+
+        if (existing) {
+            upsert('products', existing);
+            duplicate.value = existing;
+            step.value = 'duplicate';
+
+            return;
+        }
+
         toast.error(t('order.productCreateOffline'));
         finish();
     }
@@ -215,6 +253,25 @@ async function createProduct(): Promise<void> {
                 <DialogFooter class="flex-col gap-2 sm:flex-col">
                     <Button class="h-14 w-full bg-[#00056a] text-base" @click="useSuggestion(true)">{{ t('order.aiUseSuggestion') }}</Button>
                     <Button variant="outline" class="h-12 w-full" @click="useSuggestion(false)">{{ t('order.aiKeepTyped', { name: name.trim() }) }}</Button>
+                </DialogFooter>
+            </template>
+
+            <template v-else-if="step === 'duplicate' && duplicate">
+                <DialogHeader>
+                    <DialogTitle class="flex items-center gap-2"><AlertTriangle class="size-5 text-amber-500" /> {{ t('order.duplicateTitle') }}</DialogTitle>
+                    <DialogDescription>{{ t('order.duplicateHelp') }}</DialogDescription>
+                </DialogHeader>
+                <div class="rounded-2xl border-2 border-amber-300 bg-amber-50 p-4 text-amber-950">
+                    <p class="text-2xl font-bold">{{ tr(duplicate.name) }}</p>
+                    <p class="text-sm">
+                        {{ familyPath(duplicate.categoryId) || '—' }} · {{ duplicate.price !== null ? formatMoney(duplicate.price) : t('order.unpriced') }}
+                        <template v-if="!duplicate.active"> · {{ t('order.duplicateInactive') }}</template>
+                    </p>
+                </div>
+                <DialogFooter class="flex-col gap-2 sm:flex-col">
+                    <Button v-if="duplicate.active" class="h-14 w-full bg-[#00056a] text-base" @click="useExisting">{{ t('order.duplicateUse', { name: tr(duplicate.name) }) }}</Button>
+                    <Button variant="outline" class="h-12 w-full" @click="step = 'form'">{{ t('order.duplicateRename') }}</Button>
+                    <Button v-if="!addToCatalog" variant="ghost" class="h-11 w-full text-slate-600" @click="finish">{{ t('order.duplicateOneOff') }}</Button>
                 </DialogFooter>
             </template>
 

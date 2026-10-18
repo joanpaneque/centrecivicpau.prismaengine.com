@@ -9,6 +9,7 @@ use App\Models\Product;
 use App\Services\Assistant\ProductNameSuggester;
 use App\Services\Sync\SnapshotBuilder;
 use App\Support\AppSettings;
+use App\Support\CatalogNames;
 use App\Support\Translation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,8 +43,18 @@ class ProductController extends Controller
             'destinationId' => ['nullable', 'integer', 'exists:production_destinations,id'],
         ]);
 
+        $name = Translation::normalize($data['name']);
+
+        // Never two products with the same name: the TPV offers the existing one instead.
+        if ($existing = CatalogNames::duplicateProduct($name)) {
+            return response()->json([
+                'message' => __('tpv.product_duplicate', ['name' => Translation::pick($existing->name)]),
+                'duplicate' => $this->snapshots->product($existing),
+            ], 422);
+        }
+
         $product = new Product([
-            'name' => Translation::normalize($data['name']),
+            'name' => $name,
             'category_id' => (int) $data['categoryId'],
             'price' => isset($data['price']) ? (int) $data['price'] : null,
             'vat_rate' => (float) AppSettings::get('default_vat_rate', 10),

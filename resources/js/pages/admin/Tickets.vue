@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { FileText } from '@lucide/vue';
-import { reactive, watch } from 'vue';
+import { FileText, Send, Wallet } from '@lucide/vue';
+import { reactive, ref, watch } from 'vue';
 import PageHeader from '@/components/admin/PageHeader.vue';
 import Pagination from '@/components/admin/Pagination.vue';
 import SelectInput from '@/components/admin/SelectInput.vue';
+import TicketPaymentsDialog from '@/components/admin/TicketPaymentsDialog.vue';
+import TicketSimulateDialog from '@/components/admin/TicketSimulateDialog.vue';
+import type { SimulationDevice } from '@/components/admin/TicketSimulateDialog.vue';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useI18n } from '@/i18n';
 import { formatDateTime, money } from '@/lib/format';
@@ -20,15 +24,21 @@ type Ticket = {
     waiter: string | null;
     cashier: string | null;
     total: number;
-    payments: { method: 'cash' | 'card'; amount: number }[];
+    payments: { id: number; method: 'cash' | 'card'; amount: number }[];
     invoice: string | null;
+    hasOrder: boolean;
 };
 
 const props = defineProps<{
     tickets: { data: Ticket[]; links: { url: string | null; label: string; active: boolean }[] };
     filters: { from: string; to: string; search?: string; method?: string };
     totals: { count: number; total: number };
+    devices: SimulationDevice[];
+    currentDeviceId: number | null;
 }>();
+
+const editingPayments = ref<Ticket | null>(null);
+const simulating = ref<Ticket | null>(null);
 
 const { t } = useI18n();
 const filters = reactive({
@@ -105,8 +115,12 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Tiquets', href: ticketsRoute()
                         </Badge>
                     </td>
                     <td class="px-3 py-2 text-right font-medium tabular-nums">{{ money(ticket.total) }}</td>
-                    <td class="px-3 py-2 text-right">
-                        <a :href="pdf.url(ticket.id)" target="_blank" class="text-muted-foreground hover:text-foreground"><FileText class="size-4" /></a>
+                    <td class="px-3 py-2 text-right whitespace-nowrap">
+                        <Button variant="ghost" size="icon" :title="t('admin.tickets.changePayment')" @click="editingPayments = ticket"><Wallet class="size-4" /></Button>
+                        <Button variant="ghost" size="icon" :title="t('admin.tickets.simulate')" @click="simulating = ticket"><Send class="size-4" /></Button>
+                        <Button variant="ghost" size="icon" as-child>
+                            <a :href="pdf.url(ticket.id)" target="_blank" :title="t('admin.tickets.viewPdf')"><FileText class="size-4" /></a>
+                        </Button>
                     </td>
                 </tr>
             </tbody>
@@ -114,4 +128,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Tiquets', href: ticketsRoute()
         <p v-if="tickets.data.length === 0" class="py-12 text-center text-sm text-muted-foreground">{{ t('common.empty') }}</p>
     </div>
     <Pagination :links="tickets.links" />
+
+    <TicketPaymentsDialog :ticket="editingPayments" @close="editingPayments = null" />
+    <TicketSimulateDialog :ticket="simulating" :devices="devices" :current-device-id="currentDeviceId" @close="simulating = null" />
 </template>

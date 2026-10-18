@@ -8,7 +8,7 @@ use App\Services\Sync\OperationHandler;
 use App\Services\Sync\OperationRejected;
 use App\Services\TimeTracking\ClockQrService;
 use App\Services\TimeTracking\TimeEntryRecorder;
-use Carbon\CarbonImmutable;
+use App\Support\ClientTime;
 
 class TimeOperations implements OperationHandler
 {
@@ -31,7 +31,7 @@ class TimeOperations implements OperationHandler
         }
 
         try {
-            $occurredAt = CarbonImmutable::parse((string) ($payload['occurredAt'] ?? ''));
+            $occurredAt = ClientTime::parse((string) ($payload['occurredAt'] ?? ''));
         } catch (\Throwable) {
             $occurredAt = $context->clientTime;
         }

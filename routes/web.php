@@ -21,6 +21,7 @@ use App\Http\Controllers\Auth\InitialSetupController;
 use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\InvoiceRequestController;
 use App\Http\Controllers\Tpv\CatalogMoveController;
+use App\Http\Controllers\Tpv\CategoryController as TpvCategoryController;
 use App\Http\Controllers\Tpv\FloorController;
 use App\Http\Controllers\Tpv\PrintJobController;
 use App\Http\Controllers\Tpv\ProductController as TpvProductController;
@@ -69,6 +70,7 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
 
         Route::middleware('admin')->group(function () {
             Route::post('catalog/move', CatalogMoveController::class)->name('catalog.move');
+            Route::post('categories', [TpvCategoryController::class, 'store'])->name('categories.store');
             Route::post('tables', [FloorController::class, 'store'])->name('tables.store');
             Route::patch('tables/{table}', [FloorController::class, 'update'])->name('tables.update');
             Route::delete('tables/{table}', [FloorController::class, 'destroy'])->name('tables.destroy');
@@ -175,6 +177,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('tiquets/{ticket}', [TicketController::class, 'show'])->name('tickets.show');
         Route::get('tiquets/{ticket}/pdf', [TicketController::class, 'pdf'])->name('tickets.pdf');
         Route::post('tiquets/{ticket}/factura', [TicketController::class, 'issueInvoice'])->name('tickets.invoice');
+        Route::patch('tiquets/{ticket}/pagaments', [TicketController::class, 'updatePayments'])->name('tickets.payments');
+        Route::get('tiquets/{ticket}/simulacio', [TicketController::class, 'simulation'])->name('tickets.simulation');
+        Route::post('tiquets/{ticket}/simulacio', [TicketController::class, 'simulate'])->name('tickets.simulate');
         Route::get('facturas', [TicketController::class, 'invoices'])->name('invoices');
         Route::get('facturas/{invoice}/pdf', [TicketController::class, 'invoicePdf'])->name('invoices.pdf');
         Route::post('facturas/{invoice}/reenviar', [TicketController::class, 'resendInvoice'])->name('invoices.resend');

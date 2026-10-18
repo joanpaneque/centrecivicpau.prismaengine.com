@@ -7,6 +7,7 @@ use App\Models\ClientOperation;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\Printing\PrintService;
+use App\Support\ClientTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -203,7 +204,7 @@ class OperationProcessor
         $raw = $operation['createdAt'] ?? null;
 
         try {
-            $time = is_string($raw) ? CarbonImmutable::parse($raw) : CarbonImmutable::now();
+            $time = is_string($raw) ? ClientTime::parse($raw) : CarbonImmutable::now();
         } catch (Throwable) {
             $time = CarbonImmutable::now();
         }

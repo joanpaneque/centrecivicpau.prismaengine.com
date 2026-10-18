@@ -247,3 +247,33 @@ test('each device can print its tickets on its own printer', function () {
     $printer->delete();
     expect($device->refresh()->ticket_printer_id)->toBeNull();
 });
+
+test('each printer adds its blank margin above and below every document, the bottom one before the cut', function () {
+    Event::fake([PrintJobsWaiting::class]);
+    [, $token, $printer] = agentWithPrinter('driver');
+    $printer->forceFill(['agent_key' => 'kitchen'])->save();
+    $admin = User::factory()->admin()->create();
+
+    // Set on the web even for a printer of the program.
+    $this->actingAs($admin)->patch(route('admin.printers.update', $printer), ['isTicketPrinter' => true, 'active' => true, 'marginTop' => 3, 'marginBottom' => 2, 'destinationIds' => []])->assertRedirect();
+    expect($printer->refresh()->margin_top)->toBe(3)->and($printer->margin_bottom)->toBe(2);
+
+    queueJob($printer, [['type' => 'text', 'text' => 'Braves'], ['type' => 'cut']]);
+    $lines = $this->withToken($token)->postJson(route('api.print-agent.jobs'))->json('jobs.0.document.lines');
+
+    expect($lines)->toBe([
+        ['type' => 'feed', 'lines' => 3],
+        ['type' => 'text', 'text' => 'Braves'],
+        ['type' => 'feed', 'lines' => 2],
+        ['type' => 'cut'],
+    ]);
+
+    $printer->forceFill(['output' => 'escpos'])->save();
+    queueJob($printer, [['type' => 'text', 'text' => 'Braves'], ['type' => 'cut']]);
+    $bytes = base64_decode((string) $this->withToken($token)->postJson(route('api.print-agent.jobs'))->json('jobs.0.escpos'));
+
+    expect($bytes)->toContain("\x1Bd\x03")
+        ->and(strpos($bytes, "\x1Bd\x02"))->toBeLessThan(strpos($bytes, "\x1DV"));
+
+    $this->actingAs($admin)->patch(route('admin.printers.update', $printer), ['marginTop' => 11, 'destinationIds' => []])->assertSessionHasErrors('marginTop');
+});

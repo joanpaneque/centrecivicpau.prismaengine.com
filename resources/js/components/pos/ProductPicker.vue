@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ArrowLeft, Ban, Check, Move, PencilLine, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
+import { ArrowLeft, Ban, Check, Move, PencilLine, Plus, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import AllergenIcons from '@/components/pos/AllergenIcons.vue';
+import CatalogFamilyDialog from '@/components/pos/CatalogFamilyDialog.vue';
+import CatalogProductDialog from '@/components/pos/CatalogProductDialog.vue';
 import InventProductDialog from '@/components/pos/InventProductDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -124,6 +126,10 @@ function pressEnd(product: Product): void {
 type Moving = { step: 'pick' } | { step: 'place'; kind: 'product' | 'family'; id: number; name: string };
 
 const canMove = computed(() => state.me?.role === 'admin');
+/** Admins also create families and products right here (the tiles with a +). */
+const canCreate = computed(() => canMove.value && !moving.value);
+const creatingFamily = ref<{ parentId: number | null } | null>(null);
+const creatingProduct = ref<{ categoryId: number | null } | null>(null);
 const moving = ref<Moving | null>(null);
 const placing = ref(false);
 
@@ -350,8 +356,16 @@ async function toggleSoldOut(product: Product): Promise<void> {
                         <Move class="size-4" /> {{ t('order.catalogMove.this') }}
                     </button>
                 </div>
+                <button
+                    v-if="canCreate"
+                    type="button"
+                    class="flex h-24 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-base font-semibold text-slate-500 transition active:scale-95"
+                    @click="creatingFamily = { parentId: null }"
+                >
+                    <Plus class="size-6" /> {{ t('order.catalogCreate.newFamily') }}
+                </button>
             </div>
-            <p v-if="!roots.length && !frequentProducts.length" class="py-10 text-center text-sm text-slate-500">{{ t('common.empty') }}</p>
+            <p v-if="!roots.length && !frequentProducts.length && !canCreate" class="py-10 text-center text-sm text-slate-500">{{ t('common.empty') }}</p>
         </div>
 
         <template v-else>
@@ -376,7 +390,7 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 </button>
             </div>
 
-            <div v-if="children.length && !query.trim()" class="flex shrink-0 gap-1.5 overflow-x-auto px-2 pb-2">
+            <div v-if="(children.length || (canCreate && current)) && !query.trim()" class="flex shrink-0 gap-1.5 overflow-x-auto px-2 pb-2">
                 <button
                     type="button"
                     class="h-10 shrink-0 rounded-full px-4 text-sm font-semibold"
@@ -396,6 +410,14 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 >
                     <img v-if="category.photoUrl" :src="category.photoUrl" alt="" class="size-6 rounded-full object-cover" />
                     {{ tr(category.name) }}
+                </button>
+                <button
+                    v-if="canCreate && current"
+                    type="button"
+                    class="flex h-10 shrink-0 items-center gap-1 rounded-full border-2 border-dashed border-slate-300 px-4 text-sm font-semibold text-slate-500"
+                    @click="creatingFamily = { parentId: current.id }"
+                >
+                    <Plus class="size-4" /> {{ t('order.catalogCreate.subfamily') }}
                 </button>
             </div>
 
@@ -445,8 +467,16 @@ async function toggleSoldOut(product: Product): Promise<void> {
                             {{ t('order.soldOut') }}
                         </span>
                     </button>
+                    <button
+                        v-if="canCreate && here && !query.trim()"
+                        type="button"
+                        class="flex h-28 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-500 transition active:scale-95"
+                        @click="creatingProduct = { categoryId: here.id }"
+                    >
+                        <Plus class="size-6" /> {{ t('order.catalogCreate.newProduct') }}
+                    </button>
                 </div>
-                <p v-if="!products.length" class="py-10 text-center text-sm text-slate-500">{{ t('common.empty') }}</p>
+                <p v-if="!products.length && !(canCreate && here)" class="py-10 text-center text-sm text-slate-500">{{ t('common.empty') }}</p>
             </div>
         </template>
 
@@ -471,6 +501,8 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 </DialogFooter>
             </DialogContent>
         </Dialog>
+        <CatalogFamilyDialog v-if="creatingFamily" :parent-id="creatingFamily.parentId" @close="creatingFamily = null" />
+        <CatalogProductDialog v-if="creatingProduct" :category-id="creatingProduct.categoryId" @close="creatingProduct = null" />
         <InventProductDialog v-if="inventing" @add="emit('invent', $event)" @created="emit('pick', $event)" @close="inventing = false" />
     </div>
 </template>

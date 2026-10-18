@@ -167,3 +167,44 @@ export function categoryProducts(categoryId: number): Product[] {
 export function productName(product: Product): string {
     return tr(product.name);
 }
+
+/** The same rule as App\Support\CatalogNames: no accents, case, punctuation or extra spaces. */
+export function nameKey(text: string): string {
+    return normalize(text)
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+function sameName(name: { ca?: string | null; es?: string | null }, keys: Set<string>): boolean {
+    return [name.ca, name.es].some((n) => !!n && keys.has(nameKey(n)));
+}
+
+function keysOf(names: (string | null | undefined)[]): Set<string> {
+    return new Set(names.filter((n): n is string => !!n && nameKey(n) !== '').map(nameKey));
+}
+
+/** A product (even an inactive one) already called like this, in any language. */
+export function findDuplicateProduct(names: (string | null | undefined)[]): Product | null {
+    const keys = keysOf(names);
+
+    return keys.size ? (Object.values(state.products).find((p) => !p.deleted && sameName(p.name, keys)) ?? null) : null;
+}
+
+export function findDuplicateFamily(names: (string | null | undefined)[]): Category | null {
+    const keys = keysOf(names);
+
+    return keys.size ? (Object.values(state.categories).find((c) => !c.deleted && sameName(c.name, keys)) ?? null) : null;
+}
+
+/** "Tapes › Fredes" */
+export function familyPath(categoryId: number | null): string {
+    const category = categoryId ? state.categories[categoryId] : undefined;
+
+    if (!category) {
+        return '';
+    }
+
+    const parent = category.parentId ? state.categories[category.parentId] : undefined;
+
+    return parent ? `${tr(parent.name)} › ${tr(category.name)}` : tr(category.name);
+}

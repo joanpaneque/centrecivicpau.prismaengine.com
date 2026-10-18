@@ -2,19 +2,29 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\DeviceType;
+use App\Events\TpvChanged;
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\CashSession;
+use App\Models\Device;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Ticket;
 use App\Models\TicketLine;
+use App\Services\Devices\DeviceManager;
+use App\Services\Printing\PrintService;
+use App\Services\Sync\SnapshotBuilder;
 use App\Services\Tickets\InvoiceService;
 use App\Support\AppSettings;
 use App\Support\Translation;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
@@ -22,7 +32,7 @@ use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class TicketController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, DeviceManager $devices): Response
     {
         $filters = $request->validate([
             'from' => ['nullable', 'date'],
@@ -51,15 +61,18 @@ class TicketController extends Controller
                 'waiter' => $t->waiter?->name,
                 'cashier' => $t->cashier?->name,
                 'total' => $t->total,
-                'payments' => $t->payments->map(fn (Payment $p) => ['method' => $p->method, 'amount' => $p->amount])->values()->all(),
+                'payments' => $t->payments->map(fn (Payment $p) => ['id' => $p->id, 'method' => $p->method, 'amount' => $p->amount])->values()->all(),
                 'invoice' => $t->invoice?->full_number,
+                'hasOrder' => $t->order_id !== null,
             ]),
+            'devices' => $this->simulationDevices(),
+            'currentDeviceId' => $devices->fromRequest($request)?->id,
             'filters' => ['from' => $from->toDateString(), 'to' => $to->toDateString()] + $filters,
             'totals' => ['count' => (int) ($totals->count ?? 0), 'total' => (int) ($totals->total ?? 0)],
         ]);
     }
 
-    public function show(Ticket $ticket): Response
+    public function show(Request $request, Ticket $ticket, DeviceManager $devices): Response
     {
         $ticket->load(['lines', 'payments', 'waiter:id,name', 'cashier:id,name', 'invoice', 'series']);
 
@@ -91,7 +104,8 @@ class TicketController extends Controller
                     'total' => $l->total,
                     'modifiers' => $l->modifiers ?? [],
                 ])->values()->all(),
-                'payments' => $ticket->payments->map(fn (Payment $p) => ['method' => $p->method, 'amount' => $p->amount, 'tendered' => $p->tendered, 'change' => $p->change])->values()->all(),
+                'payments' => $ticket->payments->map(fn (Payment $p) => ['id' => $p->id, 'method' => $p->method, 'amount' => $p->amount, 'tendered' => $p->tendered, 'change' => $p->change])->values()->all(),
+                'hasOrder' => $ticket->order_id !== null,
                 'invoice' => $ticket->invoice ? [
                     'id' => $ticket->invoice->id,
                     'fullNumber' => $ticket->invoice->full_number,
@@ -103,7 +117,145 @@ class TicketController extends Controller
                     'emailedAt' => $ticket->invoice->emailed_at?->toIso8601String(),
                 ] : null,
             ],
+            'devices' => $this->simulationDevices(),
+            'currentDeviceId' => $devices->fromRequest($request)?->id,
         ]);
+    }
+
+    /**
+     * Correct how a ticket was paid (cash or card). The amounts do not change, and the
+     * payment method is not part of the Verifactu fingerprint, so the chain stays valid.
+     */
+    public function updatePayments(Request $request, Ticket $ticket): RedirectResponse
+    {
+        $data = $request->validate([
+            'payments' => ['required', 'array', 'min:1'],
+            'payments.*.id' => ['required', 'integer', Rule::exists('payments', 'id')->where('ticket_id', $ticket->id)],
+            'payments.*.method' => ['required', Rule::in(['cash', 'card'])],
+        ]);
+
+        $changes = [];
+
+        foreach ($data['payments'] as $row) {
+            $payment = $ticket->payments()->whereKey($row['id'])->firstOrFail();
+
+            if ($payment->method === $row['method']) {
+                continue;
+            }
+
+            $changes[] = ['payment' => $payment->id, 'amount' => $payment->amount, 'from' => $payment->method, 'to' => $row['method']];
+            // The cash handed over and the change only make sense for cash that was really counted.
+            $payment->forceFill(['method' => $row['method'], 'tendered' => null, 'change' => null])->save();
+        }
+
+        if ($changes === []) {
+            return back();
+        }
+
+        AuditLog::record('ticket.payment_method', $ticket, ['changes' => $changes]);
+        TpvChanged::notify(['cashier']);
+
+        $closed = $ticket->cash_session_id !== null && CashSession::query()->whereKey($ticket->cash_session_id)->whereNotNull('closed_at')->exists();
+        $this->toast($closed ? __('tpv.payment_method_changed_closed') : __('tpv.payment_method_changed'), $closed ? 'warning' : 'success');
+
+        return back();
+    }
+
+    /**
+     * Everything the browser needs to lay out the order and the ticket exactly as the TPV
+     * does (same code), as seen from the chosen device: its ticket printer, the
+     * destinations and their printers, the business header.
+     */
+    public function simulation(Request $request, Ticket $ticket, SnapshotBuilder $snapshots): JsonResponse
+    {
+        $data = $request->validate(['device' => ['nullable', 'integer', 'exists:devices,id']]);
+        $device = isset($data['device']) ? Device::query()->find($request->integer('device')) : null;
+        $user = $request->user();
+        abort_if($user === null, 403);
+
+        $snapshot = $snapshots->build($user, $device);
+        $ticket->load(['lines', 'payments', 'waiter:id,name', 'order.lines', 'order.table']);
+        $paid = (int) $ticket->payments->sum('amount');
+
+        return response()->json([
+            'context' => [
+                'me' => $snapshot['me'],
+                'device' => $snapshot['device'],
+                'settings' => $snapshot['settings'],
+                'staff' => $snapshot['staff'],
+                'tables' => $snapshot['tables'],
+                'destinations' => $snapshot['destinations'],
+                'printers' => $snapshot['printers'],
+                'operatorId' => $ticket->waiter_id,
+            ],
+            'order' => $ticket->order ? $snapshots->order($ticket->order) : null,
+            'ticket' => [
+                'fullNumber' => $ticket->full_number,
+                'issuedAt' => $ticket->issued_at->toIso8601String(),
+                'tableLabel' => $ticket->table_label,
+                'waiter' => $ticket->waiter->name ?? '',
+                'lines' => $ticket->lines->map(fn (TicketLine $l) => [
+                    'name' => Translation::pick($l->name),
+                    'quantity' => $l->quantity,
+                    'unitPrice' => $l->unit_price,
+                    'total' => $l->total,
+                    'vatRate' => $l->vat_rate,
+                    'discount' => $l->discount_amount,
+                    'details' => collect($l->modifiers ?? [])->map(fn (array $m) => '+ '.Translation::pick(is_array($m['name'] ?? null) ? $m['name'] : null))->values()->all(),
+                ])->values()->all(),
+                'surchargeRate' => $ticket->surcharge_rate,
+                'surchargeAmount' => $ticket->surcharge_amount,
+                'total' => $ticket->total,
+                'vatBreakdown' => $ticket->vat_breakdown,
+                'payments' => $ticket->payments->map(fn (Payment $p) => ['method' => $p->method, 'amount' => $p->amount, 'tendered' => $p->tendered, 'change' => $p->change])->values()->all(),
+                'invoiceUrl' => route('invoice-request', $ticket->public_token),
+                'verifactuUrl' => $ticket->verifactu['qr_url'] ?? null,
+                'tip' => max(0, $paid - $ticket->total) ?: null,
+            ],
+        ]);
+    }
+
+    /**
+     * Print what the simulation laid out: the same jobs the TPV would have sent, to the same
+     * printers (through the print program, the network or the cashier browser).
+     */
+    public function simulate(Request $request, Ticket $ticket, PrintService $print): JsonResponse
+    {
+        $data = $request->validate([
+            'device' => ['nullable', 'integer', 'exists:devices,id'],
+            'jobs' => ['required', 'array', 'min:1', 'max:20'],
+            'jobs.*.kind' => ['required', Rule::in(['order', 'ticket'])],
+            'jobs.*.title' => ['required', 'string', 'max:120'],
+            'jobs.*.printerId' => ['nullable', 'integer', 'exists:printers,id'],
+            'jobs.*.document' => ['required', 'array'],
+            'jobs.*.document.lines' => ['required', 'array', 'max:500'],
+        ]);
+
+        $names = [];
+
+        foreach ($data['jobs'] as $job) {
+            $stored = $print->store((string) Str::uuid(), $job['kind'], $job['title'], $job['document'], $job['printerId'] ?? null, $request->user()?->id, $data['device'] ?? null);
+            $names[] = $stored->printer_name;
+        }
+
+        AuditLog::record('ticket.simulate', $ticket, ['jobs' => count($data['jobs']), 'device' => $data['device'] ?? null]);
+        TpvChanged::notify(['prints']);
+
+        return response()->json(['printers' => array_values(array_unique(array_filter($names)))]);
+    }
+
+    /**
+     * @return list<array{id: int, name: string, type: string}>
+     */
+    private function simulationDevices(): array
+    {
+        $devices = [];
+
+        foreach (Device::query()->where('active', true)->whereIn('type', [DeviceType::Cashier, DeviceType::Tablet])->orderBy('name')->get() as $device) {
+            $devices[] = ['id' => $device->id, 'name' => $device->name, 'type' => $device->type->value];
+        }
+
+        return $devices;
     }
 
     public function pdf(Ticket $ticket, InvoiceService $invoices): HttpResponse

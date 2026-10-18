@@ -40,6 +40,8 @@ type Printer = {
     model: string | null;
     systemName: string | null;
     paperWidth: number;
+    marginTop: number;
+    marginBottom: number;
     isTicketPrinter: boolean;
     active: boolean;
     destinationIds: number[];
@@ -67,6 +69,9 @@ const { t, tr } = useI18n();
 
 const modeOptions = computed(() => (['printer', 'screen', 'both'] as Mode[]).map((value) => ({ value, label: t(`admin.printing.modes.${value}`) })));
 const typeOptions = computed(() => props.types.map((value) => ({ value, label: t(`admin.printing.types.${value}`) })));
+const marginOptions = computed(() =>
+    Array.from({ length: 11 }, (_, value) => ({ value, label: value === 0 ? t('admin.printing.marginNone') : t('admin.printing.marginLines', { count: value }) })),
+);
 const widthOptions = [32, 42, 48].map((value) => ({ value, label: `${value} (${value === 32 ? '58mm' : '80mm'})` }));
 const codepageOptions = computed(() => (['cp858', 'cp1252', 'ascii'] as const).map((value) => ({ value, label: t(`admin.printing.codepages.${value}`) })));
 const agentName = (id: number | null) => props.agents.find((a) => a.id === id)?.name ?? '';
@@ -180,6 +185,8 @@ const printerForm = useForm({
     model: '',
     systemName: '',
     paperWidth: 48,
+    marginTop: 0,
+    marginBottom: 0,
     isTicketPrinter: false,
     active: true,
     destinationIds: [] as number[],
@@ -197,6 +204,8 @@ function openPrinter(printer: Printer | null): void {
     printerForm.model = printer?.model ?? '';
     printerForm.systemName = printer?.systemName ?? printer?.name ?? '';
     printerForm.paperWidth = printer?.paperWidth ?? 48;
+    printerForm.marginTop = printer?.marginTop ?? 0;
+    printerForm.marginBottom = printer?.marginBottom ?? 0;
     printerForm.isTicketPrinter = printer?.isTicketPrinter ?? false;
     printerForm.active = printer?.active ?? true;
     printerForm.destinationIds = [...(printer?.destinationIds ?? [])];
@@ -459,6 +468,9 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                             <span v-if="printer.type === 'system' && printer.systemName" class="text-muted-foreground">{{ printer.systemName }}</span>
                             <span v-if="printer.ip" class="text-muted-foreground">{{ printer.ip }}:{{ printer.port }}</span>
                             <span class="text-muted-foreground">{{ printer.paperWidth }} col.</span>
+                            <span v-if="printer.marginTop || printer.marginBottom" class="text-muted-foreground">
+                                · {{ t('admin.printing.marginBadge', { top: printer.marginTop, bottom: printer.marginBottom }) }}
+                            </span>
                         </div>
                     </div>
                     <Button variant="outline" size="sm" @click="testPrint(printer)">{{ t('admin.printing.testPrint') }}</Button>
@@ -649,6 +661,15 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                             <Input v-model.number="printerForm.port" type="number" />
                         </Field>
                     </template>
+                </div>
+                <div class="grid gap-4 sm:grid-cols-2">
+                    <Field :label="t('admin.printing.marginTop')" :error="printerForm.errors.marginTop">
+                        <SelectInput v-model="printerForm.marginTop" :options="marginOptions" />
+                    </Field>
+                    <Field :label="t('admin.printing.marginBottom')" :error="printerForm.errors.marginBottom">
+                        <SelectInput v-model="printerForm.marginBottom" :options="marginOptions" />
+                    </Field>
+                    <p class="-mt-2 text-xs text-muted-foreground sm:col-span-2">{{ t('admin.printing.marginHelp') }}</p>
                 </div>
                 <div class="flex flex-wrap gap-4">
                     <Label class="flex items-center gap-2"><Checkbox v-model="printerForm.isTicketPrinter" /> {{ t('admin.printing.isTicketPrinter') }}</Label>

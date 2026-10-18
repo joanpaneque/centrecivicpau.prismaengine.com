@@ -6,6 +6,7 @@ use App\Events\TpvChanged;
 use App\Http\Controllers\Controller;
 use App\Models\Reservation;
 use App\Models\Zone;
+use App\Support\ClientTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,7 +53,7 @@ class ReservationController extends Controller
             'name' => $data['name'],
             'phone' => $data['phone'] ?? null,
             'party_size' => $data['party_size'],
-            'reserved_at' => CarbonImmutable::parse($data['reserved_at']),
+            'reserved_at' => ClientTime::parse($data['reserved_at']),
             'duration_minutes' => $data['duration_minutes'] ?? 90,
             'zone_id' => isset($data['zone']) ? Zone::query()->where('slug', $data['zone'])->value('id') : null,
             'notes' => $data['notes'] ?? null,

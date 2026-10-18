@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Devices\DeviceManager;
 use App\Services\Sync\OperationProcessor;
 use App\Services\Sync\SnapshotBuilder;
+use App\Support\ClientTime;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class SyncController extends Controller
         $since = null;
 
         try {
-            $since = $request->filled('since') ? CarbonImmutable::parse((string) $request->query('since')) : null;
+            $since = $request->filled('since') ? ClientTime::parse((string) $request->query('since')) : null;
         } catch (\Throwable) {
         }
 
