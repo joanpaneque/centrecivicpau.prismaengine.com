@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
-import { Copy, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from '@lucide/vue';
+import { ArrowDown, ArrowUp, Copy, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { VueDraggable } from 'vue-draggable-plus';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
@@ -272,10 +272,24 @@ const groupForm = useForm({
     name: { ca: '', es: '' },
     multiple: true,
     required: false,
-    modifiers: [] as { id: number | null; name: { ca: string; es: string }; price: string }[],
+    modifiers: [] as { key: string; id: number | null; name: { ca: string; es: string }; price: string }[],
     categoryIds: [] as number[],
     productIds: [] as number[],
 });
+
+const newModifierKey = 0;
+
+/** The options keep the order of this list (also in the TPV): drag them or use the arrows. */
+function moveModifier(index: number, by: -1 | 1): void {
+    const list = groupForm.modifiers;
+    const to = index + by;
+
+    if (to < 0 || to >= list.length) {
+        return;
+    }
+
+    [list[index], list[to]] = [list[to], list[index]];
+}
 
 function openGroup(group: ModifierGroup | null): void {
     editingGroup.value = group;
@@ -283,7 +297,7 @@ function openGroup(group: ModifierGroup | null): void {
     groupForm.name = toTrans(group?.name);
     groupForm.multiple = group?.multiple ?? true;
     groupForm.required = group?.required ?? false;
-    groupForm.modifiers = (group?.modifiers ?? []).map((m) => ({ id: m.id, name: toTrans(m.name), price: centsToInput(m.priceDelta) }));
+    groupForm.modifiers = (group?.modifiers ?? []).map((m) => ({ key: `m${m.id}`, id: m.id, name: toTrans(m.name), price: centsToInput(m.priceDelta) }));
     groupForm.categoryIds = props.categories.filter((c) => group && c.modifierGroupIds.includes(group.id)).map((c) => c.id);
     groupForm.productIds = props.products.filter((p) => group && p.modifierGroupIds.includes(group.id)).map((p) => p.id);
     groupOpen.value = true;
@@ -647,14 +661,34 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                 </div>
                 <div class="space-y-2">
                     <Label>{{ t('order.modifiers') }}</Label>
-                    <div v-for="(modifier, index) in groupForm.modifiers" :key="index" class="flex items-end gap-2">
-                        <TransInput v-model="modifier.name" :label="`${t('admin.catalog.modifier')} ${index + 1}`" class="flex-1" />
-                        <Field :label="t('admin.catalog.priceDelta')" class="w-28">
-                            <Input v-model="modifier.price" inputmode="decimal" />
-                        </Field>
-                        <Button type="button" variant="ghost" size="icon" @click="groupForm.modifiers.splice(index, 1)"><Trash2 class="size-4" /></Button>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" @click="groupForm.modifiers.push({ id: null, name: { ca: '', es: '' }, price: '' })">
+                    <p v-if="groupForm.modifiers.length > 1" class="text-xs text-muted-foreground">{{ t('admin.catalog.modifierOrderHelp') }}</p>
+                    <VueDraggable v-model="groupForm.modifiers" handle=".modifier-handle" :animation="150" class="space-y-2">
+                        <div v-for="(modifier, index) in groupForm.modifiers" :key="modifier.key" class="flex items-end gap-2 rounded-lg border bg-card p-2">
+                            <div class="flex flex-col items-center gap-0.5 self-center">
+                                <Button type="button" variant="ghost" size="icon" class="size-7" :disabled="index === 0" :title="t('admin.catalog.moveUp')" @click="moveModifier(index, -1)">
+                                    <ArrowUp class="size-4" />
+                                </Button>
+                                <GripVertical class="modifier-handle size-4 cursor-grab text-muted-foreground" />
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    class="size-7"
+                                    :disabled="index === groupForm.modifiers.length - 1"
+                                    :title="t('admin.catalog.moveDown')"
+                                    @click="moveModifier(index, 1)"
+                                >
+                                    <ArrowDown class="size-4" />
+                                </Button>
+                            </div>
+                            <TransInput v-model="modifier.name" :label="`${t('admin.catalog.modifier')} ${index + 1}`" class="flex-1" />
+                            <Field :label="t('admin.catalog.priceDelta')" class="w-28">
+                                <Input v-model="modifier.price" inputmode="decimal" />
+                            </Field>
+                            <Button type="button" variant="ghost" size="icon" @click="groupForm.modifiers.splice(index, 1)"><Trash2 class="size-4" /></Button>
+                        </div>
+                    </VueDraggable>
+                    <Button type="button" variant="outline" size="sm" @click="groupForm.modifiers.push({ key: `new${++newModifierKey}`, id: null, name: { ca: '', es: '' }, price: '' })">
                         <Plus class="size-4" /> {{ t('common.add') }}
                     </Button>
                 </div>
