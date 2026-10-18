@@ -160,6 +160,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::patch('impresion/impresoras/{printer}', [PrintingController::class, 'updatePrinter'])->name('printers.update');
         Route::delete('impresion/impresoras/{printer}', [PrintingController::class, 'destroyPrinter'])->name('printers.destroy');
         Route::post('impresion/impresoras/{printer}/prueba', [PrintingController::class, 'test'])->name('printers.test');
+        Route::patch('impresion/rutas/familias/{category}', [PrintingController::class, 'routeFamily'])->name('printing.families.update');
+        Route::patch('impresion/rutas/productos/{product}', [PrintingController::class, 'routeProduct'])->name('printing.products.update');
         Route::patch('impresion/dispositivos/{device}', [PrintingController::class, 'updateDevice'])->name('printing.devices.update');
         Route::get('impresion/programa', [PrintingController::class, 'download'])->name('print-agents.download');
         Route::post('impresion/programas', [PrintingController::class, 'storeAgent'])->name('print-agents.store');

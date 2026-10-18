@@ -95,6 +95,27 @@ watch(
 );
 
 const destinationOptions = computed(() => props.destinations.map((d) => ({ value: d.id as number | null, label: tr(d.name) })));
+
+/** Where a family prints: its own destination or the closest parent's. */
+function familyDestination(id: number | null): number | null {
+    let family = id ? props.categories.find((c) => c.id === id) : undefined;
+
+    for (let guard = 0; family && guard < 10; guard++) {
+        if (family.destinationId) {
+            return family.destinationId;
+        }
+
+        family = family.parentId ? props.categories.find((c) => c.id === family!.parentId) : undefined;
+    }
+
+    return null;
+}
+
+const inheritedName = (id: number | null) => {
+    const destination = props.destinations.find((d) => d.id === id);
+
+    return destination ? tr(destination.name) : t('admin.printing.routing.nowhere');
+};
 const categoryOptions = computed(() => tree.value.map((c) => ({ value: c.id as number | null, label: `${c.depth ? '— ' : ''}${tr(c.name)}` })));
 const vatOptions = [0, 4, 5, 10, 21].map((rate) => ({ value: rate, label: `${rate}%` }));
 
@@ -446,7 +467,11 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                         />
                     </Field>
                     <Field :label="t('admin.catalog.destination')">
-                        <SelectInput v-model="categoryForm.destinationId" :placeholder="t('common.none')" :options="destinationOptions" />
+                        <SelectInput
+                            v-model="categoryForm.destinationId"
+                            :placeholder="categoryForm.parentId ? t('admin.printing.routing.likeParent', { name: inheritedName(familyDestination(categoryForm.parentId)) }) : t('admin.printing.routing.nowhere')"
+                            :options="destinationOptions"
+                        />
                     </Field>
                     <Field :label="t('common.color')">
                         <input v-model="categoryForm.color" type="color" class="h-9 w-16 cursor-pointer rounded-md border" />
@@ -521,7 +546,11 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                                 <SelectInput v-model="productForm.categoryId" :options="categoryOptions" />
                             </Field>
                             <Field :label="t('admin.catalog.destination')" class="sm:col-span-2">
-                                <SelectInput v-model="productForm.destinationId" :placeholder="t('admin.catalog.inheritDestination')" :options="destinationOptions" />
+                                <SelectInput
+                                    v-model="productForm.destinationId"
+                                    :placeholder="t('admin.printing.routing.likeFamily', { name: inheritedName(familyDestination(productForm.categoryId)) })"
+                                    :options="destinationOptions"
+                                />
                             </Field>
                             <Field :label="t('common.color')">
                                 <input v-model="productForm.color" type="color" class="h-9 w-16 cursor-pointer rounded-md border" />

@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Admin;
 use App\Enums\DeviceType;
 use App\Events\TpvChanged;
 use App\Http\Controllers\Controller;
+use App\Models\Category;
 use App\Models\Device;
 use App\Models\PrintAgent;
 use App\Models\Printer;
 use App\Models\PrintJob;
+use App\Models\Product;
 use App\Models\ProductionDestination;
 use App\Services\Printing\PrintAgentRelease;
 use App\Services\Printing\PrintService;
@@ -65,6 +67,21 @@ class PrintingController extends Controller
                 'name' => $d->name,
                 'type' => $d->type->value,
                 'ticketPrinterId' => $d->ticket_printer_id,
+            ]),
+            // What goes where: every family (and product) with the destination it prints at.
+            'families' => Category::query()->orderBy('sort')->get(['id', 'parent_id', 'name', 'production_destination_id', 'active'])->map(fn (Category $c) => [
+                'id' => $c->id,
+                'parentId' => $c->parent_id,
+                'name' => $c->name,
+                'destinationId' => $c->production_destination_id,
+                'active' => $c->active,
+            ]),
+            'products' => Product::query()->orderBy('sort')->get(['id', 'category_id', 'name', 'production_destination_id', 'active'])->map(fn (Product $p) => [
+                'id' => $p->id,
+                'categoryId' => $p->category_id,
+                'name' => $p->name,
+                'destinationId' => $p->production_destination_id,
+                'active' => $p->active,
             ]),
             'program' => ['available' => $release->available(), 'version' => $release->version(), 'size' => $release->size()],
         ]);
@@ -201,6 +218,41 @@ class PrintingController extends Controller
             $printer->type === 'system' => __('tpv.test_print_queued'),
             default => __('tpv.test_printed'),
         });
+
+        return back();
+    }
+
+    /**
+     * Where all the products of a family go when sent (null = like its parent family).
+     */
+    public function routeFamily(Request $request, Category $category): RedirectResponse
+    {
+        $category->update(['production_destination_id' => $this->routeData($request)]);
+
+        return $this->routed();
+    }
+
+    /**
+     * Where one product goes, above its family (null = like its family).
+     */
+    public function routeProduct(Request $request, Product $product): RedirectResponse
+    {
+        $product->update(['production_destination_id' => $this->routeData($request)]);
+
+        return $this->routed();
+    }
+
+    private function routeData(Request $request): ?int
+    {
+        $data = $request->validate(['destinationId' => ['nullable', 'integer', 'exists:production_destinations,id']]);
+
+        return isset($data['destinationId']) ? (int) $data['destinationId'] : null;
+    }
+
+    private function routed(): RedirectResponse
+    {
+        TpvChanged::notify(['catalog', 'printing']);
+        $this->toast(__('tpv.saved'));
 
         return back();
     }

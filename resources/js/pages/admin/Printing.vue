@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { Check, ChevronDown, Copy, Download, KeyRound, Monitor, Pencil, Plus, Printer as PrinterIcon, ScrollText, Trash2 } from '@lucide/vue';
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Copy, Download, KeyRound, Monitor, Pencil, Plus, Printer as PrinterIcon, ScrollText, Trash2 } from '@lucide/vue';
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { toast } from 'vue-sonner';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
@@ -22,6 +22,8 @@ import * as agentRoutes from '@/routes/admin/print-agents';
 import * as printerRoutes from '@/routes/admin/printers';
 import { log as logRoute } from '@/routes/admin/printing';
 import * as deviceRoutes from '@/routes/admin/printing/devices';
+import * as familyRouteRoutes from '@/routes/admin/printing/families';
+import * as productRouteRoutes from '@/routes/admin/printing/products';
 
 type Mode = 'printer' | 'screen' | 'both';
 type Destination = { id: number; name: Record<string, string>; code: string; mode: Mode; printerIds: number[] };
@@ -43,6 +45,9 @@ type Printer = {
     destinationIds: number[];
 };
 
+type Family = { id: number; parentId: number | null; name: Record<string, string>; destinationId: number | null; active: boolean };
+type RoutedProduct = { id: number; categoryId: number; name: Record<string, string>; destinationId: number | null; active: boolean };
+
 type TicketDevice = { id: number; name: string; type: 'cashier' | 'tablet'; ticketPrinterId: number | null };
 
 type Agent = { id: number; name: string; online: boolean; lastSeenAt: string | null; machine: string | null; version: string | null; systemPrinters: string[] };
@@ -53,6 +58,8 @@ const props = defineProps<{
     types: string[];
     agents: Agent[];
     devices: TicketDevice[];
+    families: Family[];
+    products: RoutedProduct[];
     program: { available: boolean; version: string | null; size: number | null };
 }>();
 
@@ -215,6 +222,80 @@ function testPrint(printer: Printer): void {
 // Printers of the print program are set up in the program; here only what they print.
 const managed = computed(() => editingPrinter.value?.managed === true);
 const isOutdated = (agent: Agent) => !!agent.version && !!props.program.version && agent.version !== props.program.version;
+
+// ------------------------------------------------------------ What goes where
+
+const familyById = computed(() => new Map(props.families.map((f) => [f.id, f])));
+const destinationName = (id: number | null) => (id ? tr(props.destinations.find((d) => d.id === id)?.name ?? '') : '');
+
+/** The destination a family prints at: its own, or the closest parent family's. */
+function familyDestination(id: number | null): number | null {
+    let family = id ? familyById.value.get(id) : undefined;
+
+    for (let guard = 0; family && guard < 10; guard++) {
+        if (family.destinationId) {
+            return family.destinationId;
+        }
+
+        family = family.parentId ? familyById.value.get(family.parentId) : undefined;
+    }
+
+    return null;
+}
+
+const productDestination = (product: RoutedProduct) => product.destinationId ?? familyDestination(product.categoryId);
+
+/** Families in tree order, each with its depth. */
+const familyTree = computed(() => {
+    const out: { family: Family; depth: number }[] = [];
+    const walk = (parentId: number | null, depth: number) => {
+        for (const family of props.families.filter((f) => f.parentId === parentId)) {
+            out.push({ family, depth });
+            walk(family.id, depth + 1);
+        }
+    };
+    walk(null, 0);
+
+    return out;
+});
+
+const productsOf = (familyId: number) => props.products.filter((p) => p.categoryId === familyId);
+const overrides = (familyId: number) => productsOf(familyId).filter((p) => p.destinationId !== null).length;
+const lost = computed(() => props.products.filter((p) => p.active && productDestination(p) === null));
+/** Destinations that print but have no printer: what goes there is lost. */
+const destinationsWithoutPrinter = computed(() => props.destinations.filter((d) => d.mode !== 'screen' && !d.printerIds.some((id) => props.printers.find((p) => p.id === id)?.active)));
+const openFamilies = ref<number[]>([]);
+
+function inheritedLabel(family: Family): string {
+    if (!family.parentId) {
+        return t('admin.printing.routing.nowhere');
+    }
+
+    const inherited = familyDestination(family.parentId);
+
+    return t('admin.printing.routing.likeParent', { name: inherited ? destinationName(inherited) : t('admin.printing.routing.nowhere') });
+}
+
+function productOptions(product: RoutedProduct) {
+    const inherited = familyDestination(product.categoryId);
+
+    return [
+        { value: null as number | null, label: t('admin.printing.routing.likeFamily', { name: inherited ? destinationName(inherited) : t('admin.printing.routing.nowhere') }) },
+        ...props.destinations.map((d) => ({ value: d.id as number | null, label: tr(d.name) })),
+    ];
+}
+
+function routeFamily(family: Family, destinationId: number | null): void {
+    router.patch(familyRouteRoutes.update.url(family.id), { destinationId }, { preserveScroll: true, preserveState: true });
+}
+
+function routeProduct(product: RoutedProduct, destinationId: number | null): void {
+    router.patch(productRouteRoutes.update.url(product.id), { destinationId }, { preserveScroll: true, preserveState: true });
+}
+
+function showLost(): void {
+    openFamilies.value = [...new Set(lost.value.map((p) => p.categoryId))];
+}
 
 // ------------------------------------------------------------ Tickets per device
 
@@ -386,6 +467,74 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
             </div>
         </section>
     </div>
+
+    <section class="mt-8">
+        <h2 class="font-medium">{{ t('admin.printing.routing.title') }}</h2>
+        <p class="mt-1 mb-3 text-sm text-muted-foreground">{{ t('admin.printing.routing.help') }}</p>
+
+        <div v-for="d in destinationsWithoutPrinter" :key="`np-${d.id}`" class="mb-2 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            <AlertTriangle class="size-4 shrink-0" /> {{ t('admin.printing.routing.noPrinter', { name: tr(d.name) }) }}
+        </div>
+        <div v-if="lost.length" class="mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+            <AlertTriangle class="size-4 shrink-0" />
+            <span class="flex-1">{{ t('admin.printing.routing.lost', { count: lost.length }) }}</span>
+            <Button size="sm" variant="outline" @click="showLost">{{ t('admin.printing.routing.showLost') }}</Button>
+        </div>
+
+        <div class="divide-y rounded-xl border bg-card">
+            <div v-for="{ family, depth } in familyTree" :key="family.id" :class="{ 'opacity-60': !family.active }">
+                <div class="flex flex-wrap items-center gap-2 p-3" :style="{ paddingLeft: `${12 + depth * 24}px` }">
+                    <button
+                        type="button"
+                        class="flex min-w-0 flex-1 basis-48 items-center gap-1.5 text-left"
+                        @click="openFamilies.includes(family.id) ? openFamilies.splice(openFamilies.indexOf(family.id), 1) : openFamilies.push(family.id)"
+                    >
+                        <ChevronRight class="size-4 shrink-0 transition" :class="openFamilies.includes(family.id) ? 'rotate-90' : ''" />
+                        <span class="truncate font-medium">{{ tr(family.name) }}</span>
+                        <span class="shrink-0 text-xs text-muted-foreground">
+                            · {{ t('admin.printing.routing.productsCount', { count: productsOf(family.id).length }) }}
+                            <template v-if="overrides(family.id)"> · {{ t('admin.printing.routing.ownCount', { count: overrides(family.id) }) }}</template>
+                        </span>
+                    </button>
+                    <div class="flex flex-wrap gap-1">
+                        <button
+                            v-for="d in destinations"
+                            :key="d.id"
+                            type="button"
+                            class="h-9 rounded-lg border px-3 text-sm font-medium"
+                            :class="family.destinationId === d.id ? 'border-[#00056a] bg-[#00056a] text-white' : 'bg-background'"
+                            @click="routeFamily(family, d.id)"
+                        >
+                            {{ tr(d.name) }}
+                        </button>
+                        <button
+                            type="button"
+                            class="h-9 rounded-lg border px-3 text-sm"
+                            :class="family.destinationId === null ? 'border-slate-500 bg-slate-500 text-white' : 'bg-background text-muted-foreground'"
+                            @click="routeFamily(family, null)"
+                        >
+                            {{ inheritedLabel(family) }}
+                        </button>
+                    </div>
+                </div>
+                <div v-if="openFamilies.includes(family.id)" class="space-y-1 bg-muted/30 py-2 pr-3" :style="{ paddingLeft: `${44 + depth * 24}px` }">
+                    <p v-if="!productsOf(family.id).length" class="text-sm text-muted-foreground">{{ t('admin.printing.routing.noProducts') }}</p>
+                    <div v-for="product in productsOf(family.id)" :key="product.id" class="flex flex-wrap items-center gap-2" :class="{ 'opacity-60': !product.active }">
+                        <span class="min-w-0 flex-1 basis-40 truncate text-sm" :class="product.destinationId !== null ? 'font-semibold' : ''">
+                            <AlertTriangle v-if="product.active && productDestination(product) === null" class="mr-1 inline size-3.5 text-amber-600" />{{ tr(product.name) }}
+                        </span>
+                        <div class="w-full sm:w-64">
+                            <SelectInput
+                                :model-value="product.destinationId"
+                                :options="productOptions(product)"
+                                @update:model-value="(value) => routeProduct(product, (value as number | null) ?? null)"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <section class="mt-8">
         <h2 class="font-medium">{{ t('admin.printing.deviceTickets') }}</h2>
