@@ -188,6 +188,7 @@ class SnapshotBuilder
             'uuid' => $device->uuid,
             'name' => $device->name,
             'type' => $device->type->value,
+            'ticketPrinterId' => $device->ticket_printer_id,
         ];
     }
 

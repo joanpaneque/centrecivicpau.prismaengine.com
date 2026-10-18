@@ -128,8 +128,8 @@ export async function issueTicket(
     order: Order,
     selection: Selection,
     payments: PaymentInput[],
-    opts: { factor?: number; partLabel?: string | null; closeOrder?: boolean; markPaid?: boolean; tip?: number } = {},
-): Promise<{ fullNumber: string; document: PrintDocument; change: number; tip: number }> {
+    opts: { factor?: number; partLabel?: string | null; closeOrder?: boolean; markPaid?: boolean; tip?: number; print?: boolean } = {},
+): Promise<{ fullNumber: string; document: PrintDocument; change: number; tip: number; printed: boolean }> {
     const series = state.cashier?.series;
     const session = state.cashier?.session;
 
@@ -214,12 +214,13 @@ export async function issueTicket(
             paidLines: markPaid ? selection.map(({ line, quantity }) => ({ lineUuid: line.uuid, quantity })) : [],
             closeOrder: !!opts.closeOrder,
         },
-        [job('ticket', `${t('cashier.title')} · ${fullNumber}`, printerId, document)],
+        // The ticket only prints when the cashier ticks "print the ticket".
+        opts.print ? [job('ticket', `${t('cashier.title')} · ${fullNumber}`, printerId, document)] : [],
     );
 
     setKv('seriesNext', number + 1);
 
-    return { fullNumber, document, change: paymentRows.reduce((sum, p) => sum + (p.change ?? 0), 0), tip };
+    return { fullNumber, document, change: paymentRows.reduce((sum, p) => sum + (p.change ?? 0), 0), tip, printed: !!opts.print };
 }
 
 export async function reprint(title: string, document: PrintDocument): Promise<void> {

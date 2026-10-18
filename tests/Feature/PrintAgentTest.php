@@ -1,6 +1,7 @@
 <?php
 
 use App\Events\PrintJobsWaiting;
+use App\Models\Device;
 use App\Models\PrintAgent;
 use App\Models\Printer;
 use App\Models\PrintJob;
@@ -221,4 +222,28 @@ test('the printers are set up in the program: it adopts the existing ones and th
 
     $this->withToken($token)->postJson(route('api.print-agent.hello'), ['definitions' => [['key' => 'x', 'name' => 'Sense IP', 'target' => 'network', 'output' => 'escpos', 'paperWidth' => 48]]])
         ->assertUnprocessable();
+});
+
+test('each device can print its tickets on its own printer', function () {
+    Event::fake([PrintJobsWaiting::class]);
+    [, , $printer] = agentWithPrinter();
+    $admin = User::factory()->admin()->create();
+    $cookie = registerTpvDevice($this, $admin, 'cashier');
+    $device = Device::query()->latest('id')->firstOrFail();
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)
+        ->getJson(route('tpv.bootstrap'))
+        ->assertJsonPath('device.ticketPrinterId', null);
+
+    $this->actingAs($admin)->get(route('admin.printing'))->assertOk();
+    $this->actingAs($admin)->patch(route('admin.printing.devices.update', $device), ['ticketPrinterId' => $printer->id])->assertRedirect();
+    expect($device->refresh()->ticket_printer_id)->toBe($printer->id);
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)
+        ->getJson(route('tpv.bootstrap'))
+        ->assertJsonPath('device.ticketPrinterId', $printer->id);
+
+    // Deleting the printer sends the device back to the general one.
+    $printer->delete();
+    expect($device->refresh()->ticket_printer_id)->toBeNull();
 });

@@ -21,6 +21,7 @@ import * as destinationRoutes from '@/routes/admin/destinations';
 import * as agentRoutes from '@/routes/admin/print-agents';
 import * as printerRoutes from '@/routes/admin/printers';
 import { log as logRoute } from '@/routes/admin/printing';
+import * as deviceRoutes from '@/routes/admin/printing/devices';
 
 type Mode = 'printer' | 'screen' | 'both';
 type Destination = { id: number; name: Record<string, string>; code: string; mode: Mode; printerIds: number[] };
@@ -42,6 +43,8 @@ type Printer = {
     destinationIds: number[];
 };
 
+type TicketDevice = { id: number; name: string; type: 'cashier' | 'tablet'; ticketPrinterId: number | null };
+
 type Agent = { id: number; name: string; online: boolean; lastSeenAt: string | null; machine: string | null; version: string | null; systemPrinters: string[] };
 
 const props = defineProps<{
@@ -49,6 +52,7 @@ const props = defineProps<{
     printers: Printer[];
     types: string[];
     agents: Agent[];
+    devices: TicketDevice[];
     program: { available: boolean; version: string | null; size: number | null };
 }>();
 
@@ -212,6 +216,21 @@ function testPrint(printer: Printer): void {
 const managed = computed(() => editingPrinter.value?.managed === true);
 const isOutdated = (agent: Agent) => !!agent.version && !!props.program.version && agent.version !== props.program.version;
 
+// ------------------------------------------------------------ Tickets per device
+
+const generalTicketPrinter = computed(() => props.printers.find((p) => p.active && p.isTicketPrinter) ?? null);
+const deviceTicketOptions = computed(() => [
+    {
+        value: null as number | null,
+        label: generalTicketPrinter.value ? t('admin.printing.deviceTicketsGeneral', { name: generalTicketPrinter.value.name }) : t('admin.printing.deviceTicketsNone'),
+    },
+    ...props.printers.filter((p) => p.active).map((p) => ({ value: p.id as number | null, label: p.name })),
+]);
+
+function setDeviceTicketPrinter(device: TicketDevice, printerId: number | null): void {
+    router.patch(deviceRoutes.update.url(device.id), { ticketPrinterId: printerId }, { preserveScroll: true });
+}
+
 const deleting = ref<{ kind: 'destination' | 'printer' | 'agent'; id: number; label: string } | null>(null);
 const deleteOpen = computed({ get: () => deleting.value !== null, set: (v) => !v && (deleting.value = null) });
 
@@ -367,6 +386,28 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
             </div>
         </section>
     </div>
+
+    <section class="mt-8">
+        <h2 class="font-medium">{{ t('admin.printing.deviceTickets') }}</h2>
+        <p class="mt-1 mb-3 text-sm text-muted-foreground">{{ t('admin.printing.deviceTicketsHelp') }}</p>
+        <p v-if="!devices.length" class="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">{{ t('admin.printing.noDevices') }}</p>
+        <div class="grid gap-2 md:grid-cols-2">
+            <div v-for="device in devices" :key="device.id" class="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+                <Monitor class="size-5 text-muted-foreground" />
+                <div class="min-w-0 flex-1">
+                    <div class="truncate font-medium">{{ device.name }}</div>
+                    <div class="text-xs text-muted-foreground">{{ t(`device.types.${device.type}`) }}</div>
+                </div>
+                <div class="w-full sm:w-64">
+                    <SelectInput
+                        :model-value="device.ticketPrinterId"
+                        :options="deviceTicketOptions"
+                        @update:model-value="(value) => setDeviceTicketPrinter(device, (value as number | null) ?? null)"
+                    />
+                </div>
+            </div>
+        </div>
+    </section>
 
     <Dialog v-model:open="destinationOpen">
         <DialogContent class="sm:max-w-lg">

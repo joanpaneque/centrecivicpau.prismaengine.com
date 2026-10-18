@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\DeviceType;
 use App\Events\TpvChanged;
 use App\Http\Controllers\Controller;
+use App\Models\Device;
 use App\Models\PrintAgent;
 use App\Models\Printer;
 use App\Models\PrintJob;
@@ -57,6 +59,12 @@ class PrintingController extends Controller
                 'machine' => $a->machine,
                 'version' => $a->version,
                 'systemPrinters' => $a->system_printers ?? [],
+            ]),
+            'devices' => Device::query()->where('active', true)->whereIn('type', [DeviceType::Cashier, DeviceType::Tablet])->orderBy('name')->get()->map(fn (Device $d) => [
+                'id' => $d->id,
+                'name' => $d->name,
+                'type' => $d->type->value,
+                'ticketPrinterId' => $d->ticket_printer_id,
             ]),
             'program' => ['available' => $release->available(), 'version' => $release->version(), 'size' => $release->size()],
         ]);
@@ -195,6 +203,17 @@ class PrintingController extends Controller
         });
 
         return back();
+    }
+
+    /**
+     * Which printer the tickets of a device come out on (null = the general one).
+     */
+    public function updateDevice(Request $request, Device $device): RedirectResponse
+    {
+        $data = $request->validate(['ticketPrinterId' => ['nullable', 'integer', 'exists:printers,id']]);
+        $device->forceFill(['ticket_printer_id' => $data['ticketPrinterId'] ?? null])->save();
+
+        return $this->changed();
     }
 
     public function download(PrintAgentRelease $release): BinaryFileResponse

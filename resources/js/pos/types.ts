@@ -5,7 +5,7 @@ export type Role = 'admin' | 'staff' | 'kitchen';
 export type DeviceType = 'tablet' | 'cashier' | 'kds' | 'clock';
 
 export type Me = { id: number; name: string; role: Role; locale: string; color: string | null; email: string | null };
-export type DeviceInfo = { uuid: string; name: string; type: DeviceType };
+export type DeviceInfo = { uuid: string; name: string; type: DeviceType; ticketPrinterId?: number | null };
 
 export type Staff = { id: number; name: string; role: Role; color: string | null; locale: string; pinDigest: string | null };
 

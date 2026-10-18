@@ -6,6 +6,7 @@ import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
 import PrintPreview from '@/components/pos/PrintPreview.vue';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
@@ -48,9 +49,11 @@ const chosen = reactive<Record<string, number>>({});
 const charging = ref(false);
 const printing = ref(false);
 const printingProforma = ref(false);
+/** Tickets only print when asked: unticked on every charge. */
+const printOnCharge = ref(false);
 /** The ticket printer prints by itself: tickets come out on charging, no PDF. */
 const directPrinter = computed(() => directTicketPrinter());
-const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean } | null>(null);
+const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean; printed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
 /** Lines taken without price: the cashier must price them before charging. */
@@ -291,6 +294,7 @@ async function charge(): Promise<void> {
             markPaid: !isEqual || finalPart,
             closeOrder: mode.value === 'all' || finalPart,
             tip: tipCents.value,
+            print: printOnCharge.value,
         });
 
         if (isEqual) {
@@ -308,6 +312,7 @@ async function charge(): Promise<void> {
         tendered.value = '';
         cardAmount.value = '';
         customCents.value = null;
+        printOnCharge.value = false;
         result.value = { ...issued, surplus: issued.change + issued.tip, closed: !isActive(followOrder(current.uuid)) };
         toast.success(t('cashier.ticketIssued', { number: issued.fullNumber }));
     } catch (error) {
@@ -343,7 +348,11 @@ async function printTicket(): Promise<void> {
     printing.value = true;
 
     try {
-        if ((await printOrOpen('reprint', `${t('cashier.reprint')} · ${result.value.fullNumber}`, result.value.document)) === 'printed') {
+        const first = !result.value.printed;
+        const title = first ? `${t('cashier.title')} · ${result.value.fullNumber}` : `${t('cashier.reprint')} · ${result.value.fullNumber}`;
+
+        if ((await printOrOpen(first ? 'ticket' : 'reprint', title, result.value.document)) === 'printed') {
+            result.value.printed = true;
             toast.success(t('cashier.sentTo', { name: directPrinter.value?.name ?? '' }));
         }
     } catch {
@@ -497,7 +506,13 @@ function finish(): void {
                 </div>
             </div>
 
-            <Button class="mt-auto h-16 bg-emerald-600 text-xl hover:bg-emerald-700" :disabled="due <= 0 || insufficient || charging" @click="charge">
+            <label class="mt-auto flex h-14 cursor-pointer items-center gap-3 rounded-xl border-2 bg-white px-4 text-base font-medium dark:bg-slate-900" :class="printOnCharge ? 'border-[#00056a]' : 'border-transparent'">
+                <Checkbox v-model="printOnCharge" class="size-6" />
+                <FileText class="size-5 text-slate-500" />
+                <span class="flex-1">{{ t('cashier.printOnCharge') }}</span>
+                <span v-if="printOnCharge && directPrinter" class="truncate text-sm font-normal text-slate-500">{{ directPrinter.name }}</span>
+            </label>
+            <Button class="h-16 bg-emerald-600 text-xl hover:bg-emerald-700" :disabled="due <= 0 || insufficient || charging" @click="charge">
                 <Wallet class="size-6" /> {{ charging ? t('cashier.charging') : `${t('cashier.charge')} ${formatMoney(customCents && method === 'card' ? customCents : due)}` }}
             </Button>
             <p v-if="surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">
@@ -544,15 +559,16 @@ function finish(): void {
             <p v-if="result && result.surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950">
                 {{ t('cashier.surplus', { amount: formatMoney(result.surplus) }) }}
             </p>
-            <p v-if="directPrinter" class="text-center text-sm text-slate-600">{{ t('cashier.ticketSentTo', { name: directPrinter.name }) }}</p>
+            <p v-if="directPrinter && result?.printed" class="text-center text-sm text-slate-600">{{ t('cashier.ticketSentTo', { name: directPrinter.name }) }}</p>
+            <p v-else-if="directPrinter" class="text-center text-sm text-slate-600">{{ t('cashier.ticketNotPrinted') }}</p>
             <template v-else>
                 <p class="text-center text-sm text-slate-600">{{ t('cashier.printTicketQuestion') }}</p>
                 <p class="text-center text-xs text-slate-500">{{ t('cashier.openPdfHint') }}</p>
             </template>
             <DialogFooter>
                 <Button variant="outline" class="h-12 w-full sm:w-auto" @click="finish">{{ result?.closed ? t('common.done') : t('cashier.nextPart') }}</Button>
-                <Button v-if="directPrinter" variant="outline" class="h-12 w-full sm:flex-1" :disabled="printing" @click="printTicket">
-                    <FileText class="size-5" /> {{ printing ? t('cashier.sending') : t('cashier.printAgain') }}
+                <Button v-if="directPrinter" :variant="result?.printed ? 'outline' : 'default'" class="h-12 w-full sm:flex-1" :class="result?.printed ? '' : 'bg-[#00056a]'" :disabled="printing" @click="printTicket">
+                    <FileText class="size-5" /> {{ printing ? t('cashier.sending') : result?.printed ? t('cashier.printAgain') : t('cashier.printTicket') }}
                 </Button>
                 <Button v-else class="h-12 w-full bg-[#00056a] sm:flex-1" :disabled="printing" @click="printTicket">
                     <FileText class="size-5" /> {{ printing ? t('cashier.openingPdf') : t('cashier.openPdf') }}

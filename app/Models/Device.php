@@ -12,6 +12,7 @@ use Illuminate\Support\Carbon;
  * @property string $uuid
  * @property string $name
  * @property DeviceType $type
+ * @property int|null $ticket_printer_id where its tickets print (null = the general ticket printer)
  * @property string $token_hash
  * @property int|null $registered_by
  * @property Carbon|null $last_seen_at

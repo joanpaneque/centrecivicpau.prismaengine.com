@@ -42,7 +42,14 @@ export function printersFor(destinationId: number | null): number[] {
     return destination.printerIds.filter((id) => state.printers[id]?.active !== false);
 }
 
+/** Where this device prints its tickets: its own printer if it has one, otherwise the general one. */
 export function ticketPrinterId(): number | null {
+    const own = state.device?.ticketPrinterId ? state.printers[state.device.ticketPrinterId] : null;
+
+    if (own && own.active !== false) {
+        return own.id;
+    }
+
     const printer = Object.values(state.printers).find((p) => p.active && p.isTicketPrinter);
 
     return printer?.id ?? null;
