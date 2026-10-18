@@ -20,6 +20,7 @@ use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\InitialSetupController;
 use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\InvoiceRequestController;
+use App\Http\Controllers\Tpv\CatalogMoveController;
 use App\Http\Controllers\Tpv\FloorController;
 use App\Http\Controllers\Tpv\PrintJobController;
 use App\Http\Controllers\Tpv\ProductController as TpvProductController;
@@ -67,6 +68,7 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
         Route::post('products/suggest', [TpvProductController::class, 'suggest'])->middleware('throttle:30,1')->name('products.suggest');
 
         Route::middleware('admin')->group(function () {
+            Route::post('catalog/move', CatalogMoveController::class)->name('catalog.move');
             Route::post('tables', [FloorController::class, 'store'])->name('tables.store');
             Route::patch('tables/{table}', [FloorController::class, 'update'])->name('tables.update');
             Route::delete('tables/{table}', [FloorController::class, 'destroy'])->name('tables.destroy');

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Head, router, useForm } from '@inertiajs/vue3';
 import { Copy, GripVertical, ImageOff, Pencil, Plus, Search, Trash2 } from '@lucide/vue';
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { VueDraggable } from 'vue-draggable-plus';
 import ConfirmDialog from '@/components/admin/ConfirmDialog.vue';
 import Field from '@/components/admin/Field.vue';
@@ -70,7 +70,9 @@ const props = defineProps<{
 
 const { t, tr } = useI18n();
 const tab = ref<'products' | 'modifiers'>('products');
-const selectedCategory = ref<number | null>(props.categories[0]?.id ?? null);
+// ?familia=ID (from Gestió → Impressió) opens that family to edit it.
+const linkedFamily = Number(new URLSearchParams(window.location.search).get('familia')) || null;
+const selectedCategory = ref<number | null>(props.categories.find((c) => c.id === linkedFamily)?.id ?? props.categories[0]?.id ?? null);
 const search = ref('');
 
 const tree = computed(() => {
@@ -167,6 +169,14 @@ function openCategory(category: Category | null): void {
     categoryPhoto.value = null;
     categoryOpen.value = true;
 }
+
+onMounted(() => {
+    const family = props.categories.find((c) => c.id === linkedFamily);
+
+    if (family) {
+        openCategory(family);
+    }
+});
 
 function saveCategory(): void {
     categoryForm
@@ -349,7 +359,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
         <aside class="space-y-2">
             <div class="flex items-center justify-between">
                 <h2 class="text-sm font-medium">{{ t('admin.catalog.categories') }}</h2>
-                <Button size="sm" variant="outline" @click="openCategory(null)"><Plus class="size-4" /></Button>
+                <Button size="sm" variant="outline" @click="openCategory(null)"><Plus class="size-4" /> {{ t('admin.catalog.newCategory') }}</Button>
             </div>
             <VueDraggable v-model="categoryList" handle=".handle" :animation="150" class="space-y-1" @end="saveCategoryOrder">
                 <div
@@ -369,8 +379,13 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                     <span class="size-3 shrink-0 rounded-full" :style="{ background: category.color ?? '#cbd5e1' }" />
                     <span class="flex-1 truncate">{{ tr(category.name) }}</span>
                     <span class="text-xs text-muted-foreground">{{ category.productsCount }}</span>
-                    <button class="opacity-0 group-hover:opacity-100" @click.stop="openCategory(category)">
-                        <Pencil class="size-3.5" />
+                    <button
+                        type="button"
+                        class="-my-1 flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                        :title="t('common.edit')"
+                        @click.stop="openCategory(category)"
+                    >
+                        <Pencil class="size-4" />
                     </button>
                 </div>
             </VueDraggable>

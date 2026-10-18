@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { ArrowLeft, Ban, PencilLine, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
+import { ArrowLeft, Ban, Check, Move, PencilLine, Search, Star, UtensilsCrossed, X } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import { toast } from 'vue-sonner';
 import AllergenIcons from '@/components/pos/AllergenIcons.vue';
 import InventProductDialog from '@/components/pos/InventProductDialog.vue';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { t, tr } from '@/i18n';
+import { api, HttpError } from '@/lib/http';
 import { categoryColor, categoryProducts, frequentProducts, menusToday, NEUTRAL_TILE, productColor, readableText, searchProducts } from '@/pos/catalog';
 import { formatMoney } from '@/pos/money';
 import type { InventedProduct } from '@/pos/orders';
-import { sorted, state } from '@/pos/store';
+import { sorted, state, upsert } from '@/pos/store';
 import { enqueue } from '@/pos/sync';
 import type { Category, Product, SetMenu } from '@/pos/types';
 
@@ -67,6 +69,14 @@ function familyColor(category: Category): string {
 }
 
 function pick(product: Product): void {
+    if (moving.value) {
+        if (moving.value.step === 'pick') {
+            chooseProduct(product);
+        }
+
+        return;
+    }
+
     if (product.soldOut) {
         info.value = product;
 
@@ -82,6 +92,10 @@ let longPressed = false;
 function pressStart(product: Product): void {
     longPressed = false;
     pressTimer = setTimeout(() => {
+        if (moving.value) {
+            return;
+        }
+
         longPressed = true;
         info.value = product;
     }, 550);
@@ -100,6 +114,127 @@ function pressEnd(product: Product): void {
 
     if (wasPressing && !longPressed) {
         pick(product);
+    }
+}
+
+// ------------------------------------------------------------ Move products and families
+// Step 1: tap what to move (a product, or «Mou» on a family). Step 2: go where it should be
+// and tap «Posa-ho aquí». Admins only, like editing the floor.
+
+type Moving = { step: 'pick' } | { step: 'place'; kind: 'product' | 'family'; id: number; name: string };
+
+const canMove = computed(() => state.me?.role === 'admin');
+const moving = ref<Moving | null>(null);
+const placing = ref(false);
+
+function startMove(): void {
+    moving.value = { step: 'pick' };
+    query.value = '';
+}
+
+function cancelMove(): void {
+    moving.value = null;
+}
+
+function chooseProduct(product: Product): void {
+    moving.value = { step: 'place', kind: 'product', id: product.id, name: tr(product.name) };
+}
+
+function chooseFamily(category: Category): void {
+    moving.value = { step: 'place', kind: 'family', id: category.id, name: tr(category.name) };
+    backToFamilies();
+}
+
+/** The family shown right now (the subfamily if one is open). */
+const here = computed(() => (current.value ? (subCategory.value ? (state.categories[subCategory.value] ?? current.value) : current.value) : null));
+const hereLabel = computed(() => {
+    if (showFamilies.value) {
+        return t('order.catalogMove.mainFamilies');
+    }
+
+    if (!here.value || !current.value) {
+        return '—';
+    }
+
+    return here.value.id === current.value.id ? tr(current.value.name) : `${tr(current.value.name)} › ${tr(here.value.name)}`;
+});
+
+/** Where «Posa-ho aquí» would put it, or why not here. */
+const placement = computed<{ targetId: number | null; label: string } | { problem: string } | null>(() => {
+    const m = moving.value;
+
+    if (!m || m.step !== 'place') {
+        return null;
+    }
+
+    if (query.value.trim()) {
+        return { problem: t('order.catalogMove.clearSearch') };
+    }
+
+    if (m.kind === 'product') {
+        if (!here.value) {
+            return { problem: t('order.catalogMove.openFamily') };
+        }
+
+        if (state.products[m.id]?.categoryId === here.value.id) {
+            return { problem: t('order.catalogMove.alreadyHere') };
+        }
+
+        return { targetId: here.value.id, label: hereLabel.value };
+    }
+
+    const family = state.categories[m.id];
+
+    if (showFamilies.value) {
+        return family?.parentId ? { targetId: null, label: hereLabel.value } : { problem: t('order.catalogMove.alreadyHere') };
+    }
+
+    if (!current.value) {
+        return { problem: t('order.catalogMove.openFamily') };
+    }
+
+    if (current.value.id === m.id) {
+        return { problem: t('order.catalogMove.notInside') };
+    }
+
+    if (sorted.categories.value.some((c) => c.parentId === m.id)) {
+        return { problem: t('order.catalogMove.hasChildren') };
+    }
+
+    if (family?.parentId === current.value.id) {
+        return { problem: t('order.catalogMove.alreadyHere') };
+    }
+
+    return { targetId: current.value.id, label: tr(current.value.name) };
+});
+
+async function placeHere(): Promise<void> {
+    const m = moving.value;
+    const target = placement.value;
+
+    if (!m || m.step !== 'place' || !target || 'problem' in target || placing.value) {
+        return;
+    }
+
+    placing.value = true;
+
+    try {
+        const response = await api<{ product?: Product; category?: Category }>('POST', '/tpv/api/catalog/move', { kind: m.kind, id: m.id, targetId: target.targetId });
+
+        if (response.product) {
+            upsert('products', response.product);
+        }
+
+        if (response.category) {
+            upsert('categories', response.category);
+        }
+
+        toast.success(t('order.catalogMove.done', { name: m.name, where: target.label }));
+        moving.value = null;
+    } catch (error) {
+        toast.error(error instanceof HttpError && error.status === 422 ? error.message : t('common.offlineOnly'));
+    } finally {
+        placing.value = false;
     }
 }
 
@@ -124,8 +259,50 @@ async function toggleSoldOut(product: Product): Promise<void> {
                     <X class="size-5" />
                 </button>
             </div>
-            <button type="button" class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-amber-500 px-3 text-sm font-semibold text-amber-950" @click="inventing = true">
+            <button
+                v-if="!moving"
+                type="button"
+                class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-amber-500 px-3 text-sm font-semibold text-amber-950"
+                @click="inventing = true"
+            >
                 <PencilLine class="size-4" /> <span class="max-sm:hidden">{{ t('order.invent') }}</span>
+            </button>
+            <button
+                v-if="canMove && !moving"
+                type="button"
+                class="flex h-12 shrink-0 items-center gap-1 rounded-xl bg-white px-3 text-sm font-semibold text-slate-700 shadow-sm"
+                :title="t('order.catalogMove.button')"
+                @click="startMove"
+            >
+                <Move class="size-4" /> <span class="max-lg:hidden">{{ t('order.catalogMove.button') }}</span>
+            </button>
+        </div>
+
+        <!-- Moving: what to move, then where -->
+        <div v-if="moving" class="mx-2 mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-xl bg-violet-600 p-3 text-white shadow">
+            <Move class="size-6 shrink-0" />
+            <div class="min-w-0 flex-1 basis-56">
+                <template v-if="moving.step === 'pick'">
+                    <p class="font-bold">{{ t('order.catalogMove.whatTitle') }}</p>
+                    <p class="text-sm opacity-90">{{ t('order.catalogMove.whatHelp') }}</p>
+                </template>
+                <template v-else>
+                    <p class="font-bold">{{ t('order.catalogMove.whereTitle', { name: moving.name }) }}</p>
+                    <p class="text-sm opacity-90">
+                        <template v-if="placement && 'problem' in placement">{{ placement.problem }}</template>
+                        <template v-else>{{ t('order.catalogMove.whereHelp', { where: placement?.label ?? '' }) }}</template>
+                    </p>
+                </template>
+            </div>
+            <button type="button" class="h-11 shrink-0 rounded-lg bg-white/15 px-4 text-sm font-semibold" @click="cancelMove">{{ t('common.cancel') }}</button>
+            <button
+                v-if="moving.step === 'place'"
+                type="button"
+                class="flex h-11 shrink-0 items-center gap-1.5 rounded-lg bg-white px-4 text-sm font-bold text-violet-700 disabled:opacity-50"
+                :disabled="!placement || 'problem' in placement || placing"
+                @click="placeHere"
+            >
+                <Check class="size-5" /> {{ placing ? t('common.saving') : t('order.catalogMove.placeHere') }}
             </button>
         </div>
 
@@ -153,17 +330,26 @@ async function toggleSoldOut(product: Product): Promise<void> {
                         <span class="text-xs opacity-90">{{ t('order.menusCount', { count: menusToday.length }) }}</span>
                     </span>
                 </button>
-                <button
-                    v-for="category in roots"
-                    :key="category.id"
-                    type="button"
-                    class="flex h-24 items-center gap-3 rounded-2xl p-3 text-left shadow-sm transition active:scale-95"
-                    :style="{ background: familyColor(category), color: readableText(familyColor(category)) }"
-                    @click="openFamily(category.id)"
-                >
-                    <img v-if="category.photoUrl" :src="category.photoUrl" alt="" class="size-16 shrink-0 rounded-xl bg-white/20 object-cover" loading="lazy" />
-                    <span class="line-clamp-3 text-lg leading-tight font-bold">{{ tr(category.name) }}</span>
-                </button>
+                <div v-for="category in roots" :key="category.id" class="relative">
+                    <button
+                        type="button"
+                        class="flex h-24 w-full items-center gap-3 rounded-2xl p-3 text-left shadow-sm transition active:scale-95"
+                        :class="moving?.step === 'place' && moving.kind === 'family' && moving.id === category.id ? 'ring-4 ring-violet-500' : ''"
+                        :style="{ background: familyColor(category), color: readableText(familyColor(category)) }"
+                        @click="openFamily(category.id)"
+                    >
+                        <img v-if="category.photoUrl" :src="category.photoUrl" alt="" class="size-16 shrink-0 rounded-xl bg-white/20 object-cover" loading="lazy" />
+                        <span class="line-clamp-3 text-lg leading-tight font-bold" :class="moving?.step === 'pick' ? 'pr-14' : ''">{{ tr(category.name) }}</span>
+                    </button>
+                    <button
+                        v-if="moving?.step === 'pick'"
+                        type="button"
+                        class="absolute top-1.5 right-1.5 flex h-9 items-center gap-1 rounded-lg bg-violet-600 px-2 text-xs font-bold text-white shadow"
+                        @click="chooseFamily(category)"
+                    >
+                        <Move class="size-4" /> {{ t('order.catalogMove.this') }}
+                    </button>
+                </div>
             </div>
             <p v-if="!roots.length && !frequentProducts.length" class="py-10 text-center text-sm text-slate-500">{{ t('common.empty') }}</p>
         </div>
@@ -180,6 +366,14 @@ async function toggleSoldOut(product: Product): Promise<void> {
                     <img v-if="current?.photoUrl" :src="current.photoUrl" alt="" class="size-8 rounded-lg object-cover" />
                     {{ current ? tr(current.name) : view === MENUS ? t('order.menusFamily') : t('order.frequent') }}
                 </span>
+                <button
+                    v-if="moving?.step === 'pick' && here"
+                    type="button"
+                    class="ml-auto flex h-11 shrink-0 items-center gap-1 rounded-xl bg-violet-600 px-3 text-sm font-bold text-white shadow-sm"
+                    @click="chooseFamily(here)"
+                >
+                    <Move class="size-4" /> {{ t('order.catalogMove.thisFamily', { name: tr(here.name) }) }}
+                </button>
             </div>
 
             <div v-if="children.length && !query.trim()" class="flex shrink-0 gap-1.5 overflow-x-auto px-2 pb-2">
@@ -230,7 +424,7 @@ async function toggleSoldOut(product: Product): Promise<void> {
                         :key="product.id"
                         type="button"
                         class="relative flex h-28 flex-col overflow-hidden rounded-xl text-left shadow-sm transition active:scale-95"
-                        :class="product.soldOut ? 'opacity-50' : ''"
+                        :class="[product.soldOut ? 'opacity-50' : '', moving?.step === 'place' && moving.kind === 'product' && moving.id === product.id ? 'ring-4 ring-violet-500' : '']"
                         :style="{ background: tileColor(product), color: product.photoUrl ? '#ffffff' : readableText(tileColor(product)) }"
                         @pointerdown="pressStart(product)"
                         @pointerup="pressEnd(product)"

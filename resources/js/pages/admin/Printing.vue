@@ -16,7 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { tl, useI18n } from '@/i18n';
 import { formatDateTime, toTrans } from '@/lib/format';
-import { printing as printingRoute } from '@/routes/admin';
+import { catalog as catalogRoute, printing as printingRoute } from '@/routes/admin';
 import * as destinationRoutes from '@/routes/admin/destinations';
 import * as agentRoutes from '@/routes/admin/print-agents';
 import * as printerRoutes from '@/routes/admin/printers';
@@ -496,6 +496,9 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                             <template v-if="overrides(family.id)"> · {{ t('admin.printing.routing.ownCount', { count: overrides(family.id) }) }}</template>
                         </span>
                     </button>
+                    <Button variant="ghost" size="icon" as-child :title="t('common.edit')">
+                        <Link :href="`${catalogRoute.url()}?familia=${family.id}`"><Pencil class="size-4" /></Link>
+                    </Button>
                     <div class="flex flex-wrap gap-1">
                         <button
                             v-for="d in destinations"

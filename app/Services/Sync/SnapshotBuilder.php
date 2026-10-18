@@ -269,7 +269,7 @@ class SnapshotBuilder
     /**
      * @return array<string, mixed>
      */
-    private function category(Category $category): array
+    public function category(Category $category): array
     {
         return [
             'id' => $category->id,
