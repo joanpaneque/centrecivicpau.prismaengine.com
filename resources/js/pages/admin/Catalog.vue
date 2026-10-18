@@ -277,7 +277,12 @@ const groupForm = useForm({
     productIds: [] as number[],
 });
 
-const newModifierKey = 0;
+let newModifierKey = 0;
+
+function addModifier(): void {
+    newModifierKey++;
+    groupForm.modifiers.push({ key: `new${newModifierKey}`, id: null, name: { ca: '', es: '' }, price: '' });
+}
 
 /** The options keep the order of this list (also in the TPV): drag them or use the arrows. */
 function moveModifier(index: number, by: -1 | 1): void {
@@ -688,7 +693,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Carta', href: catalogRoute() }
                             <Button type="button" variant="ghost" size="icon" @click="groupForm.modifiers.splice(index, 1)"><Trash2 class="size-4" /></Button>
                         </div>
                     </VueDraggable>
-                    <Button type="button" variant="outline" size="sm" @click="groupForm.modifiers.push({ key: `new${++newModifierKey}`, id: null, name: { ca: '', es: '' }, price: '' })">
+                    <Button type="button" variant="outline" size="sm" @click="addModifier">
                         <Plus class="size-4" /> {{ t('common.add') }}
                     </Button>
                 </div>
