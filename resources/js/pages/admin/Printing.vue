@@ -42,6 +42,7 @@ type Printer = {
     paperWidth: number;
     marginTop: number;
     marginBottom: number;
+    marginBottomUnder: number | null;
     isTicketPrinter: boolean;
     active: boolean;
     destinationIds: number[];
@@ -187,6 +188,7 @@ const printerForm = useForm({
     paperWidth: 48,
     marginTop: 0,
     marginBottom: 0,
+    marginBottomUnder: '' as number | string,
     isTicketPrinter: false,
     active: true,
     destinationIds: [] as number[],
@@ -206,6 +208,7 @@ function openPrinter(printer: Printer | null): void {
     printerForm.paperWidth = printer?.paperWidth ?? 48;
     printerForm.marginTop = printer?.marginTop ?? 0;
     printerForm.marginBottom = printer?.marginBottom ?? 0;
+    printerForm.marginBottomUnder = printer?.marginBottomUnder ?? '';
     printerForm.isTicketPrinter = printer?.isTicketPrinter ?? false;
     printerForm.active = printer?.active ?? true;
     printerForm.destinationIds = [...(printer?.destinationIds ?? [])];
@@ -213,7 +216,7 @@ function openPrinter(printer: Printer | null): void {
 }
 
 function savePrinter(): void {
-    printerForm.transform((data) => ({ ...data, ip: data.ip || null, model: data.model || null, systemName: data.systemName || data.name }));
+    printerForm.transform((data) => ({ ...data, ip: data.ip || null, model: data.model || null, systemName: data.systemName || data.name, marginBottomUnder: Number(data.marginBottomUnder) || null }));
 
     const options = { preserveScroll: true, onSuccess: () => (printerOpen.value = false) };
 
@@ -668,6 +671,15 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Impressió', href: printingRou
                     </Field>
                     <Field :label="t('admin.printing.marginBottom')" :error="printerForm.errors.marginBottom">
                         <SelectInput v-model="printerForm.marginBottom" :options="marginOptions" />
+                    </Field>
+                    <Field
+                        v-if="printerForm.marginBottom"
+                        :label="t('admin.printing.marginBottomUnder')"
+                        :error="printerForm.errors.marginBottomUnder"
+                        :help="t('admin.printing.marginBottomUnderHelp')"
+                        class="sm:col-span-2"
+                    >
+                        <Input v-model="printerForm.marginBottomUnder" type="number" min="1" inputmode="numeric" :placeholder="t('admin.printing.marginBottomUnderAlways')" />
                     </Field>
                     <p class="-mt-2 text-xs text-muted-foreground sm:col-span-2">{{ t('admin.printing.marginHelp') }}</p>
                 </div>

@@ -456,13 +456,13 @@ async function toggleSoldOut(product: Product): Promise<void> {
             </div>
 
             <div v-else class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-                <div class="grid gap-2" :class="compact ? 'grid-cols-[repeat(auto-fill,minmax(6.5rem,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]'">
+                <div class="grid gap-2" :class="compact ? 'grid-cols-[repeat(auto-fill,minmax(5.75rem,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]'">
                     <button
                         v-for="product in products"
                         :key="product.id"
                         type="button"
                         class="relative flex flex-col overflow-hidden rounded-xl text-left shadow-sm transition active:scale-95"
-                        :class="[compact ? 'h-20' : 'h-28', product.soldOut ? 'opacity-50' : '', moving?.step === 'place' && moving.kind === 'product' && moving.id === product.id ? 'ring-4 ring-violet-500' : '']"
+                        :class="[compact ? 'h-[4.25rem]' : 'h-28', product.soldOut ? 'opacity-50' : '', moving?.step === 'place' && moving.kind === 'product' && moving.id === product.id ? 'ring-4 ring-violet-500' : '']"
                         :style="{ background: tileColor(product), color: product.photoUrl ? '#ffffff' : readableText(tileColor(product)) }"
                         @pointerdown="pressStart(product)"
                         @pointerup="pressCancel"
@@ -474,7 +474,7 @@ async function toggleSoldOut(product: Product): Promise<void> {
                             <img :src="product.photoUrl" alt="" class="absolute inset-0 size-full object-cover" loading="lazy" />
                             <span class="absolute inset-0 bg-gradient-to-t from-black/85 via-black/45 to-black/10" />
                         </template>
-                        <span class="relative line-clamp-3 flex-1 p-2 leading-tight font-bold" :class="compact ? 'text-sm' : 'text-[15px]'">{{ tr(product.name) }}</span>
+                        <span class="relative line-clamp-3 flex-1 leading-tight font-bold" :class="compact ? 'p-1.5 text-[13px]' : 'p-2 text-[15px]'">{{ tr(product.name) }}</span>
                         <span class="relative flex items-end justify-between gap-1 px-2 pb-1.5">
                             <AllergenIcons :allergens="product.allergens" small />
                             <span v-if="product.price !== null" class="text-sm font-bold">{{ formatMoney(product.price) }}</span>
@@ -488,7 +488,7 @@ async function toggleSoldOut(product: Product): Promise<void> {
                         v-if="canCreate && here && !query.trim()"
                         type="button"
                         class="flex flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 text-sm font-semibold text-slate-500 transition active:scale-95"
-                        :class="compact ? 'h-20' : 'h-28'"
+                        :class="compact ? 'h-[4.25rem]' : 'h-28'"
                         @click="creatingProduct = { categoryId: here.id }"
                     >
                         <Plus class="size-6" /> {{ t('order.catalogCreate.newProduct') }}

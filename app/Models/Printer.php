@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int $paper_width characters per line
  * @property int $margin_top blank lines before every document
  * @property int $margin_bottom blank lines after every document (before the cut)
+ * @property int|null $margin_bottom_under only add the bottom margin to documents shorter than this many lines (null = always)
  * @property bool $is_ticket_printer
  * @property bool $active
  * @property Carbon|null $created_at
@@ -78,6 +79,10 @@ class Printer extends Model
         $top = min(self::MAX_MARGIN, max(0, (int) $this->margin_top));
         $bottom = min(self::MAX_MARGIN, max(0, (int) $this->margin_bottom));
 
+        if ($bottom > 0 && $this->margin_bottom_under !== null && $this->documentHeight($lines) >= $this->margin_bottom_under) {
+            $bottom = 0;
+        }
+
         if ($top === 0 && $bottom === 0) {
             return $document;
         }
@@ -99,6 +104,33 @@ class Printer extends Model
         }
 
         return ['lines' => $lines] + $document;
+    }
+
+    /**
+     * Rough length of a document in normal printed lines: long text wraps at the paper
+     * width and big text takes two lines.
+     *
+     * @param  list<array<string, mixed>>  $lines
+     */
+    public function documentHeight(array $lines): int
+    {
+        $width = max(16, (int) ($this->paper_width ?: 48));
+        $height = 0;
+
+        foreach ($lines as $line) {
+            $big = (int) ($line['size'] ?? 1) > 1;
+
+            $height += match ($line['type'] ?? 'text') {
+                'feed' => max(1, (int) ($line['lines'] ?? 1)),
+                'cut' => 0,
+                'qr' => 10,
+                'image' => 6,
+                'row', 'divider' => $big ? 2 : 1,
+                default => (int) max(1, ceil(mb_strlen((string) ($line['text'] ?? '')) / ($big ? intdiv($width, 2) : $width))) * ($big ? 2 : 1),
+            };
+        }
+
+        return $height;
     }
 
     /**

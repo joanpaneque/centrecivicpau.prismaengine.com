@@ -50,6 +50,7 @@ class PrintingController extends Controller
                 'paperWidth' => $p->paper_width,
                 'marginTop' => $p->margin_top,
                 'marginBottom' => $p->margin_bottom,
+                'marginBottomUnder' => $p->margin_bottom_under,
                 'isTicketPrinter' => $p->is_ticket_printer,
                 'active' => $p->active,
                 'destinationIds' => $p->destinations->pluck('id'),
@@ -167,6 +168,7 @@ class PrintingController extends Controller
                 'active' => ['boolean'],
                 'marginTop' => ['nullable', 'integer', 'between:0,'.Printer::MAX_MARGIN],
                 'marginBottom' => ['nullable', 'integer', 'between:0,'.Printer::MAX_MARGIN],
+                'marginBottomUnder' => ['nullable', 'integer', 'between:1,500'],
                 'destinationIds' => ['array'],
                 'destinationIds.*' => ['integer', 'exists:production_destinations,id'],
             ]);
@@ -175,6 +177,7 @@ class PrintingController extends Controller
                 'active' => $data['active'] ?? true,
                 'margin_top' => (int) ($data['marginTop'] ?? 0),
                 'margin_bottom' => (int) ($data['marginBottom'] ?? 0),
+                'margin_bottom_under' => isset($data['marginBottomUnder']) ? (int) $data['marginBottomUnder'] : null,
             ]);
             $printer->destinations()->sync(array_values(array_map('intval', $data['destinationIds'] ?? [])));
             $this->singleTicketPrinter($printer);
@@ -369,6 +372,7 @@ class PrintingController extends Controller
             'paperWidth' => ['required', 'integer', Rule::in([32, 42, 48])],
             'marginTop' => ['nullable', 'integer', 'between:0,'.Printer::MAX_MARGIN],
             'marginBottom' => ['nullable', 'integer', 'between:0,'.Printer::MAX_MARGIN],
+            'marginBottomUnder' => ['nullable', 'integer', 'between:1,500'],
             'isTicketPrinter' => ['boolean'],
             'active' => ['boolean'],
             'destinationIds' => ['array'],
@@ -391,6 +395,7 @@ class PrintingController extends Controller
                 'paper_width' => (int) $data['paperWidth'],
                 'margin_top' => (int) ($data['marginTop'] ?? 0),
                 'margin_bottom' => (int) ($data['marginBottom'] ?? 0),
+                'margin_bottom_under' => isset($data['marginBottomUnder']) ? (int) $data['marginBottomUnder'] : null,
                 'is_ticket_printer' => $data['isTicketPrinter'] ?? false,
                 'active' => $data['active'] ?? true,
             ],
