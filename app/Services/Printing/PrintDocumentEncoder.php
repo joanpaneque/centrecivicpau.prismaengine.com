@@ -2,6 +2,7 @@
 
 namespace App\Services\Printing;
 
+use App\Models\Printer;
 use BaconQrCode\Common\ErrorCorrectionLevel;
 use BaconQrCode\Encoder\Encoder;
 
@@ -63,7 +64,7 @@ class PrintDocumentEncoder
             $out .= match ($type) {
                 'divider' => $this->text(str_repeat(mb_substr((string) ($line['char'] ?? '-'), 0, 1) ?: '-', $width), $codepage)."\n",
                 'row' => $this->text($this->row((string) ($line['left'] ?? ''), (string) ($line['right'] ?? ''), $columns), $codepage)."\n",
-                'feed' => $esc.'d'.chr(max(1, min(10, (int) ($line['lines'] ?? 1)))),
+                'feed' => $esc.'d'.chr(max(1, min(Printer::MAX_MARGIN, (int) ($line['lines'] ?? 1)))),
                 'cut' => $gs.'V'."\x42\x03",
                 'qr' => $this->qr((string) ($line['data'] ?? '')).(isset($line['caption']) ? $this->text((string) $line['caption'], $codepage)."\n" : ''),
                 'image' => $this->raster($width),

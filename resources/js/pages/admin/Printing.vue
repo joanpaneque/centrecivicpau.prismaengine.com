@@ -70,7 +70,7 @@ const { t, tr } = useI18n();
 const modeOptions = computed(() => (['printer', 'screen', 'both'] as Mode[]).map((value) => ({ value, label: t(`admin.printing.modes.${value}`) })));
 const typeOptions = computed(() => props.types.map((value) => ({ value, label: t(`admin.printing.types.${value}`) })));
 const marginOptions = computed(() =>
-    Array.from({ length: 11 }, (_, value) => ({ value, label: value === 0 ? t('admin.printing.marginNone') : t('admin.printing.marginLines', { count: value }) })),
+    Array.from({ length: 31 }, (_, value) => ({ value, label: value === 0 ? t('admin.printing.marginNone') : t('admin.printing.marginLines', { count: value }) })),
 );
 const widthOptions = [32, 42, 48].map((value) => ({ value, label: `${value} (${value === 32 ? '58mm' : '80mm'})` }));
 const codepageOptions = computed(() => (['cp858', 'cp1252', 'ascii'] as const).map((value) => ({ value, label: t(`admin.printing.codepages.${value}`) })));

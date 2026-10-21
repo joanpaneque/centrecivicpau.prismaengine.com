@@ -2,11 +2,15 @@ import { useMediaQuery } from '@vueuse/core';
 import { computed } from 'vue';
 import { state } from './store';
 
-/** Big enough screen held sideways: a waiter tablet, not a phone (even a phone turned sideways). */
-const wideScreen = useMediaQuery('(min-width: 768px) and (min-height: 500px)');
+/**
+ * A tablet, not a phone: the short side of the physical screen (phones stay under ~430px
+ * even sideways). The window height is not used, the browser bars eat too much of it.
+ */
+const tabletScreen = typeof window !== 'undefined' && Math.min(window.screen.width, window.screen.height) >= 500;
+const wideWindow = useMediaQuery('(min-width: 640px)');
 
 /**
  * Compact layout for devices registered as waiter tablets: smaller top bar, floor plan zoomed
  * to its tables and the order screen as a side panel next to the products.
  */
-export const tabletLayout = computed(() => state.device?.type === 'tablet' && wideScreen.value);
+export const tabletLayout = computed(() => state.device?.type === 'tablet' && tabletScreen && wideWindow.value);

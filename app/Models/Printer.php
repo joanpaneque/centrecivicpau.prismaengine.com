@@ -36,7 +36,7 @@ class Printer extends Model
 
     public const CODEPAGES = ['cp858', 'cp1252', 'ascii'];
 
-    public const MAX_MARGIN = 10;
+    public const MAX_MARGIN = 30;
 
     protected $guarded = ['id'];
 
