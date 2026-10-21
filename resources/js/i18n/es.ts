@@ -333,7 +333,6 @@ const es: Messages = {
         pending: 'Pendiente de cobro',
         paid: 'Cobrado',
         held: 'Retenido',
-        unsentWarning: 'Hay productos sin enviar. ¿Quieres salir igualmente?',
         discardDraft: 'Descartar lo no enviado',
         noDestination: 'Sin destino',
         mergedInfo: 'Esta mesa ya tenía una cuenta abierta: se han juntado.',

@@ -353,10 +353,7 @@ async function cancelEmpty(): Promise<void> {
 }
 
 function leave(): void {
-    if (draft.value.lines.length && !confirm(t('order.unsentWarning'))) {
-        return;
-    }
-
+    // Unsent lines stay saved on this table's draft, so there is nothing to confirm.
     go(state.device?.type === 'cashier' && !tableId.value ? '/caixa' : '/sala');
 }
 

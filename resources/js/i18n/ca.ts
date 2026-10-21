@@ -331,7 +331,6 @@ const ca = {
         pending: 'Pendent de cobrar',
         paid: 'Cobrat',
         held: 'Retingut',
-        unsentWarning: 'Hi ha productes sense enviar. Vols sortir igualment?',
         discardDraft: 'Descarta el que no s\'ha enviat',
         noDestination: 'Sense destí',
         mergedInfo: 'Aquesta taula ja tenia un compte obert: s\'han ajuntat.',
