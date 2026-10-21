@@ -88,14 +88,14 @@ function lineDescription(line: OrderLine, children: OrderLine[]): PrintLine[] {
     const out: PrintLine[] = [{ type: 'text', text: `${line.quantity} x ${tr(line.name)}`, bold: true, size: 2 }];
 
     for (const m of line.modifiers) {
-        out.push({ type: 'text', text: `   + ${tr(m.name)}` });
+        out.push({ type: 'text', text: `  + ${tr(m.name)}`, bold: true, size: 2 });
     }
 
     for (const child of children) {
-        out.push({ type: 'text', text: `   > ${child.quantity > 1 ? `${child.quantity} x ` : ''}${tr(child.name)}`, bold: true });
+        out.push({ type: 'text', text: `  > ${child.quantity > 1 ? `${child.quantity} x ` : ''}${tr(child.name)}`, bold: true, size: 2 });
 
         for (const m of child.modifiers) {
-            out.push({ type: 'text', text: `      + ${tr(m.name)}` });
+            out.push({ type: 'text', text: `    + ${tr(m.name)}`, bold: true, size: 2 });
         }
 
         if (child.note) {
