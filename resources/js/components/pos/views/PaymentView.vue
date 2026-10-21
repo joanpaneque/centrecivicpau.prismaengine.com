@@ -333,6 +333,8 @@ async function printProforma(): Promise<void> {
         if ((await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value, pending.value))) === 'printed') {
             toast.success(t('cashier.sentTo', { name: directPrinter.value?.name ?? '' }));
         }
+
+        go('/sala');
     } catch {
         toast.error(t('common.error'));
     } finally {
@@ -367,7 +369,7 @@ function finish(): void {
     result.value = null;
 
     if (closed || !order.value) {
-        go('/caixa');
+        go('/sala');
     }
 }
 </script>
