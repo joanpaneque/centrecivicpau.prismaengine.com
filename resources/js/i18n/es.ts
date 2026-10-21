@@ -237,6 +237,13 @@ const es: Messages = {
         map: 'Plano',
     },
     order: {
+        keypad: {
+            toggle: 'Teclado numérico',
+            changeQuantity: 'Cambiar cantidad',
+            modify: 'Modificar',
+            options: 'Opciones',
+            current: 'Ahora: {count}',
+        },
         catalogCreate: {
             newFamily: 'Nueva familia',
             newSubfamily: 'Nueva subfamilia',

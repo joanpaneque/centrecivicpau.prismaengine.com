@@ -50,6 +50,8 @@ const props = defineProps<{
     statuses: Record<number, Status>;
     editing: boolean;
     now: number;
+    /** Zoom in on the tables instead of showing the whole canvas (waiter tablets). */
+    fitContent?: boolean;
 }>();
 
 const emit = defineEmits<{ open: [table: DiningTable]; editTable: [table: DiningTable] }>();
@@ -67,6 +69,7 @@ const HANDLES: Handle[] = ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
 const container = ref<HTMLElement | null>(null);
 const canvas = ref<HTMLElement | null>(null);
 const scale = ref(1);
+const area = ref({ width: 0, height: 0 });
 const selection = ref<Selection | null>(null);
 const busy = ref(false);
 
@@ -80,6 +83,7 @@ function resize(): void {
     }
 
     const { clientWidth, clientHeight } = container.value;
+    area.value = { width: clientWidth, height: clientHeight };
     scale.value = Math.max(0.2, Math.min(clientWidth / CANVAS_W, clientHeight / CANVAS_H, 1.6));
 }
 
@@ -131,6 +135,48 @@ function bounds(g: Geometry): { width: number; height: number } {
 
     return { width: g.width * c + g.height * s, height: g.width * s + g.height * c };
 }
+
+/** What the zone has drawn, with room for the badges, when zooming in on it. */
+const contentBox = computed(() => {
+    const items: Geometry[] = [...props.tables, ...props.elements];
+
+    if (!props.fitContent || props.editing || !items.length) {
+        return null;
+    }
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+
+    for (const item of items) {
+        const box = bounds(item);
+        const cx = item.x + item.width / 2;
+        const cy = item.y + item.height / 2;
+        minX = Math.min(minX, cx - box.width / 2);
+        minY = Math.min(minY, cy - box.height / 2);
+        maxX = Math.max(maxX, cx + box.width / 2);
+        maxY = Math.max(maxY, cy + box.height / 2);
+    }
+
+    const pad = 24;
+
+    return { x: minX - pad, y: minY - pad, width: maxX - minX + pad * 2, height: maxY - minY + pad * 2 };
+});
+
+const canvasTransform = computed(() => {
+    const box = contentBox.value;
+
+    if (!box || !area.value.width || !area.value.height) {
+        return { left: '50%', transformOrigin: 'top center', transform: `translateX(-50%) scale(${scale.value})` };
+    }
+
+    const zoom = Math.min(area.value.width / box.width, area.value.height / box.height, 3);
+    const x = (area.value.width - box.width * zoom) / 2 - box.x * zoom;
+    const y = -box.y * zoom;
+
+    return { left: '0px', transformOrigin: '0 0', transform: `translate(${x}px, ${y}px) scale(${zoom})` };
+});
 
 /** Keep the rotated bounding box inside the canvas. */
 function clampPosition(g: Geometry, x: number, y: number): { x: number; y: number } {
@@ -782,9 +828,9 @@ defineExpose({ addTable, addElement });
         <div ref="container" class="relative min-h-0 flex-1 overflow-hidden" :class="editing ? 'touch-none' : ''">
             <div
                 ref="canvas"
-                class="absolute top-0 left-1/2 origin-top rounded-xl bg-slate-50"
+                class="absolute top-0 rounded-xl bg-slate-50"
                 :class="editing ? 'bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:20px_20px] ring-2 ring-amber-300' : ''"
-                :style="{ width: `${CANVAS_W}px`, height: `${CANVAS_H}px`, transform: `translateX(-50%) scale(${scale})` }"
+                :style="{ width: `${CANVAS_W}px`, height: `${CANVAS_H}px`, ...canvasTransform }"
                 @pointerdown="backgroundDown"
             >
                 <!-- Decorative elements (behind the tables) -->

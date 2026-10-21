@@ -6,6 +6,7 @@ import SyncIndicator from '@/components/pos/SyncIndicator.vue';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { locale, setLocale, t } from '@/i18n';
 import { xsrfToken } from '@/lib/http';
+import { tabletLayout } from '@/pos/layout';
 import { soundEnabled } from '@/pos/notifications';
 import { go, route } from '@/pos/router';
 import { operator, state } from '@/pos/store';
@@ -29,14 +30,19 @@ const tabs = computed(() => {
         items.push({ name: 'qr', label: t('clock.qrTab'), icon: QrCode });
     }
 
-    items.push({ name: 'cuina', label: t('nav.kitchen'), icon: ChefHat });
+    // The waiter tablet only takes orders: no kitchen screen, clocking in or assistant there.
+    if (!tabletLayout.value) {
+        items.push({ name: 'cuina', label: t('nav.kitchen'), icon: ChefHat });
+    }
 
     if (!kitchen) {
         items.push({ name: 'reserves', label: t('nav.reservations'), icon: CalendarClock });
     }
 
-    items.push({ name: 'fitxar', label: t('nav.clock'), icon: Clock });
-    items.push({ name: 'assistent', label: t('nav.assistant'), icon: Sparkles });
+    if (!tabletLayout.value) {
+        items.push({ name: 'fitxar', label: t('nav.clock'), icon: Clock });
+        items.push({ name: 'assistent', label: t('nav.assistant'), icon: Sparkles });
+    }
 
     return items;
 });
@@ -58,19 +64,19 @@ function toggleLocale(): void {
 </script>
 
 <template>
-    <header class="flex h-14 shrink-0 items-center gap-2 bg-[#00056a] px-2 text-white shadow-md sm:px-3">
-        <img src="/images/logo-centre-civic-icon.png" alt="" class="hidden size-9 rounded-md bg-white p-0.5 sm:block" />
+    <header class="flex shrink-0 items-center gap-2 bg-[#00056a] px-2 text-white shadow-md sm:px-3" :class="tabletLayout ? 'h-10' : 'h-14'">
+        <img src="/images/logo-centre-civic-icon.png" alt="" class="hidden rounded-md bg-white p-0.5 sm:block" :class="tabletLayout ? 'size-7' : 'size-9'" />
 
         <nav class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             <button
                 v-for="tab in tabs"
                 :key="tab.name"
                 type="button"
-                class="flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition"
-                :class="active === tab.name ? 'bg-white text-[#00056a]' : 'text-white/85 hover:bg-white/10'"
+                class="flex shrink-0 items-center rounded-lg font-medium transition"
+                :class="[active === tab.name ? 'bg-white text-[#00056a]' : 'text-white/85 hover:bg-white/10', tabletLayout ? 'h-8 gap-1.5 px-2.5 text-xs' : 'h-10 gap-2 px-3 text-sm']"
                 @click="go(`/${tab.name}`)"
             >
-                <component :is="tab.icon" class="size-5" />
+                <component :is="tab.icon" :class="tabletLayout ? 'size-4' : 'size-5'" />
                 <span class="hidden md:inline">{{ tab.label }}</span>
             </button>
         </nav>
@@ -79,11 +85,12 @@ function toggleLocale(): void {
 
         <button
             type="button"
-            class="flex h-10 items-center gap-2 rounded-lg bg-white/10 px-2 text-sm font-medium hover:bg-white/20 sm:px-3"
+            class="flex items-center gap-2 rounded-lg bg-white/10 px-2 text-sm font-medium hover:bg-white/20 sm:px-3"
+            :class="tabletLayout ? 'h-8' : 'h-10'"
             :title="t('operator.switch')"
             @click="switching = true"
         >
-            <span class="flex size-7 items-center justify-center rounded-full text-xs font-bold" :style="{ background: current?.color || '#ffffff', color: current?.color ? '#fff' : '#00056a' }">
+            <span class="flex items-center justify-center rounded-full text-xs font-bold" :class="tabletLayout ? 'size-6' : 'size-7'" :style="{ background: current?.color || '#ffffff', color: current?.color ? '#fff' : '#00056a' }">
                 {{ current?.name?.slice(0, 2).toUpperCase() }}
             </span>
             <span class="hidden max-w-28 truncate lg:inline">{{ current?.name }}</span>
@@ -91,7 +98,7 @@ function toggleLocale(): void {
 
         <DropdownMenu>
             <DropdownMenuTrigger as-child>
-                <button type="button" class="flex size-10 items-center justify-center rounded-lg hover:bg-white/10">
+                <button type="button" class="flex items-center justify-center rounded-lg hover:bg-white/10" :class="tabletLayout ? 'size-8' : 'size-10'">
                     <Menu class="size-5" />
                 </button>
             </DropdownMenuTrigger>

@@ -7,6 +7,7 @@ import TableEditor from '@/components/pos/TableEditor.vue';
 import { Button } from '@/components/ui/button';
 import { t, tr } from '@/i18n';
 import { api, HttpError } from '@/lib/http';
+import { tabletLayout } from '@/pos/layout';
 import { formatMoney } from '@/pos/money';
 import { orderTotal, tableStatus } from '@/pos/orders';
 import { go } from '@/pos/router';
@@ -129,7 +130,7 @@ function toggleEdit(): void {
 
 <template>
     <div class="flex h-full flex-col">
-        <div class="flex shrink-0 items-center gap-2 overflow-x-auto border-b bg-white px-2 py-2 dark:bg-slate-900">
+        <div class="flex shrink-0 items-center gap-2 overflow-x-auto border-b bg-white px-2 dark:bg-slate-900" :class="tabletLayout ? 'py-1 [&_button]:h-9' : 'py-2'">
             <button
                 v-for="z in zones"
                 :key="z.id"
@@ -181,6 +182,7 @@ function toggleEdit(): void {
             :statuses="statuses"
             :editing="editing"
             :now="now"
+            :fit-content="tabletLayout"
             @open="open"
             @edit-table="(table) => (editingTable = table)"
         >

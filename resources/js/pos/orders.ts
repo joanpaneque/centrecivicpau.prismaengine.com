@@ -158,7 +158,8 @@ export function draftFromMenu(menu: SetMenu, choices: { name: T9n; productId: nu
     };
 }
 
-export function addToDraft(draft: Draft, line: DraftLine): void {
+/** Adds the line (or more units of an identical one) and returns the draft line that holds it. */
+export function addToDraft(draft: Draft, line: DraftLine): DraftLine {
     const same = draft.lines.find((l) => {
         if (l.children.length || line.children.length || l.note !== line.note || l.course !== line.course) {
             return false;
@@ -177,9 +178,13 @@ export function addToDraft(draft: Draft, line: DraftLine): void {
 
     if (same) {
         same.quantity += line.quantity;
-    } else {
-        draft.lines.push(line);
+
+        return same;
     }
+
+    draft.lines.push(line);
+
+    return draft.lines[draft.lines.length - 1];
 }
 
 export function topLines(order: Order | null): OrderLine[] {

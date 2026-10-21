@@ -17,11 +17,16 @@ import { sorted, state, upsert } from '@/pos/store';
 import { enqueue } from '@/pos/sync';
 import type { Category, Product, SetMenu } from '@/pos/types';
 
+/** large: bigger family tiles, for the waiter tablet where the picker fills most of the screen. */
+const props = defineProps<{ large?: boolean }>();
 const emit = defineEmits<{ pick: [product: Product]; menu: [menu: SetMenu]; invent: [product: InventedProduct] }>();
 
 const FREQUENT = 'frequent';
 /** The set menus available today, shown as one more family. */
 const MENUS = 'menus';
+
+const familyTile = computed(() => (props.large ? 'h-32' : 'h-24'));
+const familyTitle = computed(() => (props.large ? 'text-2xl' : 'text-lg'));
 
 const query = ref('');
 /** null: the families grid; 'frequent', 'menus' or a root category id: what is inside. */
@@ -322,38 +327,40 @@ async function toggleSoldOut(product: Product): Promise<void> {
 
         <!-- Families first -->
         <div v-if="showFamilies" class="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2">
+            <div class="grid gap-2" :class="large ? 'grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]' : 'grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]'">
                 <button
                     v-if="frequentProducts.length"
                     type="button"
-                    class="flex h-24 items-center gap-3 rounded-2xl bg-[#00056a] p-3 text-left text-white shadow-sm transition active:scale-95"
+                    class="flex items-center gap-3 rounded-2xl bg-[#00056a] p-3 text-left text-white shadow-sm transition active:scale-95"
+                    :class="familyTile"
                     @click="openFamily(FREQUENT)"
                 >
                     <Star class="size-10 shrink-0" />
-                    <span class="line-clamp-2 text-lg leading-tight font-bold">{{ t('order.frequent') }}</span>
+                    <span class="line-clamp-2 leading-tight font-bold" :class="familyTitle">{{ t('order.frequent') }}</span>
                 </button>
                 <button
                     v-if="menusToday.length"
                     type="button"
-                    class="flex h-24 items-center gap-3 rounded-2xl bg-emerald-600 p-3 text-left text-white shadow-sm transition active:scale-95"
+                    class="flex items-center gap-3 rounded-2xl bg-emerald-600 p-3 text-left text-white shadow-sm transition active:scale-95"
+                    :class="familyTile"
                     @click="openFamily(MENUS)"
                 >
                     <UtensilsCrossed class="size-10 shrink-0" />
                     <span class="min-w-0">
-                        <span class="line-clamp-2 text-lg leading-tight font-bold">{{ t('order.menusFamily') }}</span>
+                        <span class="line-clamp-2 leading-tight font-bold" :class="familyTitle">{{ t('order.menusFamily') }}</span>
                         <span class="text-xs opacity-90">{{ t('order.menusCount', { count: menusToday.length }) }}</span>
                     </span>
                 </button>
                 <div v-for="category in roots" :key="category.id" class="relative">
                     <button
                         type="button"
-                        class="flex h-24 w-full items-center gap-3 rounded-2xl p-3 text-left shadow-sm transition active:scale-95"
-                        :class="moving?.step === 'place' && moving.kind === 'family' && moving.id === category.id ? 'ring-4 ring-violet-500' : ''"
+                        class="flex w-full items-center gap-3 rounded-2xl p-3 text-left shadow-sm transition active:scale-95"
+                        :class="[familyTile, moving?.step === 'place' && moving.kind === 'family' && moving.id === category.id ? 'ring-4 ring-violet-500' : '']"
                         :style="{ background: familyColor(category), color: readableText(familyColor(category)) }"
                         @click="openFamily(category.id)"
                     >
                         <img v-if="category.photoUrl" :src="category.photoUrl" alt="" class="size-16 shrink-0 rounded-xl bg-white/20 object-cover" loading="lazy" />
-                        <span class="line-clamp-3 text-lg leading-tight font-bold" :class="moving?.step === 'pick' ? 'pr-14' : ''">{{ tr(category.name) }}</span>
+                        <span class="line-clamp-3 leading-tight font-bold" :class="[familyTitle, moving?.step === 'pick' ? 'pr-14' : '']">{{ tr(category.name) }}</span>
                     </button>
                     <button
                         v-if="moving?.step === 'pick'"
@@ -367,7 +374,8 @@ async function toggleSoldOut(product: Product): Promise<void> {
                 <button
                     v-if="canCreate"
                     type="button"
-                    class="flex h-24 items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-base font-semibold text-slate-500 transition active:scale-95"
+                    class="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 text-base font-semibold text-slate-500 transition active:scale-95"
+                    :class="familyTile"
                     @click="creatingFamily = { parentId: null }"
                 >
                     <Plus class="size-6" /> {{ t('order.catalogCreate.newFamily') }}

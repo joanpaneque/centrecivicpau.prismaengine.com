@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRightLeft, BellRing, Ban, ChefHat, Combine, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Settings, Timer, Trash2, Undo2, Users } from '@lucide/vue';
+import { ArrowLeft, ArrowRightLeft, BellRing, Ban, Calculator, ChefHat, Combine, Delete, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Settings, Timer, Trash2, Undo2, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import LineActions from '@/components/pos/LineActions.vue';
@@ -14,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { t, tr } from '@/i18n';
 import { printOrOpen } from '@/pos/cashier';
 import { productModifierGroups } from '@/pos/catalog';
+import { tabletLayout } from '@/pos/layout';
 import { formatMoney } from '@/pos/money';
 import {
     addToDraft,
@@ -135,15 +136,78 @@ function pickProduct(product: Product): void {
         return;
     }
 
-    addToDraft(draft.value, draftFromProduct(product, [], '', course.value));
+    add(draftFromProduct(product, [], '', course.value));
 }
 
 function addFromWizard(product: Product, data: { modifiers: LineModifier[]; note: string; course: number | null; quantity: number }): void {
-    addToDraft(draft.value, draftFromProduct(product, data.modifiers, data.note, data.course, data.quantity));
+    add(draftFromProduct(product, data.modifiers, data.note, data.course, data.quantity));
 }
 
 function inventProduct(product: InventedProduct): void {
-    addToDraft(draft.value, draftFromCustom(product.name, product.unitPrice, product.destinationId, course.value));
+    add(draftFromCustom(product.name, product.unitPrice, product.destinationId, course.value));
+}
+
+// ------------------------------------------------------------ Numeric keypad (tablet)
+// Opens for the product just added («Canvia la quantitat») or for the unsent line tapped
+// on the list («Modifica»), to type its quantity instead of tapping + many times.
+
+/** The draft line added last: the keypad button reopens the keypad for it. */
+const lastAddedKey = ref<string | null>(null);
+const keypad = ref<{ key: string; mode: 'last' | 'edit' } | null>(null);
+const keypadValue = ref('');
+const keypadLine = computed(() => (keypad.value ? (draft.value.lines.find((l) => l.key === keypad.value!.key) ?? null) : null));
+const lastAddedLine = computed(() => (lastAddedKey.value ? (draft.value.lines.find((l) => l.key === lastAddedKey.value) ?? null) : null));
+
+function add(line: DraftLine): void {
+    const added = addToDraft(draft.value, line);
+    lastAddedKey.value = added.key;
+
+    if (tabletLayout.value) {
+        openKeypad(added, 'last');
+    }
+}
+
+function openKeypad(line: DraftLine, mode: 'last' | 'edit'): void {
+    keypad.value = { key: line.key, mode };
+    keypadValue.value = '';
+}
+
+function toggleKeypad(): void {
+    if (keypadLine.value) {
+        keypad.value = null;
+    } else if (lastAddedLine.value) {
+        openKeypad(lastAddedLine.value, 'last');
+    }
+}
+
+function keypadPress(key: string): void {
+    if (key === 'C') {
+        keypadValue.value = '';
+    } else if (key === 'back') {
+        keypadValue.value = keypadValue.value.slice(0, -1);
+    } else if (keypadValue.value.length < 3) {
+        keypadValue.value = (keypadValue.value + key).replace(/^0+/, '');
+    }
+}
+
+function applyKeypad(): void {
+    const quantity = Number(keypadValue.value);
+
+    if (!keypadLine.value || !quantity) {
+        return;
+    }
+
+    keypadLine.value.quantity = quantity;
+    keypad.value = null;
+    keypadValue.value = '';
+}
+
+function tapDraftLine(line: DraftLine): void {
+    if (tabletLayout.value) {
+        openKeypad(line, 'edit');
+    } else {
+        editDraftLine(line);
+    }
 }
 
 async function savePrice(edit: LineEdit): Promise<void> {
@@ -178,7 +242,7 @@ function saveModifiers(data: { modifiers: DraftLine['modifiers']; note: string; 
     if (target.line) {
         Object.assign(target.line, data);
     } else if (target.product) {
-        addToDraft(draft.value, draftFromProduct(target.product, data.modifiers, data.note, data.course, data.quantity));
+        add(draftFromProduct(target.product, data.modifiers, data.note, data.course, data.quantity));
     }
 }
 
@@ -379,10 +443,25 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
 </script>
 
 <template>
-    <div class="flex h-full min-h-0 flex-col lg:flex-row">
-        <section class="flex min-h-0 flex-col border-r bg-white lg:w-[26rem] xl:w-[30rem]" :class="showPicker ? 'max-lg:h-[45%]' : 'flex-1'">
-            <header class="flex shrink-0 items-center gap-2 border-b px-2 py-2">
+    <div class="flex h-full min-h-0" :class="tabletLayout ? 'flex-row' : 'flex-col lg:flex-row'">
+        <section
+            class="flex min-h-0 flex-col border-r bg-white"
+            :class="tabletLayout ? 'w-[30%] min-w-[17rem] shrink-0' : ['lg:w-[26rem] xl:w-[30rem]', showPicker ? 'max-lg:h-[45%]' : 'flex-1']"
+        >
+            <header class="flex shrink-0 items-center gap-2 border-b px-2" :class="tabletLayout ? 'py-1 [&_button]:h-9 [&_button.size-11]:w-9' : 'py-2'">
                 <Button variant="ghost" size="icon" class="size-11" @click="leave"><ArrowLeft class="size-5" /></Button>
+                <Button
+                    v-if="tabletLayout"
+                    variant="outline"
+                    size="icon"
+                    class="size-11"
+                    :class="keypadLine ? 'border-[#00056a] bg-[#00056a] text-white hover:bg-[#00056a]/90 hover:text-white' : ''"
+                    :disabled="!keypadLine && !lastAddedLine"
+                    :title="t('order.keypad.toggle')"
+                    @click="toggleKeypad"
+                >
+                    <Calculator class="size-5" />
+                </Button>
                 <div class="min-w-0 flex-1">
                     <h2 class="truncate text-lg font-bold text-[#00056a]">{{ title }}</h2>
                     <p class="flex items-center gap-2 text-xs text-slate-500">
@@ -391,13 +470,13 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <span v-if="surchargeRate">{{ t('order.surchargeInfo', { percent: surchargeRate }) }}</span>
                     </p>
                 </div>
-                <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="h-11 gap-1 px-3" @click="moving = true">
+                <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="h-11 gap-1 px-3" :title="t('order.moveTable')" @click="moving = true">
                     <ArrowRightLeft class="size-4" />
-                    <span class="max-sm:hidden">{{ t('order.moveTable') }}</span>
+                    <span class="max-sm:hidden" :class="tabletLayout ? 'hidden' : ''">{{ t('order.moveTable') }}</span>
                 </Button>
-                <Button v-if="tableId && order" variant="outline" class="h-11 gap-1 px-3" @click="merging = true">
+                <Button v-if="tableId && order" variant="outline" class="h-11 gap-1 px-3" :title="t('order.merge')" @click="merging = true">
                     <Combine class="size-4" />
-                    <span class="max-sm:hidden">{{ t('order.merge') }}</span>
+                    <span class="max-sm:hidden" :class="tabletLayout ? 'hidden' : ''">{{ t('order.merge') }}</span>
                 </Button>
                 <Button variant="outline" class="h-11 gap-1" @click="setGuests">
                     <Users class="size-4" />
@@ -417,7 +496,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 </DropdownMenu>
             </header>
 
-            <div class="flex shrink-0 gap-1 border-b px-2 py-1.5">
+            <div class="flex shrink-0 gap-1 border-b px-2" :class="tabletLayout ? 'py-1 [&_button]:h-7' : 'py-1.5'">
                 <span class="self-center pr-1 text-xs font-semibold text-slate-500">{{ t('order.course') }}</span>
                 <button
                     v-for="c in [null, 1, 2, 3]"
@@ -480,13 +559,13 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 <div v-if="draft.lines.length" class="border-t-4 border-amber-300 bg-amber-50/60">
                     <p class="px-3 pt-2 text-xs font-bold tracking-wide text-amber-800 uppercase">{{ t('order.draft') }}</p>
                     <ul class="divide-y divide-amber-200/60">
-                        <li v-for="line in draft.lines" :key="line.key" class="flex items-center gap-2 px-2 py-2">
+                        <li v-for="line in draft.lines" :key="line.key" class="flex items-center gap-2 px-2 py-2" :class="keypadLine?.key === line.key ? 'bg-[#00056a]/10 ring-2 ring-[#00056a] ring-inset' : ''">
                             <div class="flex shrink-0 items-center gap-1">
                                 <button type="button" class="flex size-9 items-center justify-center rounded-lg bg-white shadow-sm" @click="changeQty(line, -1)"><Minus class="size-4" /></button>
                                 <span class="w-6 text-center font-bold">{{ line.quantity }}</span>
                                 <button type="button" class="flex size-9 items-center justify-center rounded-lg bg-white shadow-sm" @click="changeQty(line, 1)"><Plus class="size-4" /></button>
                             </div>
-                            <button type="button" class="min-w-0 flex-1 text-left" @click="editDraftLine(line)">
+                            <button type="button" class="min-w-0 flex-1 text-left" @click="tapDraftLine(line)">
                                 <p class="font-medium">
                                     {{ tr(line.name) }}
                                     <span v-if="line.course" class="ml-1 rounded bg-white px-1 text-[10px] font-semibold text-slate-600">{{ t(`order.courses.${line.course}`) }}</span>
@@ -503,6 +582,35 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         </li>
                     </ul>
                 </div>
+            </div>
+
+            <div v-if="tabletLayout && keypadLine" class="shrink-0 border-t-4 border-[#00056a] bg-slate-50 p-2">
+                <div class="mb-2 flex items-center gap-2">
+                    <div class="min-w-0 flex-1">
+                        <p class="truncate text-sm font-bold">{{ tr(keypadLine.name) }}</p>
+                        <p class="text-xs text-slate-500">{{ t('order.keypad.current', { count: keypadLine.quantity }) }}</p>
+                    </div>
+                    <span class="flex h-10 min-w-16 items-center justify-end rounded-lg border-2 border-[#00056a] bg-white px-2 text-2xl font-bold text-[#00056a]">{{ keypadValue || '–' }}</span>
+                    <button type="button" class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-600 shadow-sm" :title="t('order.keypad.options')" @click="editDraftLine(keypadLine)">
+                        <Settings class="size-5" />
+                    </button>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button
+                        v-for="key in ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', 'back']"
+                        :key="key"
+                        type="button"
+                        class="flex h-11 items-center justify-center rounded-lg text-xl font-bold shadow-sm active:scale-95"
+                        :class="key === 'C' || key === 'back' ? 'bg-slate-200 text-slate-700' : 'bg-white text-slate-900'"
+                        @click="keypadPress(key)"
+                    >
+                        <Delete v-if="key === 'back'" class="size-5" />
+                        <template v-else>{{ key }}</template>
+                    </button>
+                </div>
+                <Button class="mt-2 h-12 w-full bg-[#00056a] text-base" :disabled="!Number(keypadValue)" @click="applyKeypad">
+                    {{ keypad?.mode === 'edit' ? t('order.keypad.modify') : t('order.keypad.changeQuantity') }}
+                </Button>
             </div>
 
             <footer class="shrink-0 border-t bg-slate-50 p-2">
@@ -552,14 +660,14 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         {{ t('order.charge') }}
                     </Button>
                 </div>
-                <button type="button" class="mt-2 w-full text-center text-xs text-slate-500 lg:hidden" @click="showPicker = !showPicker">
+                <button v-if="!tabletLayout" type="button" class="mt-2 w-full text-center text-xs text-slate-500 lg:hidden" @click="showPicker = !showPicker">
                     {{ showPicker ? '▼' : '▲' }}
                 </button>
             </footer>
         </section>
 
-        <section v-show="showPicker" class="min-h-0 flex-1 bg-slate-100">
-            <ProductPicker @pick="pickProduct" @menu="(menu) => (menuWizard = menu)" @invent="inventProduct" />
+        <section v-show="showPicker || tabletLayout" class="min-h-0 min-w-0 flex-1 bg-slate-100">
+            <ProductPicker :large="tabletLayout" @pick="pickProduct" @menu="(menu) => (menuWizard = menu)" @invent="inventProduct" />
         </section>
 
         <ModifierDialog
@@ -572,7 +680,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             @close="editing = null"
         />
         <ProductWizard v-if="wizard" :product="wizard" :course="course" @add="(data) => addFromWizard(wizard!, data)" @close="wizard = null" />
-        <SetMenuWizard v-if="menuWizard" :initial="menuWizard === true ? null : menuWizard" @add="(line) => addToDraft(draft, line)" @close="menuWizard = null" />
+        <SetMenuWizard v-if="menuWizard" :initial="menuWizard === true ? null : menuWizard" @add="add" @close="menuWizard = null" />
         <LineActions
             v-if="lineAction !== undefined && order"
             :order="order"

@@ -235,6 +235,13 @@ const ca = {
         map: 'Plànol',
     },
     order: {
+        keypad: {
+            toggle: 'Teclat numèric',
+            changeQuantity: 'Canvia la quantitat',
+            modify: 'Modifica',
+            options: 'Opcions',
+            current: 'Ara: {count}',
+        },
         catalogCreate: {
             newFamily: 'Nova família',
             newSubfamily: 'Nova subfamília',
