@@ -84,27 +84,24 @@ function header(lines: PrintLine[], title: string, order: Order, width: number, 
     void width;
 }
 
-function lineDescription(line: OrderLine, children: OrderLine[]): PrintLine[] {
-    const out: PrintLine[] = [{ type: 'text', text: `${line.quantity} x ${tr(line.name)}`, bold: true, size: 2 }];
+/** The product and its extras on one line ("1 x Llom + patates"); the printer wraps it if it does not fit. */
+function withModifiers(text: string, line: OrderLine): string {
+    return [text, ...line.modifiers.map((m) => `+ ${tr(m.name)}`)].join(' ');
+}
 
-    for (const m of line.modifiers) {
-        out.push({ type: 'text', text: `  + ${tr(m.name)}`, bold: true, size: 2 });
-    }
+function lineDescription(line: OrderLine, children: OrderLine[]): PrintLine[] {
+    const out: PrintLine[] = [{ type: 'text', text: withModifiers(`${line.quantity} x ${tr(line.name)}`, line), bold: true, size: 2 }];
 
     for (const child of children) {
-        out.push({ type: 'text', text: `  > ${child.quantity > 1 ? `${child.quantity} x ` : ''}${tr(child.name)}`, bold: true, size: 2 });
-
-        for (const m of child.modifiers) {
-            out.push({ type: 'text', text: `    + ${tr(m.name)}`, bold: true, size: 2 });
-        }
+        out.push({ type: 'text', text: withModifiers(`  > ${child.quantity > 1 ? `${child.quantity} x ` : ''}${tr(child.name)}`, child), bold: true, size: 2 });
 
         if (child.note) {
-            out.push({ type: 'text', text: `      ! ${child.note}`, bold: true });
+            out.push({ type: 'text', text: `    ! ${child.note}`, bold: true, size: 2 });
         }
     }
 
     if (line.note) {
-        out.push({ type: 'text', text: `   ! ${line.note}`, bold: true });
+        out.push({ type: 'text', text: `  ! ${line.note}`, bold: true, size: 2 });
     }
 
     return out;

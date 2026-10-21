@@ -81,6 +81,9 @@ function toggleLocale(): void {
             </button>
         </nav>
 
+        <!-- The order screen puts its table buttons here on the waiter tablet -->
+        <div id="topbar-actions" class="flex shrink-0 items-center gap-1" />
+
         <SyncIndicator />
 
         <button

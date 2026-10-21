@@ -108,6 +108,8 @@ const title = computed(() => (table.value ? t('order.table', { label: table.valu
 const canCharge = computed(() => state.device?.type === 'cashier' && !!order.value);
 const isCashier = computed(() => state.device?.type === 'cashier');
 const canSendAndCharge = computed(() => isCashier.value && !tableId.value);
+/** Table buttons: in the order header, or white on blue in the top bar on the waiter tablet. */
+const headerButton = computed(() => (tabletLayout.value ? 'h-8 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white' : 'h-11'));
 
 type LineStatus = 'pending' | 'preparing' | 'ready' | 'served' | 'held';
 const STATUS_ORDER: LineStatus[] = ['held', 'pending', 'preparing', 'ready', 'served'];
@@ -470,30 +472,33 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <span v-if="surchargeRate">{{ t('order.surchargeInfo', { percent: surchargeRate }) }}</span>
                     </p>
                 </div>
-                <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="h-11 gap-1 px-3" :title="t('order.moveTable')" @click="moving = true">
-                    <ArrowRightLeft class="size-4" />
-                    <span class="max-sm:hidden" :class="tabletLayout ? 'hidden' : ''">{{ t('order.moveTable') }}</span>
-                </Button>
-                <Button v-if="tableId && order" variant="outline" class="h-11 gap-1 px-3" :title="t('order.merge')" @click="merging = true">
-                    <Combine class="size-4" />
-                    <span class="max-sm:hidden" :class="tabletLayout ? 'hidden' : ''">{{ t('order.merge') }}</span>
-                </Button>
-                <Button variant="outline" class="h-11 gap-1" @click="setGuests">
-                    <Users class="size-4" />
-                    {{ order?.guests ?? draft.guests ?? '–' }}
-                </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger as-child>
-                        <Button variant="outline" size="icon" class="size-11"><MoreHorizontal class="size-5" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" class="w-56">
-                        <DropdownMenuItem :disabled="!order" @select="lineAction = null"><Percent class="size-4" /> {{ t('order.discountOrder') }}</DropdownMenuItem>
-                        <DropdownMenuItem v-if="order?.status === 'bill_requested'" @select="reopen"><Undo2 class="size-4" /> {{ t('order.reopen') }}</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem v-if="draft.lines.length" class="text-red-700" @select="discard"><Trash2 class="size-4" /> {{ t('order.discardDraft') }}</DropdownMenuItem>
-                        <DropdownMenuItem v-if="order && !pendingTotal" class="text-red-700" @select="cancelEmpty"><Ban class="size-4" /> {{ t('order.cancelOrder') }}</DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <!-- On the waiter tablet these go up to the blue top bar -->
+                <Teleport to="#topbar-actions" :disabled="!tabletLayout">
+                    <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="gap-1 px-3" :class="headerButton" :title="t('order.moveTable')" @click="moving = true">
+                        <ArrowRightLeft class="size-4" />
+                        <span class="max-sm:hidden">{{ t('order.moveTable') }}</span>
+                    </Button>
+                    <Button v-if="tableId && order" variant="outline" class="gap-1 px-3" :class="headerButton" :title="t('order.merge')" @click="merging = true">
+                        <Combine class="size-4" />
+                        <span class="max-sm:hidden">{{ t('order.merge') }}</span>
+                    </Button>
+                    <Button variant="outline" class="gap-1" :class="headerButton" @click="setGuests">
+                        <Users class="size-4" />
+                        {{ order?.guests ?? draft.guests ?? '–' }}
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger as-child>
+                            <Button variant="outline" size="icon" :class="[headerButton, tabletLayout ? 'w-8' : 'w-11']"><MoreHorizontal class="size-5" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" class="w-56">
+                            <DropdownMenuItem :disabled="!order" @select="lineAction = null"><Percent class="size-4" /> {{ t('order.discountOrder') }}</DropdownMenuItem>
+                            <DropdownMenuItem v-if="order?.status === 'bill_requested'" @select="reopen"><Undo2 class="size-4" /> {{ t('order.reopen') }}</DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem v-if="draft.lines.length" class="text-red-700" @select="discard"><Trash2 class="size-4" /> {{ t('order.discardDraft') }}</DropdownMenuItem>
+                            <DropdownMenuItem v-if="order && !pendingTotal" class="text-red-700" @select="cancelEmpty"><Ban class="size-4" /> {{ t('order.cancelOrder') }}</DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </Teleport>
             </header>
 
             <div class="flex shrink-0 gap-1 border-b px-2" :class="tabletLayout ? 'py-1 [&_button]:h-7' : 'py-1.5'">
@@ -510,7 +515,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 </button>
             </div>
 
-            <div class="min-h-0 flex-1 overflow-y-auto">
+            <div class="min-h-0 flex-1 overflow-y-auto" :class="tabletLayout ? 'text-sm [&_.text-lg]:text-base' : ''">
                 <p v-if="!sentGroups.length && !draft.lines.length" class="p-6 text-center text-sm text-slate-500">{{ t('order.empty') }}</p>
 
                 <ul v-if="sentGroups.length" class="divide-y">
@@ -667,7 +672,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
         </section>
 
         <section v-show="showPicker || tabletLayout" class="min-h-0 min-w-0 flex-1 bg-slate-100">
-            <ProductPicker :large="tabletLayout" @pick="pickProduct" @menu="(menu) => (menuWizard = menu)" @invent="inventProduct" />
+            <ProductPicker :compact="tabletLayout" @pick="pickProduct" @menu="(menu) => (menuWizard = menu)" @invent="inventProduct" />
         </section>
 
         <ModifierDialog
