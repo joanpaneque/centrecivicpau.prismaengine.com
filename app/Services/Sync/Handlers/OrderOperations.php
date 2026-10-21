@@ -30,7 +30,7 @@ class OrderOperations implements OperationHandler
     {
         return [
             'order.open', 'order.send', 'order.march', 'order.update', 'order.move', 'order.merge',
-            'order.requestBill', 'order.reopen', 'order.cancel', 'order.discount',
+            'order.requestBill', 'order.proforma', 'order.reopen', 'order.cancel', 'order.discount',
             'line.void', 'line.discount', 'line.edit', 'line.quantity', 'line.move', 'product.soldOut', 'product.edit', 'print.job',
         ];
     }
@@ -49,6 +49,7 @@ class OrderOperations implements OperationHandler
             'order.move' => $this->move($payload, $context),
             'order.merge' => $this->merge($payload, $context),
             'order.requestBill' => $this->setStatus($payload, $context, 'bill_requested'),
+            'order.proforma' => $this->markProforma($payload, $context),
             'order.reopen' => $this->setStatus($payload, $context, 'open'),
             'order.cancel' => $this->cancel($payload, $context),
             'order.discount' => $this->discountOrder($payload, $context),
@@ -186,8 +187,8 @@ class OrderOperations implements OperationHandler
             }
         }
 
-        if ($order->status === 'bill_requested') {
-            $order->forceFill(['status' => 'open', 'bill_requested_at' => null])->save();
+        if ($order->status === 'bill_requested' || $order->proforma_printed_at) {
+            $order->forceFill(['status' => 'open', 'bill_requested_at' => null, 'proforma_printed_at' => null])->save();
         }
 
         $order->touch();
@@ -452,7 +453,27 @@ class OrderOperations implements OperationHandler
         $order->forceFill([
             'status' => $status,
             'bill_requested_at' => $status === 'bill_requested' ? now() : null,
+            'proforma_printed_at' => $status === 'open' ? null : $order->proforma_printed_at,
         ])->save();
+
+        $context->touch('orders');
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function markProforma(array $payload, OperationContext $context): array
+    {
+        $order = $this->findOrder($payload);
+
+        if (! $order->isActive()) {
+            throw new OperationRejected('order_closed');
+        }
+
+        $order->forceFill(['proforma_printed_at' => now()])->save();
 
         $context->touch('orders');
 

@@ -217,11 +217,25 @@ export function tableStatus(tableId: number) {
         return at - lead <= now && at + 30 * 60000 >= now;
     });
     const ready = order ? Object.values(state.kitchenTickets).some((k) => k.orderUuid === order.uuid && k.status === 'ready') : false;
+    // Unsent lines still make the table look taken, with their amount.
+    const draftTotal = (drafts[`table:${tableId}`]?.lines ?? []).reduce((sum, line) => sum + draftLineTotal(line), 0);
+    const hasDraft = !!drafts[`table:${tableId}`]?.lines.length;
 
     return {
         order,
-        status: order ? (order.status === 'bill_requested' ? 'bill' : 'occupied') : reservation ? 'reserved' : 'free',
-        total: orderTotal(order),
+        status: order
+            ? order.proformaPrintedAt
+                ? 'proforma'
+                : order.status === 'bill_requested'
+                  ? 'bill'
+                  : 'occupied'
+            : hasDraft
+              ? 'occupied'
+              : reservation
+                ? 'reserved'
+                : 'free',
+        total: orderTotal(order) + draftTotal,
+        hasDraft,
         reservation,
         ready,
     } as const;
@@ -288,6 +302,7 @@ function previewOrder(draft: Draft): Order {
             openedBy: operatorId(),
             openedAt: new Date().toISOString(),
             billRequestedAt: null,
+            proformaPrintedAt: null,
             closedAt: null,
             mergedIntoUuid: null,
             reservationUuid: draft.reservationUuid,
@@ -515,6 +530,11 @@ export function proformaTitle(order: Order): string {
     const label = order.tableId ? (state.tables[order.tableId]?.label ?? '') : (order.label ?? '');
 
     return `${t('order.proforma')}${label ? ` · ${label}` : ''}`;
+}
+
+/** Paints the table as "proforma printed" on every device until new lines are sent. */
+export async function markProforma(order: Order): Promise<void> {
+    await enqueue('order.proforma', { orderUuid: order.uuid });
 }
 
 export async function requestBill(order: Order, view: TicketView, opts: { print?: boolean } = {}): Promise<void> {

@@ -206,6 +206,7 @@ const es: Messages = {
         free: 'Libre',
         occupied: 'Ocupada',
         billRequested: 'Cuenta pedida',
+        proformaPrinted: 'Proforma impresa',
         reserved: 'Reservada',
         reservedAt: 'Reserva {time}',
         ready: 'Platos listos',

@@ -637,11 +637,13 @@ function tableClasses(table: DiningTable): string[] {
     const colors =
         status === 'occupied'
             ? 'bg-[#00056a] border-[#00056a]'
-            : status === 'bill'
-              ? 'bg-amber-400 border-amber-500'
-              : status === 'reserved'
-                ? 'bg-violet-100 border-violet-400 border-dashed'
-                : 'bg-white border-slate-300';
+            : status === 'proforma'
+              ? 'bg-fuchsia-500 border-fuchsia-600'
+              : status === 'bill'
+                ? 'bg-amber-400 border-amber-500'
+                : status === 'reserved'
+                  ? 'bg-violet-100 border-violet-400 border-dashed'
+                  : 'bg-white border-slate-300';
 
     return [colors, table.shape === 'round' || table.shape === 'stool' ? 'rounded-full' : 'rounded-xl', table.isAuxiliary ? 'ring-2 ring-sky-300 ring-offset-1' : ''];
 }
@@ -649,7 +651,7 @@ function tableClasses(table: DiningTable): string[] {
 function tableTextClass(table: DiningTable): string {
     const status = props.statuses[table.id]?.status;
 
-    return status === 'occupied' ? 'text-white' : status === 'bill' ? 'text-amber-950' : status === 'reserved' ? 'text-violet-900' : 'text-slate-700';
+    return status === 'occupied' || status === 'proforma' ? 'text-white' : status === 'bill' ? 'text-amber-950' : status === 'reserved' ? 'text-violet-900' : 'text-slate-700';
 }
 
 function elapsed(iso: string): string {
@@ -824,9 +826,9 @@ defineExpose({ addTable, addElement });
                     />
                     <div class="pointer-events-none absolute flex flex-col items-center justify-center p-1 text-center" :class="tableTextClass(table)" :style="contentStyle(table)">
                         <span class="text-xl leading-none font-bold">{{ table.label }}</span>
-                        <template v-if="statuses[table.id]?.order">
+                        <template v-if="statuses[table.id]?.order || statuses[table.id]?.hasDraft">
                             <span class="mt-0.5 text-xs font-semibold opacity-90">{{ formatMoney(statuses[table.id].total) }}</span>
-                            <span class="flex items-center gap-1 text-[11px] opacity-80">
+                            <span v-if="statuses[table.id].order" class="flex items-center gap-1 text-[11px] opacity-80">
                                 <Users v-if="statuses[table.id].order?.guests" class="size-3" />
                                 {{ statuses[table.id].order?.guests || '' }}
                                 {{ elapsed(statuses[table.id].order!.openedAt) }}

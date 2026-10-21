@@ -43,10 +43,16 @@ o.label = p.label;
                 o.billRequestedAt = op.createdAt;
             });
             break;
+        case 'order.proforma':
+            withOrder(p.orderUuid, (o) => {
+                o.proformaPrintedAt = op.createdAt;
+            });
+            break;
         case 'order.reopen':
             withOrder(p.orderUuid, (o) => {
                 o.status = 'open';
                 o.billRequestedAt = null;
+                o.proformaPrintedAt = null;
             });
             break;
         case 'order.cancel':
@@ -206,6 +212,7 @@ function openOrder(p: Payload, op: Pick<Operation, 'createdAt' | 'operatorId'>):
         openedBy: op.operatorId,
         openedAt: p.openedAt ?? op.createdAt,
         billRequestedAt: null,
+        proformaPrintedAt: null,
         closedAt: null,
         mergedIntoUuid: active?.uuid ?? null,
         reservationUuid: p.reservationUuid ?? null,
@@ -305,6 +312,8 @@ function send(p: Payload, op: Pick<Operation, 'createdAt' | 'operatorId'>): void
         order.status = 'open';
         order.billRequestedAt = null;
     }
+
+    order.proformaPrintedAt = null;
 
     markDirty('orders', order.uuid);
 }

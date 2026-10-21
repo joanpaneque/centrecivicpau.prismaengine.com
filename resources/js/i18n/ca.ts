@@ -204,6 +204,7 @@ const ca = {
         free: 'Lliure',
         occupied: 'Ocupada',
         billRequested: 'Compte demanat',
+        proformaPrinted: 'Proforma impresa',
         reserved: 'Reservada',
         reservedAt: 'Reserva {time}',
         ready: 'Plats llestos',

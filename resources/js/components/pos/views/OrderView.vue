@@ -31,6 +31,7 @@ import {
     moveDraft,
     moveLinesToTable,
     orderTotal,
+    markProforma,
     proformaDocument,
     proformaTitle,
     requestBill,
@@ -257,7 +258,10 @@ async function printProforma(): Promise<void> {
     printingProforma.value = true;
 
     try {
-        if ((await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value))) === 'printed') {
+        const outcome = await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value));
+        await markProforma(order.value);
+
+        if (outcome === 'printed') {
             toast.success(t('cashier.sentTo', { name: directTicketPrinter()?.name ?? '' }));
         }
     } catch {

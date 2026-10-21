@@ -398,6 +398,7 @@ class SnapshotBuilder
             'openedBy' => $order->opened_by,
             'openedAt' => $order->opened_at->toIso8601String(),
             'billRequestedAt' => $order->bill_requested_at?->toIso8601String(),
+            'proformaPrintedAt' => $order->proforma_printed_at?->toIso8601String(),
             'closedAt' => $order->closed_at?->toIso8601String(),
             'mergedIntoUuid' => $mergedIntoUuid,
             'reservationUuid' => $order->reservation_uuid,

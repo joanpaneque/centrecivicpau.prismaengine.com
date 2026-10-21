@@ -87,6 +87,8 @@ function colorClasses(status: string): string {
     switch (status) {
         case 'occupied':
             return 'bg-[#00056a] text-white border-[#00056a]';
+        case 'proforma':
+            return 'bg-fuchsia-500 text-white border-fuchsia-600';
         case 'bill':
             return 'bg-amber-400 text-amber-950 border-amber-500';
         case 'reserved':
@@ -198,7 +200,9 @@ function toggleEdit(): void {
                     @click="open(table)"
                 >
                     <span class="text-2xl font-bold">{{ table.label }}</span>
-                    <span v-if="statuses[table.id]?.order" class="text-sm font-semibold">{{ formatMoney(statuses[table.id].total) }} · {{ elapsed(statuses[table.id].order!.openedAt) }}</span>
+                    <span v-if="statuses[table.id]?.order || statuses[table.id]?.hasDraft" class="text-sm font-semibold">
+                        {{ formatMoney(statuses[table.id].total) }}<template v-if="statuses[table.id].order"> · {{ elapsed(statuses[table.id].order!.openedAt) }}</template>
+                    </span>
                     <span v-else class="text-sm opacity-70">{{ t(`floor.${statuses[table.id]?.status === 'reserved' ? 'reserved' : 'free'}`) }}</span>
                     <ChefHat v-if="statuses[table.id]?.ready" class="absolute top-2 right-2 size-5 text-emerald-500" />
                 </button>
@@ -209,6 +213,7 @@ function toggleEdit(): void {
             <span class="flex items-center gap-1"><span class="size-3 rounded border border-slate-300 bg-white" /> {{ t('floor.free') }}</span>
             <span class="flex items-center gap-1"><span class="size-3 rounded bg-[#00056a]" /> {{ t('floor.occupied') }}</span>
             <span class="flex items-center gap-1"><span class="size-3 rounded bg-amber-400" /> {{ t('floor.billRequested') }}</span>
+            <span class="flex items-center gap-1"><span class="size-3 rounded bg-fuchsia-500" /> {{ t('floor.proformaPrinted') }}</span>
             <span class="flex items-center gap-1"><span class="size-3 rounded border border-dashed border-violet-400 bg-violet-100" /> {{ t('floor.reserved') }}</span>
             <span class="flex items-center gap-1"><ChefHat class="size-3 text-emerald-600" /> {{ t('floor.ready') }}</span>
         </div>

@@ -175,6 +175,7 @@ export type Order = {
     openedBy: number | null;
     openedAt: string;
     billRequestedAt: string | null;
+    proformaPrintedAt: string | null;
     closedAt: string | null;
     mergedIntoUuid: string | null;
     reservationUuid: string | null;

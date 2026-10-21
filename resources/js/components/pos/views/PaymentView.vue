@@ -14,7 +14,7 @@ import { issueTicket, orderLabel, pendingSelection, printOrOpen, selectionTotal,
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { uuid } from '@/pos/crypto';
 import { formatMoney, parseMoney } from '@/pos/money';
-import { childLines, editSentLines, proformaDocument, proformaTitle, unpricedGroups } from '@/pos/orders';
+import { childLines, editSentLines, markProforma, proformaDocument, proformaTitle, unpricedGroups } from '@/pos/orders';
 import type { LineEdit, LineGroup } from '@/pos/orders';
 import { directTicketPrinter, lineAmount } from '@/pos/print';
 import { go, route } from '@/pos/router';
@@ -330,7 +330,10 @@ async function printProforma(): Promise<void> {
     printingProforma.value = true;
 
     try {
-        if ((await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value, pending.value))) === 'printed') {
+        const outcome = await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value, pending.value));
+        await markProforma(order.value);
+
+        if (outcome === 'printed') {
             toast.success(t('cashier.sentTo', { name: directPrinter.value?.name ?? '' }));
         }
 

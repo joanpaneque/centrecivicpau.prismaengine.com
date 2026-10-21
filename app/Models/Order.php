@@ -18,6 +18,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $opened_by
  * @property Carbon $opened_at
  * @property Carbon|null $bill_requested_at
+ * @property Carbon|null $proforma_printed_at
  * @property Carbon|null $closed_at
  * @property int|null $merged_into_id
  * @property string|null $reservation_uuid
@@ -37,6 +38,7 @@ class Order extends Model
         return [
             'opened_at' => 'datetime',
             'bill_requested_at' => 'datetime',
+            'proforma_printed_at' => 'datetime',
             'closed_at' => 'datetime',
         ];
     }
