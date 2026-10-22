@@ -212,12 +212,16 @@ function ticketBody(out: PrintLine[], ticket: TicketView, width: number): void {
 
     out.push({ type: 'divider' });
 
+    // The unit price column (in the middle) only when some line has more than one unit.
+    if (ticket.lines.some((line) => line.quantity !== 1)) {
+        out.push({ type: 'row', left: '', center: 'P. Unit', right: '' });
+    }
+
     for (const line of ticket.lines) {
         const qty = Number.isInteger(line.quantity) ? String(line.quantity) : line.quantity.toFixed(2);
-        // More than one unit: the unit price and quantity in the middle of the same line.
         out.push(
             line.quantity !== 1
-                ? { type: 'row', left: `${qty} ${line.name}`, center: `${formatMoney(line.unitPrice, false)} x ${qty}`, right: formatMoney(line.total, false) }
+                ? { type: 'row', left: `${qty} ${line.name}`, center: formatMoney(line.unitPrice, false), right: formatMoney(line.total, false) }
                 : { type: 'row', left: `${qty} ${line.name}`.slice(0, width - 10), right: formatMoney(line.total, false) },
         );
 
