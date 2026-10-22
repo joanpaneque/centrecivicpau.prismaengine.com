@@ -138,7 +138,7 @@ class MenuTranslator
         }
 
         if ($this->isText($source)) {
-            return is_string($value) && trim($value) !== '' ? mb_substr(trim($value), 0, 250) : null;
+            return is_string($value) && trim($value) !== '' ? mb_substr(trim($value), 0, 1000) : null;
         }
 
         if (! is_array($source) || ! is_array($value)) {

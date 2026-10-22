@@ -63,7 +63,7 @@ class PrintDocumentEncoder
 
             $out .= match ($type) {
                 'divider' => $this->text(str_repeat(mb_substr((string) ($line['char'] ?? '-'), 0, 1) ?: '-', $width), $codepage)."\n",
-                'row' => $this->text($this->row((string) ($line['left'] ?? ''), (string) ($line['right'] ?? ''), $columns), $codepage)."\n",
+                'row' => $this->text($this->rowText($line, $columns), $codepage)."\n",
                 'feed' => $esc.'d'.chr(max(1, min(Printer::MAX_MARGIN, (int) ($line['lines'] ?? 1)))),
                 'cut' => $gs.'V'."\x42\x03",
                 'qr' => $this->qr((string) ($line['data'] ?? '')).(isset($line['caption']) ? $this->text((string) $line['caption'], $codepage)."\n" : ''),
@@ -100,6 +100,13 @@ class PrintDocumentEncoder
                 }
 
                 $line = ['type' => 'image', 'png' => base64_encode($png)];
+            }
+
+            // Rows with a middle column go as plain text: the Windows program only knows two columns.
+            if (($line['type'] ?? '') === 'row' && ! empty($line['center'])) {
+                $big = (int) ($line['size'] ?? 1) > 1;
+                $columns = $width ?? (int) ($document['width'] ?? 48);
+                $line = ['type' => 'text', 'text' => $this->rowText($line, $big ? intdiv($columns, 2) : $columns), 'bold' => $line['bold'] ?? false, 'size' => $line['size'] ?? 1];
             }
 
             $lines[] = $line;
@@ -159,6 +166,37 @@ class PrintDocumentEncoder
         }
 
         return $this->maps[$codepage];
+    }
+
+    /**
+     * @param  array<string, mixed>  $line
+     */
+    private function rowText(array $line, int $width): string
+    {
+        $left = (string) ($line['left'] ?? '');
+        $right = (string) ($line['right'] ?? '');
+        $center = (string) ($line['center'] ?? '');
+
+        return $center === '' ? $this->row($left, $right, $width) : $this->threeColumns($left, $center, $right, $width);
+    }
+
+    /**
+     * "6 Cafè        1,20 x 6       7,20": the middle text centred (moved left if the right
+     * one needs the room) and the left one cut with "..." before it reaches the middle.
+     */
+    private function threeColumns(string $left, string $center, string $right, int $width): string
+    {
+        $start = intdiv($width - mb_strlen($center), 2);
+        $start = max(0, min($start, $width - mb_strlen($right) - 1 - mb_strlen($center)));
+        $room = $start - 1;
+
+        if (mb_strlen($left) > $room) {
+            $left = $room > 3 ? mb_substr($left, 0, $room - 3).'...' : mb_substr($left, 0, max(0, $room));
+        }
+
+        $line = $left.str_repeat(' ', max(1, $start - mb_strlen($left))).$center;
+
+        return $line.str_repeat(' ', max(1, $width - mb_strlen($line) - mb_strlen($right))).$right;
     }
 
     private function row(string $left, string $right, int $width): string

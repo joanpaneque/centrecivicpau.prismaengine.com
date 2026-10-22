@@ -226,3 +226,68 @@ test('in the chat the assistant asks for a price it does not know, without answe
 
     Http::assertSent(fn ($request) => collect($request->data()['messages'] ?? [])->contains(fn ($m) => $m['role'] === 'tool' && str_contains((string) $m['content'], 'No sé el precio de: «Pastís de formatge»')));
 });
+
+test('a dish can show a text instead of a price, and the carta takes notes, a sheet limit and its own css', function () {
+    Queue::fake();
+    $admin = User::factory()->admin()->create();
+    $tools = cartaTools($admin);
+
+    $saved = $tools->run('save_carta', [
+        'name_ca' => 'Peix', 'name_es' => 'Pescado',
+        'notes_ca' => "S.M. = segons mercat\nPa inclòs", 'notes_es' => "S.M. = según mercado\nPan incluido",
+        'max_pages' => 1,
+        'css' => '.cost { color: red; } </style><script>alert(1)</script> @import "x.css"; .dish { background: url(http://x/y.png); }',
+        'sections' => [['name_ca' => 'Del dia', 'name_es' => 'Del día', 'items' => [
+            ['name_ca' => 'Llamàntol', 'name_es' => 'Bogavante', 'price_text' => 'S.M.'],
+        ]]],
+    ]);
+
+    $carta = Carta::query()->findOrFail($saved['result']['carta_id']);
+    $item = $carta->sections[0]->items[0];
+
+    expect($item->price)->toBeNull()
+        ->and($item->price_text)->toBe('S.M.')
+        ->and($carta->notes['es'])->toBe("S.M. = según mercado\nPan incluido")
+        ->and($carta->maxPages())->toBe(1)
+        ->and($carta->css())->toContain('.cost { color: red; }')->not->toContain('<')->not->toContain('@import')->not->toContain('http://');
+
+    $document = app(CartaDocument::class);
+    $page = $document->localized($carta, 'es');
+
+    expect($page['sections'][0]['items'][0]['price'])->toBe('S.M.')
+        ->and($page['notes'])->toBe("S.M. = según mercado\nPan incluido");
+
+    $pages = $document->paginate($page, app(MenuDocument::class)->sizes(1), 'classic', true);
+
+    expect(end($pages)['notes'])->toBe($page['notes'])
+        ->and($pages[0]['notes'] ?? null)->toBe(count($pages) === 1 ? $page['notes'] : null);
+
+    $tools->run('edit_carta', ['id' => $carta->id, 'max_pages' => null, 'css' => null, 'changes' => [
+        ['action' => 'update_item', 'item_id' => $item->id, 'price_text' => null, 'price' => 32],
+    ]]);
+
+    $carta->refresh();
+
+    expect($carta->layout)->toBeNull()
+        ->and($carta->sections[0]->items[0]->price)->toBe(3200)
+        ->and($carta->sections[0]->items[0]->price_text)->toBeNull();
+});
+
+test('the back office takes a price text instead of a price', function () {
+    Queue::fake();
+    $admin = User::factory()->admin()->create();
+
+    $this->actingAs($admin)->post(route('admin.cartas.store'), [
+        'name' => ['ca' => 'Marisc', 'es' => 'Marisco'],
+        'notes' => ['ca' => 'S.M. = segons mercat', 'es' => 'S.M. = según mercado'],
+        'layout' => ['maxPages' => 1, 'css' => null],
+        'active' => true,
+        'sections' => [['name' => ['ca' => 'Marisc', 'es' => 'Marisco'], 'items' => [['productId' => null, 'name' => ['ca' => 'Gambes', 'es' => 'Gambas'], 'price' => null, 'priceText' => 'S.M.']]]],
+    ])->assertSessionHasNoErrors();
+
+    $carta = Carta::query()->firstOrFail();
+
+    expect($carta->sections[0]->items[0]->price_text)->toBe('S.M.')
+        ->and($carta->maxPages())->toBe(1)
+        ->and($carta->notes['ca'])->toBe('S.M. = segons mercat');
+});

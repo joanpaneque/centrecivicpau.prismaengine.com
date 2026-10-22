@@ -28,6 +28,7 @@ class TicketPdfController extends Controller
             'document.lines.*.type' => ['required', 'string', Rule::in(['text', 'row', 'divider', 'qr', 'image', 'feed', 'cut'])],
             'document.lines.*.text' => ['nullable', 'string', 'max:500'],
             'document.lines.*.left' => ['nullable', 'string', 'max:500'],
+            'document.lines.*.center' => ['nullable', 'string', 'max:100'],
             'document.lines.*.right' => ['nullable', 'string', 'max:500'],
             'document.lines.*.data' => ['nullable', 'string', 'max:2000'],
             'document.lines.*.caption' => ['nullable', 'string', 'max:200'],

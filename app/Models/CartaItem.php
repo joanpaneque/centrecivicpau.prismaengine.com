@@ -17,6 +17,7 @@ use Illuminate\Support\Carbon;
  * @property array<string, string>|null $name
  * @property array<string, string>|null $description
  * @property int|null $price cents; null = the product's price
+ * @property string|null $price_text shown instead of a price ("S.M." = según mercado)
  * @property int $sort
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at

@@ -290,7 +290,7 @@ export type Operation = {
 
 export type PrintLine =
     | { type: 'text'; text: string; align?: 'left' | 'center' | 'right'; bold?: boolean; size?: 1 | 2; invert?: boolean }
-    | { type: 'row'; left: string; right: string; bold?: boolean; size?: 1 | 2 }
+    | { type: 'row'; left: string; center?: string; right: string; bold?: boolean; size?: 1 | 2 }
     | { type: 'divider'; char?: string }
     | { type: 'qr'; data: string; caption?: string }
     | { type: 'image'; url: string }

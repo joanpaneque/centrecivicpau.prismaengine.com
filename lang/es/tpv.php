@@ -16,7 +16,7 @@ return [
     'deleted' => 'Eliminado.',
     'duplicated' => 'Duplicado.',
     'carta_item_name' => 'Cada plato necesita un nombre.',
-    'carta_item_price' => 'Falta el precio: este plato no está en la carta del TPV o no tiene precio allí.',
+    'carta_item_price' => 'Falta el precio (o un texto como «S.M.»): este plato no está en la carta del TPV o no tiene precio allí.',
     'invoice_already_issued' => 'Este ticket ya tiene una factura emitida.',
     'invoice_issued' => 'Factura emitida correctamente.',
     'invoice_subject' => 'Tu factura :number',

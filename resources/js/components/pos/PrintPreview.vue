@@ -43,8 +43,9 @@ function divider(line: Extract<PrintLine, { type: 'divider' }>): string {
                 {{ line.text }}
             </div>
             <div v-else-if="line.type === 'row'" :class="textClass(line)" class="flex justify-between gap-2">
-                <span class="min-w-0 truncate whitespace-pre">{{ line.left }}</span>
-                <span class="shrink-0 whitespace-pre">{{ line.right }}</span>
+                <span class="min-w-0 truncate whitespace-pre" :class="line.center ? 'flex-1' : ''">{{ line.left }}</span>
+                <span v-if="line.center" class="shrink-0 whitespace-pre">{{ line.center }}</span>
+                <span class="shrink-0 whitespace-pre" :class="line.center ? 'flex-1 text-right' : ''">{{ line.right }}</span>
             </div>
             <div v-else-if="line.type === 'divider'" class="overflow-hidden whitespace-nowrap text-black/70">{{ divider(line) }}</div>
             <div v-else-if="line.type === 'qr'" class="my-2 flex flex-col items-center">

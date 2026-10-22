@@ -170,9 +170,10 @@ class MenuDocument
     /**
      * @param  list<array<string, mixed>>  $pages
      */
-    public function view(string $template, array $pages, ?string $logo): string
+    public function view(string $template, array $pages, ?string $logo, ?string $css = null): string
     {
         return view('pdf.menu.document', [
+            'css' => $css,
             'title' => $pages[0]['name'] ?? '',
             'template' => $template,
             'pages' => $pages,

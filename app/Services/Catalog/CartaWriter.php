@@ -13,8 +13,8 @@ use App\Support\Translation;
 class CartaWriter
 {
     /**
-     * @param  array<string, mixed>  $data  name, subtitle, active, template,
-     *                                      sections[id?, name, items[id?, productId, name, description, price (cents|null)]]
+     * @param  array<string, mixed>  $data  name, subtitle, notes, active, template, layout{maxPages, css},
+     *                                      sections[id?, name, items[id?, productId, name, description, price (cents|null), priceText]]
      */
     public function save(Carta $carta, array $data): void
     {
@@ -23,6 +23,17 @@ class CartaWriter
             'subtitle' => $this->filled($data['subtitle'] ?? null) ? Translation::normalize($data['subtitle']) : null,
             'active' => $data['active'] ?? true,
         ]);
+
+        if (array_key_exists('notes', $data)) {
+            $carta->notes = $this->filled($data['notes']) ? Translation::normalize($data['notes']) : null;
+        }
+
+        if (array_key_exists('layout', $data)) {
+            $layout = is_array($data['layout']) ? $data['layout'] : [];
+            $pages = is_numeric($layout['maxPages'] ?? null) && (int) $layout['maxPages'] > 0 ? min(10, (int) $layout['maxPages']) : null;
+            $css = Carta::cleanCss($layout['css'] ?? null);
+            $carta->layout = $pages !== null || $css !== null ? ['max_pages' => $pages, 'css' => $css] : null;
+        }
 
         if (isset($data['template']) && in_array($data['template'], MenuDocument::TEMPLATES, true)) {
             $carta->template = $data['template'];
@@ -52,6 +63,7 @@ class CartaWriter
                     'name' => $this->filled($itemRow['name'] ?? null) ? Translation::normalize($itemRow['name']) : null,
                     'description' => $this->filled($itemRow['description'] ?? null) ? Translation::normalize($itemRow['description']) : null,
                     'price' => isset($itemRow['price']) ? max(0, (int) $itemRow['price']) : null,
+                    'price_text' => is_string($itemRow['priceText'] ?? null) && trim($itemRow['priceText']) !== '' ? mb_substr(trim($itemRow['priceText']), 0, 20) : null,
                     'sort' => $itemSort,
                 ])->save();
                 $keepItems[] = $item->id;

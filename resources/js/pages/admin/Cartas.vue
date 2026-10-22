@@ -23,9 +23,18 @@ import { destroy, duplicate, store, update } from '@/routes/admin/cartas';
  * product of the POS without a price of its own shows the product's price.
  */
 type Trans = Record<string, string>;
-type Item = { id: number; productId: number | null; name: Trans | null; description: Trans | null; price: number | null; effectivePrice: number | null; displayName: Trans };
+type Item = {
+    id: number;
+    productId: number | null;
+    name: Trans | null;
+    description: Trans | null;
+    price: number | null;
+    priceText: string | null;
+    effectivePrice: number | null;
+    displayName: Trans;
+};
 type Section = { id: number; name: Trans; items: Item[] };
-type Carta = { id: number; name: Trans; subtitle: Trans | null; template: string; active: boolean; sections: Section[] };
+type Carta = { id: number; name: Trans; subtitle: Trans | null; notes: Trans | null; maxPages: number | null; css: string | null; template: string; active: boolean; sections: Section[] };
 
 const props = defineProps<{
     cartas: Carta[];
@@ -34,7 +43,7 @@ const props = defineProps<{
 
 const { t, tr } = useI18n();
 
-type FormItem = { id: number | null; productId: number | null; name: { ca: string; es: string }; description: { ca: string; es: string }; price: string };
+type FormItem = { id: number | null; productId: number | null; name: { ca: string; es: string }; description: { ca: string; es: string }; price: string; priceText: string };
 type FormSection = { id: number | null; name: { ca: string; es: string }; items: FormItem[] };
 
 const open = ref(false);
@@ -43,15 +52,23 @@ const printing = ref<Carta | null>(null);
 const form = useForm({
     name: { ca: '', es: '' },
     subtitle: { ca: '', es: '' },
+    notes: { ca: '', es: '' },
+    maxPages: null as number | null,
+    css: '',
     active: true,
     sections: [] as FormSection[],
 });
+
+const pageOptions = computed(() => [
+    { value: null as number | null, label: t('admin.cartas.pagesAuto') },
+    ...[1, 2, 3, 4].map((n) => ({ value: n as number | null, label: t('admin.cartas.pagesMax', { count: n }) })),
+]);
 
 const productOptions = computed(() => props.products.map((p) => ({ value: p.id as number | null, label: `${tr(p.name)}${p.price !== null ? ` · ${money(p.price)}` : ''}` })));
 const productsById = computed(() => new Map(props.products.map((p) => [p.id, p])));
 
 function emptyItem(): FormItem {
-    return { id: null, productId: null, name: { ca: '', es: '' }, description: { ca: '', es: '' }, price: '' };
+    return { id: null, productId: null, name: { ca: '', es: '' }, description: { ca: '', es: '' }, price: '', priceText: '' };
 }
 
 function openCarta(carta: Carta | null): void {
@@ -59,12 +76,22 @@ function openCarta(carta: Carta | null): void {
     form.clearErrors();
     form.name = toTrans(carta?.name);
     form.subtitle = toTrans(carta?.subtitle);
+    form.notes = toTrans(carta?.notes);
+    form.maxPages = carta?.maxPages ?? null;
+    form.css = carta?.css ?? '';
     form.active = carta?.active ?? true;
     form.sections = carta
         ? carta.sections.map((s) => ({
               id: s.id,
               name: toTrans(s.name),
-              items: s.items.map((i) => ({ id: i.id, productId: i.productId, name: toTrans(i.name), description: toTrans(i.description), price: centsToInput(i.price) })),
+              items: s.items.map((i) => ({
+                  id: i.id,
+                  productId: i.productId,
+                  name: toTrans(i.name),
+                  description: toTrans(i.description),
+                  price: centsToInput(i.price),
+                  priceText: i.priceText ?? '',
+              })),
           }))
         : [{ id: null, name: { ca: '', es: '' }, items: [emptyItem()] }];
     open.value = true;
@@ -95,6 +122,8 @@ function save(): void {
     form.transform((data) => ({
         ...data,
         subtitle: data.subtitle.ca || data.subtitle.es ? data.subtitle : null,
+        notes: data.notes.ca || data.notes.es ? data.notes : null,
+        layout: { maxPages: data.maxPages, css: data.css.trim() || null },
         sections: data.sections.map((s) => ({
             id: s.id,
             name: s.name,
@@ -104,6 +133,7 @@ function save(): void {
                 name: i.name.ca || i.name.es ? i.name : null,
                 description: i.description.ca || i.description.es ? i.description : null,
                 price: i.price.trim() === '' ? null : parseMoney(i.price),
+                priceText: i.priceText.trim() || null,
             })),
         })),
     }));
@@ -116,6 +146,12 @@ function save(): void {
         form.post(store.url(), options);
     }
 }
+
+const layoutError = computed(() => {
+    const errors = form.errors as Record<string, string>;
+
+    return errors['layout.css'] ?? errors['layout.maxPages'];
+});
 
 function itemError(section: number, item: number): string | undefined {
     const errors = form.errors as Record<string, string>;
@@ -165,7 +201,7 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Cartes', href: cartasRoute() }
                     <div v-for="item in section.items" :key="item.id" class="flex items-baseline gap-2">
                         <span class="min-w-0 flex-1 truncate">{{ tr(item.displayName) }}</span>
                         <Link2 v-if="item.price === null && item.productId" class="size-3 shrink-0 text-muted-foreground" :title="t('studio.priceFromCatalog')" />
-                        <span class="tabular-nums">{{ item.effectivePrice !== null ? money(item.effectivePrice) : '—' }}</span>
+                        <span class="tabular-nums">{{ item.priceText ?? (item.effectivePrice !== null ? money(item.effectivePrice) : '—') }}</span>
                     </div>
                 </div>
             </div>
@@ -199,7 +235,26 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Cartes', href: cartasRoute() }
 
                 <TransInput v-model="form.name" :label="t('common.name')" :error="form.errors['name.ca'] || form.errors.name" />
                 <TransInput v-model="form.subtitle" :label="t('admin.cartas.subtitle')" />
-                <Label class="flex items-center gap-2"><Checkbox v-model="form.active" /> {{ t('common.active') }}</Label>
+                <TransInput v-model="form.notes" multiline :label="t('admin.cartas.notes')" :error="form.errors['notes.ca'] || form.errors['notes.es']" />
+                <div class="flex flex-wrap items-center gap-4">
+                    <Label class="flex items-center gap-2"><Checkbox v-model="form.active" /> {{ t('common.active') }}</Label>
+                    <div class="flex items-center gap-2">
+                        <Label>{{ t('admin.cartas.pages') }}</Label>
+                        <SelectInput v-model="form.maxPages" class="w-48" :options="pageOptions" />
+                    </div>
+                </div>
+                <details class="rounded-lg border p-3 text-sm">
+                    <summary class="cursor-pointer font-medium">{{ t('admin.cartas.css') }}</summary>
+                    <p class="mt-2 text-xs text-muted-foreground">{{ t('admin.cartas.cssHelp') }}</p>
+                    <textarea
+                        v-model="form.css"
+                        rows="6"
+                        spellcheck="false"
+                        class="mt-2 w-full rounded-md border border-input bg-transparent p-2 font-mono text-xs shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                        placeholder=".dish { font-weight: bold; }"
+                    />
+                    <p v-if="layoutError" class="text-xs text-destructive">{{ layoutError }}</p>
+                </details>
 
                 <div class="space-y-3">
                     <div class="flex items-center justify-between">
@@ -223,11 +278,12 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Cartes', href: cartasRoute() }
                         </div>
 
                         <div v-for="(item, iIndex) in section.items" :key="iIndex" class="grid gap-2 rounded-md bg-muted/40 p-2">
-                            <div class="grid items-end gap-2 sm:grid-cols-[13rem_1fr_1fr_6rem_auto]">
+                            <div class="grid items-end gap-2 sm:grid-cols-[13rem_1fr_1fr_6rem_5rem_auto]">
                                 <SelectInput v-model="item.productId" :placeholder="t('admin.setMenus.freeText')" :options="productOptions" />
                                 <Input v-model="item.name.ca" :placeholder="productPlaceholder(item, 'name', 'ca') || 'CA'" />
                                 <Input v-model="item.name.es" :placeholder="productPlaceholder(item, 'name', 'es') || 'ES'" />
-                                <Input v-model="item.price" inputmode="decimal" :placeholder="productPlaceholder(item, 'price')" />
+                                <Input v-model="item.price" inputmode="decimal" :disabled="!!item.priceText.trim()" :placeholder="productPlaceholder(item, 'price')" />
+                                <Input v-model="item.priceText" maxlength="20" :title="t('admin.cartas.priceTextHelp')" :placeholder="t('admin.cartas.priceText')" />
                                 <Button type="button" variant="ghost" size="icon" @click="section.items.splice(iIndex, 1)"><Trash2 class="size-4" /></Button>
                             </div>
                             <div class="grid gap-2 sm:grid-cols-2">

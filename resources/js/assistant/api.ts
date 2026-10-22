@@ -48,7 +48,8 @@ export type CartaPreview = {
     subtitle: T9n | null;
     template: string;
     active: boolean;
-    sections: { name: T9n; items: { name: T9n; description: T9n | null; price: number | null; fromCatalog: boolean }[] }[];
+    notes?: T9n | null;
+    sections: { name: T9n; items: { name: T9n; description: T9n | null; price: number | null; priceText?: string | null; fromCatalog: boolean }[] }[];
     /** Set when the assistant prepared a print: languages to preselect. */
     print?: { languages: string[] } | null;
 };

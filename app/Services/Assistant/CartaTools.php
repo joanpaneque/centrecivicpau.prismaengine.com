@@ -9,6 +9,7 @@ use App\Models\CartaSection;
 use App\Models\Product;
 use App\Models\User;
 use App\Services\Assistant\Concerns\ReadsToolArguments;
+use App\Services\Catalog\CartaDocument;
 use App\Services\Catalog\CartaWriter;
 use App\Services\Catalog\MenuDocument;
 use Illuminate\Database\Eloquent\Collection;
@@ -59,6 +60,13 @@ class CartaTools
             'description_ca' => ['type' => ['string', 'null'], 'description' => 'Descripción corta opcional (ingredientes…), en catalán.'],
             'description_es' => ['type' => ['string', 'null']],
             'price' => ['type' => ['number', 'null'], 'description' => 'Precio en euros con IVA. Omítelo si el usuario no lo ha dicho: se coge el del producto del TPV.'],
+            'price_text' => ['type' => ['string', 'null'], 'description' => 'Texto en lugar del precio, tal cual (máx. 20 caracteres): «S.M.» (según mercado), «Consultar»… Solo si lo piden; con él no hace falta price. null lo quita.'],
+        ];
+        $document = [
+            'notes_ca' => ['type' => ['string', 'null'], 'description' => 'Notas al pie de la carta, en letra pequeña al final (leyenda, «S.M. = segons mercat», alérgenos…). Puede tener varias líneas (\n). Solo si lo piden. null las quita.'],
+            'notes_es' => ['type' => ['string', 'null']],
+            'max_pages' => ['type' => ['integer', 'null'], 'description' => 'Máximo de hojas A4 por idioma («que quepa en una hoja» = 1). La letra se reduce lo necesario. null = automático.'],
+            'css' => ['type' => ['string', 'null'], 'description' => 'CSS extra para el documento impreso (sustituye al anterior; null lo quita). Lo pinta DomPDF: CSS 2.1, sin flex, grid ni columnas, sin imágenes externas. Clases: .sheet (cada hoja; .carta en las cartas, .more en las hojas 2+), h1 (título), .includes (subtítulo), h2 (sección), table.dishes, .dishes td, .dish (nombre), .description, .cost (precio), .notes (notas al pie), .vat, .frame (marco), .decor (dibujos). Los tamaños de letra van en style inline: para cambiarlos usa !important. Revisa siempre el resultado con check_carta_layout.'],
         ];
         $template = ['type' => 'string', 'enum' => MenuDocument::TEMPLATES, 'description' => 'Diseño impreso: classic (normal), halloween, christmas (Navidad), easter (Pascua), kids (infantil).'];
 
@@ -72,6 +80,7 @@ class CartaTools
                 'subtitle_es' => ['type' => ['string', 'null']],
                 'template' => $template,
                 'active' => ['type' => 'boolean'],
+            ] + $document + [
                 'sections' => [
                     'type' => 'array',
                     'items' => [
@@ -93,6 +102,7 @@ class CartaTools
                 'subtitle_es' => ['type' => ['string', 'null']],
                 'template' => $template,
                 'active' => ['type' => 'boolean'],
+            ] + $document + [
                 'changes' => [
                     'type' => 'array',
                     'items' => [
@@ -107,6 +117,11 @@ class CartaTools
                         'required' => ['action'],
                     ],
                 ],
+            ], ['id']),
+            self::fn('check_carta_layout', 'Genera la carta de verdad (como el PDF) y dice, por idioma, cuántas hojas ocupa, si cabe en max_pages, el tamaño de letra usado (1 = el más grande, 0 = el mínimo) y te devuelve el HTML generado para que lo revises. Úsalo SIEMPRE después de cambiar max_pages, css, notas o muchos platos, y antes de decir que algo cabe en una hoja; si no queda bien, corrige (edit_carta) y vuelve a comprobar.', [
+                'id' => ['type' => 'integer'],
+                'languages' => ['type' => 'array', 'items' => ['type' => 'string', 'enum' => MenuDocument::LOCALES], 'description' => 'Por defecto ca y es (los otros idiomas suelen ocupar algo más).'],
+                'include_html' => ['type' => 'boolean', 'description' => 'Devolver el HTML generado (del primer idioma). Por defecto true.'],
             ], ['id']),
             self::fn('print_carta', 'Prepara la impresión de una carta: sale en el chat la hoja A4 de verdad, los idiomas marcados y el botón para generar el PDF. Úsalo cuando pidan imprimirla, verla impresa o en otros idiomas.', [
                 'id' => ['type' => 'integer'],
@@ -152,6 +167,7 @@ class CartaTools
                 'save_carta' => $this->save($args),
                 'edit_carta' => $this->edit($args),
                 'print_carta' => $this->print($args),
+                'check_carta_layout' => $this->check($args),
                 'delete_carta' => $this->delete($args),
                 default => throw new MenuToolError("Herramienta desconocida: {$tool}"),
             });
@@ -201,6 +217,17 @@ class CartaTools
             'sections' => $sections,
         ];
 
+        if (array_key_exists('notes_ca', $args) || array_key_exists('notes_es', $args)) {
+            $data['notes'] = $this->names($args, false, 'notes', 1000);
+        }
+
+        if (array_key_exists('max_pages', $args) || array_key_exists('css', $args)) {
+            $data['layout'] = [
+                'maxPages' => array_key_exists('max_pages', $args) ? $this->optionalInt($args, 'max_pages') : $carta->maxPages(),
+                'css' => array_key_exists('css', $args) ? $args['css'] : $carta->css(),
+            ];
+        }
+
         return $this->saved($carta, $data, $creating ? 'created' : 'updated', ($creating ? 'Carta creada: ' : 'Carta actualitzada: ').$data['name']['ca']);
     }
 
@@ -232,6 +259,21 @@ class CartaTools
         if (isset($args['active'])) {
             $data['active'] = (bool) $args['active'];
             $done[] = $data['active'] ? 'activa' : 'desactivada';
+        }
+
+        if (array_key_exists('notes_ca', $args) || array_key_exists('notes_es', $args)) {
+            $data['notes'] = $this->names($args, false, 'notes', 1000);
+            $done[] = $data['notes'] ? 'notes' : 'sense notes';
+        }
+
+        if (array_key_exists('max_pages', $args)) {
+            $data['layout']['maxPages'] = $this->optionalInt($args, 'max_pages');
+            $done[] = $data['layout']['maxPages'] ? 'màxim '.$data['layout']['maxPages'].' full(s)' : 'fulls automàtics';
+        }
+
+        if (array_key_exists('css', $args)) {
+            $data['layout']['css'] = $args['css'];
+            $done[] = Carta::cleanCss($args['css']) ? 'estil retocat' : 'sense estil propi';
         }
 
         foreach ((array) ($args['changes'] ?? []) as $change) {
@@ -318,7 +360,7 @@ class CartaTools
      *
      * @param  array<string, mixed>  $args
      * @param  array<string, mixed>|null  $current  the dish being changed
-     * @return array{id: int|null, productId: int|null, name: array{ca: string, es: string}|null, description: array{ca: string, es: string}|null, price: int|null}
+     * @return array{id: int|null, productId: int|null, name: array{ca: string, es: string}|null, description: array{ca: string, es: string}|null, price: int|null, priceText: string|null}
      */
     private function item(array $args, ?array $current): array
     {
@@ -328,13 +370,16 @@ class CartaTools
             ? $this->names($args, false, 'description', 200)
             : ($current['description'] ?? null);
         $price = array_key_exists('price', $args) ? $this->cents($args['price']) : ($current['price'] ?? null);
+        $priceText = array_key_exists('price_text', $args)
+            ? (is_string($args['price_text']) && trim($args['price_text']) !== '' ? mb_substr(trim($args['price_text']), 0, 20) : null)
+            : ($current['priceText'] ?? null);
         $product = null;
 
         if ($productId !== null) {
             $product = $this->products()->get($productId) ?? throw new MenuToolError("No existe el producto {$productId}: mira los ids con get_catalog.");
         } elseif ($name === null) {
             throw new MenuToolError('Cada plato necesita nombre o product_id.');
-        } elseif ($price === null) {
+        } elseif ($price === null && $priceText === null) {
             $product = $this->findProduct($name);
         }
 
@@ -344,20 +389,22 @@ class CartaTools
 
         $label = ($name ?? $product->name ?? [])['ca'] ?? '';
 
-        if ($price === null && $product?->price === null) {
+        if ($priceText !== null) {
+            // Priced with a text: nothing to check.
+        } elseif ($price === null && $product?->price === null) {
             $this->unpriced[] = $label;
         } elseif ($price === null) {
             $this->fromCatalog[] = $label.' ('.$this->euros((int) $product->price).')';
         }
 
-        return ['id' => $current['id'] ?? null, 'productId' => $product?->id, 'name' => $name, 'description' => $description, 'price' => $price];
+        return ['id' => $current['id'] ?? null, 'productId' => $product?->id, 'name' => $name, 'description' => $description, 'price' => $price, 'priceText' => $priceText];
     }
 
     private function checkPrices(): void
     {
         if ($this->unpriced !== []) {
             throw new MenuToolError('No se ha guardado nada. No sé el precio de: '.implode(', ', array_map(fn ($n) => "«{$n}»", $this->unpriced))
-                .'. No están en la carta del TPV (o allí no tienen precio). Pregunta al usuario el precio de cada uno (no lo inventes) y vuelve a llamar con price.');
+                .'. No están en la carta del TPV (o allí no tienen precio). Pregunta al usuario el precio de cada uno (no lo inventes) y vuelve a llamar con price (o price_text si es un texto como «S.M.»).');
         }
     }
 
@@ -462,6 +509,10 @@ class CartaTools
         $name = ($item['name'] ?? $product->name ?? [])['ca'] ?? '';
         $price = $item['price'] ?? $product?->price;
 
+        if (($item['priceText'] ?? null) !== null) {
+            return $name.' '.$item['priceText'];
+        }
+
         return $name.($price !== null ? ' '.$this->euros((int) $price) : '');
     }
 
@@ -507,6 +558,31 @@ class CartaTools
     }
 
     /**
+     * The carta printed for real (DomPDF), so the model can see whether it fits and review
+     * the HTML it produced with its CSS. Images are left out of the HTML (they are only data).
+     *
+     * @param  array<string, mixed>  $args
+     * @return array{result: array<string, mixed>}
+     */
+    private function check(array $args): array
+    {
+        $carta = Carta::query()->with('sections.items.product')->find((int) ($args['id'] ?? 0)) ?? throw new MenuToolError('No existe esa carta: mira los ids con get_cartas.');
+        $languages = array_values(array_intersect(MenuDocument::LOCALES, array_map('strval', (array) ($args['languages'] ?? [])))) ?: ['ca', 'es'];
+        app(MenuTranslator::class)->ensure($carta, $languages);
+        $carta->refresh()->load('sections.items.product');
+        $document = app(CartaDocument::class);
+        $result = ['languages' => $document->report($carta, $carta->template, $languages)];
+
+        if (($args['include_html'] ?? true) !== false) {
+            $html = $document->html($carta, $carta->template, [$languages[0]]);
+            $html = (string) preg_replace('/data:[a-z\/+.-]+;base64,[A-Za-z0-9+\/=]+/', 'data:…', $html);
+            $result['html'] = mb_strlen($html) > 20000 ? mb_substr($html, 0, 20000).'…' : $html;
+        }
+
+        return ['result' => $result];
+    }
+
+    /**
      * @param  array<string, mixed>  $args
      * @return array{result: array<string, mixed>, action: array{kind: string, label: string}}
      */
@@ -535,6 +611,8 @@ class CartaTools
             'subtitle' => $carta->subtitle,
             'active' => $carta->active,
             'template' => $carta->template,
+            'notes' => $carta->notes,
+            'layout' => ['maxPages' => $carta->maxPages(), 'css' => $carta->css()],
             'sections' => $carta->sections->map(fn (CartaSection $s) => [
                 'id' => $s->id,
                 'name' => $s->name,
@@ -544,6 +622,7 @@ class CartaTools
                     'name' => $i->name,
                     'description' => $i->description,
                     'price' => $i->price,
+                    'priceText' => $i->price_text,
                 ])->all(),
             ])->all(),
         ];
@@ -561,7 +640,11 @@ class CartaTools
             'name_ca' => $carta->name['ca'] ?? '',
             'name_es' => $carta->name['es'] ?? '',
             'subtitle_ca' => $carta->subtitle['ca'] ?? null,
+            'notes_ca' => $carta->notes['ca'] ?? null,
+            'notes_es' => $carta->notes['es'] ?? null,
             'template' => $carta->template,
+            'max_pages' => $carta->maxPages(),
+            'css' => $carta->css(),
             'active' => $carta->active,
             'sections' => $carta->sections->map(fn (CartaSection $s) => [
                 'id' => $s->id,
@@ -573,8 +656,9 @@ class CartaTools
                     'name_ca' => $i->displayName()['ca'] ?? '',
                     'name_es' => $i->displayName()['es'] ?? '',
                     'description_ca' => $i->description['ca'] ?? null,
-                    'price' => $i->effectivePrice() === null ? null : $i->effectivePrice() / 100,
-                    'price_from_catalog' => $i->price === null && $i->product_id !== null ? true : null,
+                    'price' => $i->price_text === null && $i->effectivePrice() !== null ? $i->effectivePrice() / 100 : null,
+                    'price_text' => $i->price_text,
+                    'price_from_catalog' => $i->price === null && $i->price_text === null && $i->product_id !== null ? true : null,
                 ], fn ($v) => $v !== null))->values()->all(),
             ])->values()->all(),
         ];
@@ -592,6 +676,7 @@ class CartaTools
             'id' => $carta->id,
             'name' => $carta->name,
             'subtitle' => $carta->subtitle,
+            'notes' => $carta->notes,
             'template' => $carta->template,
             'active' => $carta->active,
             'sections' => $carta->sections->map(fn (CartaSection $s) => [
@@ -600,7 +685,8 @@ class CartaTools
                     'name' => $i->displayName(),
                     'description' => $i->description,
                     'price' => $i->effectivePrice(),
-                    'fromCatalog' => $i->price === null && $i->product_id !== null,
+                    'priceText' => $i->price_text,
+                    'fromCatalog' => $i->price === null && $i->price_text === null && $i->product_id !== null,
                 ])->values()->all(),
             ])->values()->all(),
         ];

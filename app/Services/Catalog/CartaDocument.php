@@ -27,7 +27,7 @@ class CartaDocument
     /**
      * Texts to translate, in both source languages, with the structure of the carta.
      *
-     * @return array{name: array{ca: string, es: string}, subtitle: array{ca: string, es: string}|null, sections: list<array{name: array{ca: string, es: string}, items: list<array{name: array{ca: string, es: string}, description: array{ca: string, es: string}|null}>}>}
+     * @return array{name: array{ca: string, es: string}, subtitle: array{ca: string, es: string}|null, sections: list<array{name: array{ca: string, es: string}, items: list<array{name: array{ca: string, es: string}, description: array{ca: string, es: string}|null}>}>, notes: array{ca: string, es: string}|null}
      */
     public function source(Carta $carta): array
     {
@@ -43,6 +43,7 @@ class CartaDocument
                     'description' => $i->description ? $this->menus->pair($i->description) : null,
                 ])->all()),
             ])->all()),
+            'notes' => $carta->notes ? $this->menus->pair($carta->notes) : null,
         ];
     }
 
@@ -71,7 +72,7 @@ class CartaDocument
     /**
      * The carta in one language, ready for the template.
      *
-     * @return array{kind: string, locale: string, name: string, subtitle: string|null, vat: string, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}
+     * @return array{kind: string, locale: string, name: string, subtitle: string|null, notes: string|null, vat: string, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}
      */
     public function localized(Carta $carta, string $locale): array
     {
@@ -89,11 +90,12 @@ class CartaDocument
             $items = [];
 
             foreach ($section['items'] as $i => $item) {
-                $price = $carta->sections[$s]->items[$i]->effectivePrice();
+                $dish = $carta->sections[$s]->items[$i];
+                $price = $dish->effectivePrice();
                 $items[] = [
                     'name' => $pick($item['name'], $translated['sections'][$s]['items'][$i]['name'] ?? null),
                     'description' => $item['description'] ? $pick($item['description'], $translated['sections'][$s]['items'][$i]['description'] ?? null) : null,
-                    'price' => $price === null ? null : $this->menus->money($price, $locale),
+                    'price' => $dish->price_text ?? ($price === null ? null : $this->menus->money($price, $locale)),
                 ];
             }
 
@@ -105,6 +107,7 @@ class CartaDocument
             'locale' => $locale,
             'name' => $pick($source['name'], $translated['name'] ?? null),
             'subtitle' => $source['subtitle'] ? $pick($source['subtitle'], $translated['subtitle'] ?? null) : null,
+            'notes' => $source['notes'] ? $pick($source['notes'], $translated['notes'] ?? null) : null,
             'vat' => (MenuDocument::LABELS[$locale] ?? MenuDocument::LABELS['es'])['vat'],
             'sections' => $sections,
         ];
@@ -131,28 +134,66 @@ class CartaDocument
         $pages = [];
 
         foreach ($locales as $locale) {
-            array_push($pages, ...$this->fitted($this->localized($carta, $locale), $template, $logo));
+            array_push($pages, ...$this->fitted($this->localized($carta, $locale), $template, $logo, $carta->maxPages(), $carta->css()));
         }
 
-        return $this->menus->view($template, $pages, $logo);
+        return $this->menus->view($template, $pages, $logo, $carta->css());
+    }
+
+    /**
+     * How the carta really prints, language by language: sheets DomPDF needs, type size used
+     * and whether it is at the smallest readable size. The assistant uses it to check its
+     * layout (fit in one sheet, its CSS…) and fix it before showing it.
+     *
+     * @param  list<string>  $locales
+     * @return list<array{locale: string, sheets: int, planned_sheets: int, max_pages: int|null, type_size: float, at_minimum: bool, fits: bool}>
+     */
+    public function report(Carta $carta, string $template, array $locales): array
+    {
+        $template = in_array($template, MenuDocument::TEMPLATES, true) ? $template : 'classic';
+        $logo = $this->menus->logo();
+        $report = [];
+
+        foreach (array_values(array_intersect(MenuDocument::LOCALES, $locales)) ?: ['ca'] as $locale) {
+            $pages = $this->fitted($this->localized($carta, $locale), $template, $logo, $carta->maxPages(), $carta->css());
+            $density = (float) ($pages[0]['sizes']['density'] ?? 1);
+            $sheets = $this->sheets($this->menus->view($template, $pages, $logo, $carta->css()));
+            $report[] = [
+                'locale' => $locale,
+                'sheets' => $sheets,
+                'planned_sheets' => count($pages),
+                'max_pages' => $carta->maxPages(),
+                'type_size' => round($density, 2),
+                'at_minimum' => $density <= ($carta->maxPages() !== null ? 0.0 : self::MIN_DENSITY) + 0.001,
+                'fits' => $carta->maxPages() === null || $sheets <= $carta->maxPages(),
+            ];
+        }
+
+        return $report;
+    }
+
+    private function sheets(string $html): int
+    {
+        $pdf = Pdf::loadHTML($html)->setPaper('a4');
+        $pdf->render();
+
+        return (int) $pdf->getDomPDF()->getCanvas()->get_page_count();
     }
 
     /**
      * Sheets for one language: the largest type that keeps the fewest sheets, checked with
      * DomPDF and shrunk if a sheet still overflows.
      *
-     * @param  array{kind: string, locale: string, name: string, subtitle: string|null, vat: string, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
+     * @param  array{kind: string, locale: string, name: string, subtitle: string|null, notes?: string|null, vat: string, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
      * @return list<array<string, mixed>>
      */
-    private function fitted(array $carta, string $template, ?string $logo): array
+    private function fitted(array $carta, string $template, ?string $logo, ?int $maxPages = null, ?string $css = null): array
     {
-        $density = $this->density($carta, $template, $logo !== null);
+        $density = $this->density($carta, $template, $logo !== null, $maxPages);
 
         do {
             $pages = $this->paginate($carta, $this->menus->sizes($density), $template, $logo !== null);
-            $pdf = Pdf::loadHTML($this->menus->view($template, $pages, $logo))->setPaper('a4');
-            $pdf->render();
-            $sheets = $pdf->getDomPDF()->getCanvas()->get_page_count();
+            $sheets = $this->sheets($this->menus->view($template, $pages, $logo, $css));
             $density = round($density - 0.05, 2);
         } while ($sheets > count($pages) && $density >= 0);
 
@@ -160,30 +201,34 @@ class CartaDocument
     }
 
     /**
-     * Largest density that needs no more sheets than the smallest readable type would.
+     * Largest density that needs no more sheets than the smallest readable type would. With
+     * a maximum of sheets, the type may go smaller to keep within it, or stay bigger when it
+     * allows more sheets than the fewest.
      *
-     * @param  array{name: string, subtitle: string|null, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
+     * @param  array{name: string, subtitle: string|null, notes?: string|null, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
      */
-    public function density(array $carta, string $template = 'classic', bool $logo = true): float
+    public function density(array $carta, string $template = 'classic', bool $logo = true, ?int $maxPages = null): float
     {
-        $fewest = count($this->paginate($carta, $this->menus->sizes(self::MIN_DENSITY), $template, $logo));
+        $minimum = $maxPages !== null ? 0.0 : self::MIN_DENSITY;
+        $fewest = count($this->paginate($carta, $this->menus->sizes($minimum), $template, $logo));
+        $target = $maxPages !== null ? max($fewest, $maxPages) : $fewest;
 
-        for ($step = 0; 1 - $step * 0.02 > self::MIN_DENSITY; $step++) {
+        for ($step = 0; 1 - $step * 0.02 > $minimum; $step++) {
             $d = round(1 - $step * 0.02, 2);
 
-            if (count($this->paginate($carta, $this->menus->sizes($d), $template, $logo)) <= $fewest) {
+            if (count($this->paginate($carta, $this->menus->sizes($d), $template, $logo)) <= $target) {
                 return $d;
             }
         }
 
-        return self::MIN_DENSITY;
+        return $minimum;
     }
 
     /**
      * Split the carta into sheets by estimated height. The title goes on the first sheet,
      * the VAT note on the last; a section cut in two repeats its heading.
      *
-     * @param  array{locale?: string, vat?: string, name: string, subtitle: string|null, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
+     * @param  array{locale?: string, vat?: string, name: string, subtitle: string|null, notes?: string|null, sections: list<array{name: string, items: list<array{name: string, description: string|null, price: string|null}>}>}  $carta
      * @param  array<string, float>  $z
      * @return list<array<string, mixed>>
      */
@@ -234,6 +279,18 @@ class CartaDocument
             }
         }
 
+        // The notes go at the end of the last sheet; if they do not fit, on a sheet of their own.
+        $notes = $carta['notes'] ?? null;
+
+        if ($notes) {
+            $notesHeight = 4 + array_sum(array_map(fn (string $text) => $line($this->notesSize($z), $text), explode("\n", $notes)));
+
+            if (($used + $notesHeight + 8) * 1.06 > $capacity && $current !== []) {
+                $pages[] = $current;
+                $current = [];
+            }
+        }
+
         $pages[] = $current;
         $last = count($pages) - 1;
 
@@ -243,10 +300,21 @@ class CartaDocument
             'name' => $carta['name'],
             'subtitle' => $carta['subtitle'],
             'vat' => $carta['vat'] ?? '',
+            'notes' => $i === $last ? ($carta['notes'] ?? null) : null,
             'first' => $i === 0,
             'last' => $i === $last,
             'sections' => $sections,
             'sizes' => $z,
         ], $pages, array_keys($pages));
+    }
+
+    /**
+     * Type size (pt) of the notes: small, a little under the dish descriptions.
+     *
+     * @param  array<string, float>  $z
+     */
+    public function notesSize(array $z): float
+    {
+        return round(max(6.5, $z['includes'] * 0.85), 1);
     }
 }

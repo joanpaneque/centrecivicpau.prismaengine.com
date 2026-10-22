@@ -8,6 +8,7 @@
         body { font-family: DejaVu Sans, sans-serif; font-size: 9px; color: #111; }
         table { width: 100%; border-collapse: collapse; }
         td { padding: 1px 0; vertical-align: top; }
+        .nowrap { white-space: nowrap; padding: 1px 6px; }
         .center { text-align: center; }
         .right { text-align: right; }
         .bold { font-weight: bold; }
@@ -24,20 +25,23 @@
             @php $type = $line['type'] ?? ''; @endphp
             @if ($type === 'text')
                 <tr>
-                    <td colspan="2" class="{{ ($line['align'] ?? 'left') === 'center' ? 'center' : (($line['align'] ?? '') === 'right' ? 'right' : '') }} {{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">
+                    <td colspan="3" class="{{ ($line['align'] ?? 'left') === 'center' ? 'center' : (($line['align'] ?? '') === 'right' ? 'right' : '') }} {{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">
                         {{ $line['text'] ?? '' }}
                     </td>
                 </tr>
             @elseif ($type === 'row')
                 <tr>
-                    <td class="{{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">{{ $line['left'] ?? '' }}</td>
+                    <td @if (empty($line['center'])) colspan="2" @endif class="{{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">{{ $line['left'] ?? '' }}</td>
+                    @if (! empty($line['center']))
+                        <td class="center nowrap {{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">{{ $line['center'] }}</td>
+                    @endif
                     <td class="right {{ ! empty($line['bold']) ? 'bold' : '' }} {{ ($line['size'] ?? 1) == 2 ? 'big' : '' }}">{{ $line['right'] ?? '' }}</td>
                 </tr>
             @elseif ($type === 'divider')
-                <tr><td colspan="2" class="divider"></td></tr>
+                <tr><td colspan="3" class="divider"></td></tr>
             @elseif ($type === 'qr' && ! empty($line['data']))
                 <tr>
-                    <td colspan="2" class="center">
+                    <td colspan="3" class="center">
                         <img class="qr" src="{{ \App\Services\Printing\DocumentPdfRenderer::qrDataUri((string) $line['data']) }}"><br>
                         @if (! empty($line['caption']))
                             <span class="muted">{{ $line['caption'] }}</span>
@@ -46,12 +50,12 @@
                 </tr>
             @elseif ($type === 'image')
                 @if (! empty($logo))
-                    <tr><td colspan="2" class="center"><img class="logo" src="{{ $logo }}"></td></tr>
+                    <tr><td colspan="3" class="center"><img class="logo" src="{{ $logo }}"></td></tr>
                 @elseif (is_string($line['url'] ?? null) && str_starts_with($line['url'], 'data:image/'))
-                    <tr><td colspan="2" class="center"><img class="logo" src="{{ $line['url'] }}"></td></tr>
+                    <tr><td colspan="3" class="center"><img class="logo" src="{{ $line['url'] }}"></td></tr>
                 @endif
             @elseif ($type === 'feed')
-                <tr><td colspan="2" style="height: {{ max(1, (int) ($line['lines'] ?? 1)) * 8 }}px"></td></tr>
+                <tr><td colspan="3" style="height: {{ max(1, (int) ($line['lines'] ?? 1)) * 8 }}px"></td></tr>
             @endif
         @endforeach
     </table>

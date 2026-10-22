@@ -34,6 +34,9 @@ class CartaController extends Controller
                 'id' => $c->id,
                 'name' => $c->name,
                 'subtitle' => $c->subtitle,
+                'notes' => $c->notes,
+                'maxPages' => $c->maxPages(),
+                'css' => $c->css(),
                 'template' => $c->template,
                 'active' => $c->active,
                 'sections' => $c->sections->map(fn (CartaSection $s) => [
@@ -45,6 +48,7 @@ class CartaController extends Controller
                         'name' => $i->name,
                         'description' => $i->description,
                         'price' => $i->price,
+                        'priceText' => $i->price_text,
                         'effectivePrice' => $i->effectivePrice(),
                         'displayName' => $i->displayName(),
                     ])->values()->all(),
@@ -83,7 +87,7 @@ class CartaController extends Controller
                 $newSection = $copy->sections()->create($section->only(['name', 'sort']));
 
                 foreach ($section->items as $item) {
-                    $newSection->items()->create($item->only(['product_id', 'name', 'description', 'price', 'sort']));
+                    $newSection->items()->create($item->only(['product_id', 'name', 'description', 'price', 'price_text', 'sort']));
                 }
             }
         });
@@ -157,6 +161,12 @@ class CartaController extends Controller
             'subtitle' => ['nullable', 'array'],
             'subtitle.ca' => ['nullable', 'string', 'max:200'],
             'subtitle.es' => ['nullable', 'string', 'max:200'],
+            'notes' => ['nullable', 'array'],
+            'notes.ca' => ['nullable', 'string', 'max:1000'],
+            'notes.es' => ['nullable', 'string', 'max:1000'],
+            'layout' => ['nullable', 'array'],
+            'layout.maxPages' => ['nullable', 'integer', 'between:1,10'],
+            'layout.css' => ['nullable', 'string', 'max:8000'],
             'active' => ['boolean'],
             'template' => ['nullable', Rule::in(MenuDocument::TEMPLATES)],
             'sections' => ['array'],
@@ -168,6 +178,7 @@ class CartaController extends Controller
             'sections.*.items.*.name' => ['nullable', 'array'],
             'sections.*.items.*.description' => ['nullable', 'array'],
             'sections.*.items.*.price' => ['nullable', 'integer', 'min:0'],
+            'sections.*.items.*.priceText' => ['nullable', 'string', 'max:20'],
         ]);
 
         // Every dish needs a name, and a price of its own or from its product.
@@ -181,7 +192,7 @@ class CartaController extends Controller
                     throw ValidationException::withMessages(["sections.{$s}.items.{$i}.name" => __('tpv.carta_item_name')]);
                 }
 
-                if (! isset($item['price']) && ($prices[$item['productId'] ?? 0] ?? null) === null) {
+                if (! isset($item['price']) && trim((string) ($item['priceText'] ?? '')) === '' && ($prices[$item['productId'] ?? 0] ?? null) === null) {
                     throw ValidationException::withMessages(["sections.{$s}.items.{$i}.price" => __('tpv.carta_item_price')]);
                 }
             }

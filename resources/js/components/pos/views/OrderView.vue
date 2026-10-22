@@ -12,6 +12,7 @@ import TableMoveDialog from '@/components/pos/TableMoveDialog.vue';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { t, tr } from '@/i18n';
+import { formatDateTime } from '@/lib/format';
 import { printOrOpen } from '@/pos/cashier';
 import { productModifierGroups } from '@/pos/catalog';
 import { tabletLayout } from '@/pos/layout';
@@ -108,6 +109,12 @@ const title = computed(() => (table.value ? t('order.table', { label: table.valu
 const canCharge = computed(() => state.device?.type === 'cashier' && !!order.value);
 const isCashier = computed(() => state.device?.type === 'cashier');
 const canSendAndCharge = computed(() => isCashier.value && !tableId.value);
+/** When the first product of the order was sent (the order opening as a fallback). */
+const firstProductAt = computed(() => {
+    const times = (order.value?.lines ?? []).map((l) => l.sentAt).filter((at): at is string => !!at).sort((x, y) => new Date(x).getTime() - new Date(y).getTime());
+
+    return times[0] ?? order.value?.openedAt ?? null;
+});
 /** Table buttons: in the order header, or white on blue in the top bar on the waiter tablet. */
 const headerButton = computed(() => (tabletLayout.value ? 'h-8 border-white/30 bg-white/10 text-white hover:bg-white/20 hover:text-white' : 'h-11'));
 
@@ -330,6 +337,8 @@ async function printProforma(): Promise<void> {
         if (outcome === 'printed') {
             toast.success(t('cashier.sentTo', { name: directTicketPrinter()?.name ?? '' }));
         }
+
+        go('/sala');
     } catch {
         toast.error(t('common.error'));
     } finally {
@@ -468,6 +477,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                     <h2 class="truncate text-lg font-bold text-[#00056a]">{{ title }}</h2>
                     <p class="flex items-center gap-2 text-xs text-slate-500">
                         <span v-if="zone">{{ tr(zone.name) }}</span>
+                        <span v-if="firstProductAt">{{ formatDateTime(firstProductAt) }}</span>
                         <span v-if="order?.status === 'bill_requested'" class="rounded bg-amber-100 px-1.5 font-semibold text-amber-800">{{ t('order.billRequested') }}</span>
                         <span v-if="surchargeRate">{{ t('order.surchargeInfo', { percent: surchargeRate }) }}</span>
                     </p>

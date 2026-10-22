@@ -140,10 +140,15 @@
         .dish { line-height: 1.25; }
         .description { color: {{ $t['soft'] }}; font-style: italic; line-height: 1.25; }
         .cost { width: 24mm; text-align: right; white-space: nowrap; font-weight: bold; font-family: DejaVu Sans, Arial, sans-serif; color: {{ $t['title'] }}; }
+        .notes { margin-top: 5mm; text-align: left; line-height: 1.3; color: {{ $t['soft'] }}; font-family: DejaVu Sans, Arial, sans-serif; }
         @media screen {
             html, body { width: 210mm; height: 297mm; overflow: hidden; }
         }
     </style>
+    @if (! empty($css))
+    {{-- Extra CSS of this carta (written by the assistant or by hand), cleaned when saved --}}
+    <style>{!! $css !!}</style>
+    @endif
 </head>
 <body>
     <div class="frame"></div>
@@ -192,6 +197,7 @@
                 </div>
         @endforeach
 
+        @if (! empty($page['notes']))<div class="notes" style="font-size: {{ round(max(6.5, $z['includes'] * 0.85), 1) }}pt">{!! nl2br(e($page['notes'])) !!}</div>@endif
         @if ($page['last'])<div class="vat">{{ $page['vat'] }}@if ($business) · {{ $business }}@endif</div>@endif
     </div>
     @else

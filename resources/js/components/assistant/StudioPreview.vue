@@ -106,9 +106,11 @@ function readable(hex: string): string {
                             <span v-if="item.description" class="block text-xs text-slate-500 italic">{{ tr(item.description) }}</span>
                         </span>
                         <Link2 v-if="item.fromCatalog" class="size-3.5 shrink-0 text-slate-400" :aria-label="t('studio.priceFromCatalog')" />
-                        <span v-if="item.price !== null" class="font-semibold tabular-nums">{{ formatMoney(item.price) }}</span>
+                        <span v-if="item.priceText" class="font-semibold">{{ item.priceText }}</span>
+                        <span v-else-if="item.price !== null" class="font-semibold tabular-nums">{{ formatMoney(item.price) }}</span>
                     </div>
                 </div>
+                <p v-if="preview.notes" class="px-4 py-2.5 text-xs whitespace-pre-line text-slate-500">{{ tr(preview.notes) }}</p>
             </div>
         </template>
 

@@ -17,7 +17,8 @@ use App\Services\TimeTracking\WorkedTime;
  */
 class MenuAgent
 {
-    public const MAX_STEPS = 12;
+    /** Enough for designing a carta: change, print it for real, look, fix, check again. */
+    public const MAX_STEPS = 20;
 
     public function __construct(
         private readonly AssistantService $assistant,
@@ -219,6 +220,13 @@ class MenuAgent
               · Si dicen «carta» refiriéndose a un documento para imprimir o enseñar al cliente, es esto (save_carta, edit_carta, print_carta). Si dicen «posa'l a la carta» refiriéndose al TPV (para cobrarlo), son productos (create_product).
               · PRECIOS: si el usuario dice el precio, pásalo en price. Si NO lo dice, mira get_catalog: si el plato está en el TPV pasa su product_id y NO pongas price (se usa el del TPV y lo sigue si cambia). Si no está en el TPV, NO inventes el precio: pregúntalo con ask_user (sin opciones). La herramienta rechaza los platos sin precio y te dice cuáles faltan.
               · Para cambios sueltos («afegeix les braves a 5 €», «treu el flam», «puja el vermut a 3 €», «canvia el disseny a Nadal») usa edit_carta con la lista de cambios; no reescribas la carta entera. Lee antes los ids con get_cartas. Quitar un plato o sección que piden quitar no necesita confirmación; borrar la carta entera sí.
+              · PRECIO CON TEXTO: si dicen «S.M.», «segons mercat», «a consultar»… en vez de un precio, usa price_text con el texto tal cual lo quieren ver (por defecto «S.M.»), sin price.
+              · NOTAS AL PIE: texto pequeño al final de la carta (leyenda, «S.M. = segons mercat», alérgenos, «Pa i servei inclosos»…) en notes_ca/notes_es. SOLO si lo piden; no las añadas por tu cuenta.
+              · CONTROL DEL DOCUMENTO: tú decides cómo queda la hoja impresa.
+                - «Que hi càpiga en un full» → max_pages = 1 (la letra se reduce lo necesario). Para volver a lo automático, max_pages = null.
+                - Puedes retocar el diseño con css (espaciados, tamaños con !important, colores, alineación, ocultar el marco o los dibujos…). Escribe CSS sencillo y válido para DomPDF. No lo uses si no hace falta.
+                - Después de cambiar max_pages, css, notas o bastantes platos, llama SIEMPRE a check_carta_layout y mira las hojas reales (sheets), si cabe (fits), el tamaño de letra (type_size, 0 = el mínimo) y el HTML. Si no cabe o algo no cuadra, corrige con edit_carta y vuelve a comprobar (como mucho 3 intentos). No digas que cabe en una hoja sin haberlo comprobado.
+                - Si ni con la letra mínima cabe, propónselo al usuario con ask_user (quitar descripciones, acortar notas, dos hojas…) en lugar de dejar algo ilegible.
             TEXT;
         }
 
