@@ -359,6 +359,7 @@ const es: Messages = {
         lineEdited: 'Línea actualizada',
         sendAndCharge: 'Enviar y cobrar',
         chargeWithoutSending: 'Cobrar sin enviar',
+        proformaWithoutSending: 'Imprimir proforma sin enviar',
         moveTable: 'Mover mesa',
         moveTitle: 'Mover la mesa {label}',
         moveHelp: 'Cambia de sala si hace falta y toca la mesa nueva. Las ocupadas no se pueden elegir.',

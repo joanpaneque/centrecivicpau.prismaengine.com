@@ -357,6 +357,7 @@ const ca = {
         lineEdited: 'Línia actualitzada',
         sendAndCharge: 'Envia i cobra',
         chargeWithoutSending: 'Cobra sense enviar',
+        proformaWithoutSending: 'Imprimeix la proforma sense enviar',
         moveTable: 'Mou taula',
         moveTitle: 'Mou la taula {label}',
         moveHelp: 'Canvia de sala si cal i toca la taula nova. Les ocupades no es poden triar.',

@@ -13,6 +13,7 @@ concurrency:
 jobs:
   # The Windows print program (print-agent/). Its version only changes when print-agent/
   # changes, so the PCs of the bar update themselves only when there is something new.
+  # It is only built when this push touches print-agent/ (or when run by hand).
   print-agent:
     runs-on: ubuntu-latest
     steps:
@@ -20,17 +21,33 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Did the print program change?
+        id: changes
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" != "push" ] || [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null \
+            || ! git diff --quiet "$BEFORE" "${{ github.sha }}" -- print-agent; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "print-agent/ no ha cambiado: no se compila."
+          fi
+
       - uses: actions/setup-dotnet@v4
+        if: steps.changes.outputs.changed == 'true'
         with:
           dotnet-version: '8.0.x'
 
       - name: Build the program
+        if: steps.changes.outputs.changed == 'true'
         run: |
           VERSION="1.0.$(git rev-list --count HEAD -- print-agent)"
           dotnet publish print-agent/App -c Release -o print-agent/dist -p:Version="$VERSION"
           echo "$VERSION" > print-agent/dist/version.txt
 
       - name: Upload it to the server
+        if: steps.changes.outputs.changed == 'true'
         uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.SSH_HOST }}

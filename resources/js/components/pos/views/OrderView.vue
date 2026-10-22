@@ -267,7 +267,8 @@ function changeQty(line: DraftLine, delta: number): void {
     }
 }
 
-async function send(holdSecond = false, charge = false, silent = false): Promise<void> {
+/** after: go to charge it, or print its proforma (and back to the floor). silent: nothing to the kitchen. */
+async function send(holdSecond = false, after: 'charge' | 'proforma' | null = null, silent = false): Promise<void> {
     if (!draft.value.lines.length || sending.value) {
         return;
     }
@@ -288,8 +289,10 @@ async function send(holdSecond = false, charge = false, silent = false): Promise
 
         draft.value = draftFor(followOrder(uuid), tableId.value);
 
-        if (charge) {
+        if (after === 'charge') {
             go(`/caixa/${uuid}`);
+        } else if (after === 'proforma') {
+            await printProforma(followOrder(uuid));
         } else if (!tableId.value) {
             go(`/comanda/${uuid}`);
         } else {
@@ -323,16 +326,16 @@ async function bill(): Promise<void> {
     toast.success(t('order.billRequested'));
 }
 
-async function printProforma(): Promise<void> {
-    if (!order.value || printingProforma.value) {
+async function printProforma(target = order.value): Promise<void> {
+    if (!target || printingProforma.value) {
         return;
     }
 
     printingProforma.value = true;
 
     try {
-        const outcome = await printOrOpen('bill', proformaTitle(order.value), proformaDocument(order.value));
-        await markProforma(order.value);
+        const outcome = await printOrOpen('bill', proformaTitle(target), proformaDocument(target));
+        await markProforma(target);
 
         if (outcome === 'printed') {
             toast.success(t('cashier.sentTo', { name: directTicketPrinter()?.name ?? '' }));
@@ -639,7 +642,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <Send class="size-5" />
                         {{ sending ? t('order.sending') : t('order.send') }} ({{ draft.lines.reduce((s, l) => s + l.quantity, 0) }})
                     </Button>
-                    <Button v-if="draft.lines.length && canSendAndCharge" class="h-12 bg-[#00056a] text-base" :disabled="sending" @click="send(false, true)">
+                    <Button v-if="draft.lines.length && canSendAndCharge" class="h-12 bg-[#00056a] text-base" :disabled="sending" @click="send(false, 'charge')">
                         <Receipt class="size-5" />
                         {{ t('order.sendAndCharge') }}
                     </Button>
@@ -649,10 +652,20 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         class="h-12 border-[#00056a] text-base text-[#00056a]"
                         :class="canSendAndCharge ? '' : 'col-span-2'"
                         :disabled="sending"
-                        @click="send(false, true, true)"
+                        @click="send(false, 'charge', true)"
                     >
                         <Receipt class="size-5" />
                         {{ t('order.chargeWithoutSending') }}
+                    </Button>
+                    <Button
+                        v-if="draft.lines.length && isCashier"
+                        variant="outline"
+                        class="col-span-2 h-12 text-base"
+                        :disabled="sending || printingProforma"
+                        @click="send(false, 'proforma', true)"
+                    >
+                        <FileText class="size-5" />
+                        {{ printingProforma ? (directTicketPrinter() ? t('cashier.sending') : t('cashier.openingPdf')) : t('order.proformaWithoutSending') }}
                     </Button>
                     <Button v-if="draft.lines.length && hasSecondCourse" variant="outline" class="col-span-2 h-11" :disabled="sending" @click="send(true)">
                         <Timer class="size-4" />
@@ -666,7 +679,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <BellRing class="size-5" />
                         {{ t('order.requestBill') }}
                     </Button>
-                    <Button v-if="canCharge && !draft.lines.length" variant="outline" class="h-12" :disabled="printingProforma" @click="printProforma">
+                    <Button v-if="canCharge && !draft.lines.length" variant="outline" class="h-12" :disabled="printingProforma" @click="printProforma()">
                         <FileText class="size-5" />
                         {{ printingProforma ? (directTicketPrinter() ? t('cashier.sending') : t('cashier.openingPdf')) : t('order.printProforma') }}
                     </Button>
