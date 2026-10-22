@@ -33,6 +33,8 @@ export type Draft = {
     guests: number | null;
     reservationUuid: string | null;
     lines: DraftLine[];
+    /** When a line was last added (ISO): drafts left alone for hours are dropped. */
+    updatedAt?: string;
 };
 
 const STORAGE_KEY = 'tpv-drafts';
@@ -61,10 +63,36 @@ export function draftFor(order: Order | null, tableId: number | null, label: str
             guests: order?.guests ?? null,
             reservationUuid: null,
             lines: [],
+            updatedAt: new Date().toISOString(),
         };
     }
 
     return drafts[key];
+}
+
+const DRAFT_TTL = 12 * 3600 * 1000;
+const DRAFT_RECENT = 30 * 60 * 1000;
+
+/**
+ * Drops unsent lines that no longer belong anywhere: the order they were for was charged or
+ * cancelled on another device, or nobody touched them for hours. They live only on this
+ * device, so otherwise they keep showing the table as taken here (and sending them would
+ * reopen the closed order). A draft still being filled in moves to a new order instead.
+ */
+export function pruneDrafts(): void {
+    const now = Date.now();
+
+    for (const [key, draft] of Object.entries(drafts)) {
+        const age = now - new Date(draft.updatedAt ?? 0).getTime();
+        const order = state.orders[draft.orderUuid];
+        const closed = !!order && order.status !== 'open' && order.status !== 'bill_requested';
+
+        if (age > DRAFT_TTL || (closed && age > DRAFT_RECENT)) {
+            delete drafts[key];
+        } else if (closed) {
+            draft.orderUuid = uuid();
+        }
+    }
 }
 
 export function draftKeyOf(draft: Draft): string | undefined {
@@ -160,6 +188,7 @@ export function draftFromMenu(menu: SetMenu, choices: { name: T9n; productId: nu
 
 /** Adds the line (or more units of an identical one) and returns the draft line that holds it. */
 export function addToDraft(draft: Draft, line: DraftLine): DraftLine {
+    draft.updatedAt = new Date().toISOString();
     const same = draft.lines.find((l) => {
         if (l.children.length || line.children.length || l.note !== line.note || l.course !== line.course) {
             return false;

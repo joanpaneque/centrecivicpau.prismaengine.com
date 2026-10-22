@@ -9,7 +9,7 @@ import { t, tr } from '@/i18n';
 import { api, HttpError } from '@/lib/http';
 import { tabletLayout } from '@/pos/layout';
 import { formatMoney } from '@/pos/money';
-import { orderTotal, tableStatus } from '@/pos/orders';
+import { orderTotal, pruneDrafts, tableStatus } from '@/pos/orders';
 import { go } from '@/pos/router';
 import { sorted, state } from '@/pos/store';
 import { pull, sync } from '@/pos/sync';
@@ -59,7 +59,11 @@ const zoneCounts = computed(() => {
 const quickOrders = computed(() => sorted.activeOrders.value.filter((o) => !o.tableId));
 
 onMounted(() => {
-    clock = setInterval(() => (now.value = Date.now()), 30000);
+    pruneDrafts();
+    clock = setInterval(() => {
+        now.value = Date.now();
+        pruneDrafts();
+    }, 30000);
 });
 
 onBeforeUnmount(() => {
