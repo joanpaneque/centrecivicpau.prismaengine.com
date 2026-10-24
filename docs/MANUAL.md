@@ -219,6 +219,17 @@ El administrador ve las facturas en **Gestión → Facturas** (PDF, reenviar). T
 
 Serie de facturas completas: una para todo el local, por año (`F2026-000001`…).
 
+### Clientes habituales: resumen y una factura de todo junto
+
+Para quien viene muchas veces, paga cada vez y al final quiere **un solo documento de todo**.
+
+- **Crear un cliente:** en caja, pestaña **Clients / Clientes** → **Nou client / Nuevo cliente**. Código (lo elegís vosotros, por ejemplo «EMP1») y nombre; NIF, dirección, correo y teléfono son **opcionales**. También se puede crear desde el botón **Client / Cliente** de una cuenta.
+- **Asignar una cuenta:** dentro de la mesa (o al cobrar) botón **Client / Cliente** (icono de persona; en la tablet, arriba en la barra azul) → buscar por código o nombre → elegirlo. El botón pasa a mostrar el código. Se cobra normal: el ticket queda a nombre del cliente. Se puede cambiar o quitar con el mismo botón.
+- **Un ticket ya cobrado sin asignar:** **Clients** → el cliente → **Afegeix un tiquet / Añadir ticket** → buscar por número o mesa (últimos 90 días). La **X** de cada ticket lo quita del cliente.
+- **Imprimir el resumen:** **Clients** → el cliente → salen sus **tickets pendientes** (todos marcados; se pueden desmarcar) → **Imprimeix el resum / Imprimir resumen**. Sale un ticket con todos sus tickets y líneas, el total, el IVA y un **QR**. **No es factura.** Los tickets incluidos ya no vuelven a salir como pendientes; los resúmenes se pueden **reimprimir**.
+- **Factura de todo junto:** el cliente escanea el QR del resumen (`/factura/resum/…`) y rellena sus datos (vienen ya puestos si el cliente los tenía). Se emite **una sola factura completa** que sustituye a todos esos tickets. Después, ni el resumen ni ninguno de sus tickets se pueden volver a facturar (el QR de cada ticket muestra esa factura).
+- Un ticket que ya tiene factura propia no entra en ningún resumen.
+
 ---
 
 ## 11. Reservas (TPV → Reserves)

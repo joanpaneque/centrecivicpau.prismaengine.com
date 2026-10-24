@@ -291,7 +291,7 @@ class TicketController extends Controller
 
         return Inertia::render('admin/Invoices', [
             'invoices' => Invoice::query()
-                ->with('ticket:id,full_number,total')
+                ->with('ticket:id,full_number,total', 'statement.tickets:id,customer_statement_id,full_number,total')
                 ->when($search !== '', fn ($q) => $q->where(fn ($q) => $q->where('full_number', 'like', "%{$search}%")->orWhere('customer_name', 'like', "%{$search}%")->orWhere('customer_tax_id', 'like', "%{$search}%")))
                 ->latest('issued_at')
                 ->paginate(40)
@@ -300,11 +300,12 @@ class TicketController extends Controller
                     'id' => $i->id,
                     'ticketId' => $i->ticket_id,
                     'fullNumber' => $i->full_number,
-                    'ticketNumber' => $i->ticket->full_number,
+                    // A customer summary invoice covers several tickets: its summary number.
+                    'ticketNumber' => $i->ticket->full_number ?? $i->statement?->label().' ('.$i->statement?->tickets->count().')',
                     'customerName' => $i->customer_name,
                     'customerTaxId' => $i->customer_tax_id,
                     'customerEmail' => $i->customer_email,
-                    'total' => $i->ticket->total,
+                    'total' => $i->ticket->total ?? (int) $i->statement?->tickets->sum('total'),
                     'issuedAt' => $i->issued_at->toIso8601String(),
                     'emailedAt' => $i->emailed_at?->toIso8601String(),
                 ]),

@@ -3,6 +3,15 @@
 @php
     $money = fn (int $cents) => number_format($cents / 100, 2, ',', '.').' €';
     $name = fn ($value) => \App\Support\Translation::pick(is_array($value) ? $value : null);
+    // One ticket, or every ticket of a customer summary ($statement).
+    $many = $tickets->count() > 1;
+    $paid = [];
+
+    foreach ($tickets as $t) {
+        foreach ($t->payments as $payment) {
+            $paid[$payment->method] = ($paid[$payment->method] ?? 0) + $payment->amount;
+        }
+    }
 @endphp
 
 @section('title', 'Factura '.$invoice->full_number)
@@ -23,7 +32,11 @@
                 <h1>FACTURA</h1>
                 <div><strong>{{ $invoice->full_number }}</strong></div>
                 <div>Data / Fecha: {{ $invoice->issued_at->format('d/m/Y') }}</div>
-                <div class="muted">Tiquet / Ticket: {{ $ticket->full_number }} ({{ $ticket->issued_at->format('d/m/Y H:i') }})</div>
+                @if ($statement)
+                    <div class="muted">Resum / Resumen {{ $statement->label() }} · {{ $tickets->count() }} tiquets</div>
+                @else
+                    <div class="muted">Tiquet / Ticket: {{ $tickets->first()->full_number }} ({{ $tickets->first()->issued_at->format('d/m/Y H:i') }})</div>
+                @endif
             </td>
         </tr>
     </table>
@@ -47,6 +60,10 @@
             </tr>
         </thead>
         <tbody>
+            @foreach ($tickets as $ticket)
+            @if ($many)
+                <tr><td colspan="5"><strong>Tiquet {{ $ticket->full_number }}</strong> <span class="muted">{{ $ticket->issued_at->format('d/m/Y H:i') }}@if ($ticket->table_label) · {{ $ticket->table_label }}@endif</span></td></tr>
+            @endif
             @foreach ($ticket->lines as $line)
                 <tr>
                     <td>
@@ -70,6 +87,7 @@
                     <td class="right">{{ $money($ticket->surcharge_amount) }}</td>
                 </tr>
             @endif
+            @endforeach
         </tbody>
     </table>
 
@@ -83,7 +101,7 @@
             </tr>
         </thead>
         <tbody>
-            @foreach ($ticket->vat_breakdown as $row)
+            @foreach ($vat as $row)
                 <tr>
                     <td>{{ rtrim(rtrim(number_format((float) $row['rate'], 2, ',', ''), '0'), ',') }}%</td>
                     <td class="right">{{ $money((int) $row['base']) }}</td>
@@ -93,15 +111,15 @@
             @endforeach
             <tr class="total">
                 <td colspan="3">TOTAL</td>
-                <td class="right">{{ $money($ticket->total) }}</td>
+                <td class="right">{{ $money($total) }}</td>
             </tr>
         </tbody>
     </table>
 
     <p class="muted" style="margin-top: 14px">
         Forma de pagament / pago:
-        @foreach ($ticket->payments as $payment)
-            {{ $payment->method === 'card' ? 'Targeta / Tarjeta' : 'Efectiu / Efectivo' }} {{ $money($payment->amount) }}@if (! $loop->last), @endif
+        @foreach ($paid as $method => $amount)
+            {{ $method === 'card' ? 'Targeta / Tarjeta' : 'Efectiu / Efectivo' }} {{ $money($amount) }}@if (! $loop->last), @endif
         @endforeach
     </p>
 
@@ -110,7 +128,11 @@
             <td style="width: 90px"><img src="{{ \App\Support\Qr::dataUri($qr, 90) }}" style="width: 80px; height: 80px"></td>
             <td class="small muted">
                 VERI*FACTU (simulat / simulado). Factura verificable a la seu electrònica de l'AEAT.<br>
-                Aquesta factura substitueix el tiquet simplificat {{ $ticket->full_number }}.
+                @if ($many)
+                    Aquesta factura substitueix els tiquets simplificats / Esta factura sustituye a los tickets simplificados {{ $tickets->pluck('full_number')->implode(', ') }}.
+                @else
+                    Aquesta factura substitueix el tiquet simplificat {{ $tickets->first()->full_number }}.
+                @endif
             </td>
         </tr>
     </table>

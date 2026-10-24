@@ -3,6 +3,7 @@
 namespace App\Services\Sync\Handlers;
 
 use App\Models\AuditLog;
+use App\Models\Customer;
 use App\Models\DiningTable;
 use App\Models\KitchenTicket;
 use App\Models\KitchenTicketItem;
@@ -10,6 +11,7 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\Product;
 use App\Models\Reservation;
+use App\Models\Ticket;
 use App\Services\Sync\OperationContext;
 use App\Services\Sync\OperationHandler;
 use App\Services\Sync\OperationRejected;
@@ -30,7 +32,7 @@ class OrderOperations implements OperationHandler
     {
         return [
             'order.open', 'order.send', 'order.march', 'order.update', 'order.move', 'order.merge',
-            'order.requestBill', 'order.proforma', 'order.reopen', 'order.cancel', 'order.discount',
+            'order.requestBill', 'order.proforma', 'order.customer', 'order.reopen', 'order.cancel', 'order.discount',
             'line.void', 'line.discount', 'line.edit', 'line.quantity', 'line.move', 'product.soldOut', 'product.edit', 'print.job',
         ];
     }
@@ -50,6 +52,7 @@ class OrderOperations implements OperationHandler
             'order.merge' => $this->merge($payload, $context),
             'order.requestBill' => $this->setStatus($payload, $context, 'bill_requested'),
             'order.proforma' => $this->markProforma($payload, $context),
+            'order.customer' => $this->assignCustomer($payload, $context),
             'order.reopen' => $this->setStatus($payload, $context, 'open'),
             'order.cancel' => $this->cancel($payload, $context),
             'order.discount' => $this->discountOrder($payload, $context),
@@ -456,6 +459,30 @@ class OrderOperations implements OperationHandler
             'proforma_printed_at' => $status === 'open' ? null : $order->proforma_printed_at,
         ])->save();
 
+        $context->touch('orders');
+
+        return [];
+    }
+
+    /**
+     * The order goes to a customer (or to none), also once paid: its tickets follow it,
+     * except those already in a customer summary or invoiced.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function assignCustomer(array $payload, OperationContext $context): array
+    {
+        $order = $this->findOrder($payload);
+        $customerId = is_numeric($payload['customerId'] ?? null) ? (int) $payload['customerId'] : null;
+
+        if ($customerId !== null && ! Customer::query()->whereKey($customerId)->exists()) {
+            throw new OperationRejected('customer_not_found');
+        }
+
+        $order->forceFill(['customer_id' => $customerId])->save();
+        Ticket::query()->where('order_id', $order->id)->whereNull('customer_statement_id')->whereDoesntHave('invoice')->update(['customer_id' => $customerId]);
+        AuditLog::record('order.customer', $order, ['customer' => $customerId], userId: $context->operator->id, deviceId: $context->device?->id);
         $context->touch('orders');
 
         return [];

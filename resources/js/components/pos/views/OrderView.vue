@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRightLeft, BellRing, Ban, Calculator, ChefHat, Combine, Delete, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Settings, Timer, Trash2, Undo2, Users } from '@lucide/vue';
+import { ArrowLeft, ArrowRightLeft, Ban, BellRing, Calculator, ChefHat, Combine, Delete, FileText, Minus, MoreHorizontal, Percent, Plus, Receipt, Send, Settings, Timer, Trash2, Undo2, UserRound, Users } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import CustomerPicker from '@/components/pos/CustomerPicker.vue';
 import LineActions from '@/components/pos/LineActions.vue';
 import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
 import ModifierDialog from '@/components/pos/ModifierDialog.vue';
@@ -15,6 +16,7 @@ import { t, tr } from '@/i18n';
 import { formatDateTime } from '@/lib/format';
 import { printOrOpen } from '@/pos/cashier';
 import { productModifierGroups } from '@/pos/catalog';
+import { assignCustomer } from '@/pos/customers';
 import { tabletLayout } from '@/pos/layout';
 import { formatMoney } from '@/pos/money';
 import {
@@ -86,6 +88,7 @@ const merging = ref(false);
 /** Some units of a line going to another table. */
 const lineMove = ref<{ group: LineGroup; quantity: number } | null>(null);
 const sending = ref(false);
+const pickingCustomer = ref(false);
 const printingProforma = ref(false);
 const showPicker = ref(true);
 
@@ -487,6 +490,11 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 </div>
                 <!-- On the waiter tablet these go up to the blue top bar -->
                 <Teleport to="#topbar-actions" :disabled="!tabletLayout">
+                    <Button v-if="order" variant="outline" class="gap-1 px-3" :class="headerButton" :title="t('customers.button')" @click="pickingCustomer = true">
+                        <UserRound class="size-4" />
+                        <span v-if="order.customer" class="font-bold">{{ order.customer.code }}</span>
+                        <span v-else class="max-sm:hidden">{{ t('customers.button') }}</span>
+                    </Button>
                     <Button v-if="tableId && (order || draft.lines.length)" variant="outline" class="gap-1 px-3" :class="headerButton" :title="t('order.moveTable')" @click="moving = true">
                         <ArrowRightLeft class="size-4" />
                         <span class="max-sm:hidden">{{ t('order.moveTable') }}</span>
@@ -726,6 +734,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
             @save="savePrice"
             @close="priceEdit = null"
         />
+        <CustomerPicker v-if="pickingCustomer && order" :current="order.customer ?? null" @select="(customer) => order && assignCustomer(order, customer)" @close="pickingCustomer = false" />
         <TableMoveDialog v-if="moving && tableId" :from-table-id="tableId" @move="moveTo" @close="moving = false" />
         <TableMoveDialog v-if="merging && tableId" :from-table-id="tableId" mode="merge" @move="mergeWith" @close="merging = false" />
         <TableMoveDialog

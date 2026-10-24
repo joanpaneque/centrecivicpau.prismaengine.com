@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CalendarClock, ChefHat, Clock, Cog, Languages, LayoutGrid, LogOut, Menu, QrCode, Receipt, RefreshCw, Sparkles, Volume2, VolumeX } from '@lucide/vue';
+import { CalendarClock, ChefHat, Clock, Cog, Languages, LayoutGrid, LogOut, Menu, QrCode, Receipt, RefreshCw, Sparkles, UserRound, Volume2, VolumeX } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import OperatorSwitch from '@/components/pos/OperatorSwitch.vue';
 import SyncIndicator from '@/components/pos/SyncIndicator.vue';
@@ -27,6 +27,7 @@ const tabs = computed(() => {
 
     if (state.device?.type === 'cashier') {
         items.push({ name: 'caixa', label: t('nav.cashier'), icon: Receipt });
+        items.push({ name: 'clients', label: t('nav.customers'), icon: UserRound });
         items.push({ name: 'qr', label: t('clock.qrTab'), icon: QrCode });
     }
 

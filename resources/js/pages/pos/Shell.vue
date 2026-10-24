@@ -9,6 +9,7 @@ import AssistantView from '@/components/pos/views/AssistantView.vue';
 import CashierView from '@/components/pos/views/CashierView.vue';
 import ClockQrView from '@/components/pos/views/ClockQrView.vue';
 import ClockView from '@/components/pos/views/ClockView.vue';
+import CustomersView from '@/components/pos/views/CustomersView.vue';
 import FloorView from '@/components/pos/views/FloorView.vue';
 import KdsView from '@/components/pos/views/KdsView.vue';
 import OrderView from '@/components/pos/views/OrderView.vue';
@@ -52,6 +53,8 @@ const view = computed(() => {
             return OrderView;
         case 'caixa':
             return route.value.params[0] ? PaymentView : CashierView;
+        case 'clients':
+            return CustomersView;
         case 'cuina':
             return KdsView;
         case 'reserves':

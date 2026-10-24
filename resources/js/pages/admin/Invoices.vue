@@ -14,7 +14,7 @@ import { show } from '@/routes/admin/tickets';
 
 type Invoice = {
     id: number;
-    ticketId: number;
+    ticketId: number | null;
     fullNumber: string;
     ticketNumber: string;
     customerName: string;
@@ -68,7 +68,10 @@ defineOptions({ layout: { breadcrumbs: [{ title: 'Factures', href: invoicesRoute
                         {{ invoice.customerName }}
                         <div class="text-xs text-muted-foreground">{{ invoice.customerTaxId }} {{ invoice.customerEmail ? `· ${invoice.customerEmail}` : '' }}</div>
                     </td>
-                    <td class="px-3 py-2"><Link :href="show(invoice.ticketId)" class="hover:underline">{{ invoice.ticketNumber }}</Link></td>
+                    <td class="px-3 py-2">
+                        <Link v-if="invoice.ticketId" :href="show(invoice.ticketId)" class="hover:underline">{{ invoice.ticketNumber }}</Link>
+                        <span v-else>{{ invoice.ticketNumber }}</span>
+                    </td>
                     <td class="px-3 py-2 text-right tabular-nums">{{ money(invoice.total) }}</td>
                     <td class="px-3 py-2 text-right whitespace-nowrap">
                         <Button variant="ghost" size="icon" as-child>

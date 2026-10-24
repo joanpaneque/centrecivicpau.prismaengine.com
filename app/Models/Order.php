@@ -22,9 +22,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $closed_at
  * @property int|null $merged_into_id
  * @property string|null $reservation_uuid
+ * @property int|null $customer_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read DiningTable|null $table
+ * @property-read Customer|null $customer
  * @property-read Collection<int, OrderLine> $lines
  */
 class Order extends Model
@@ -49,6 +51,14 @@ class Order extends Model
     public function table(): BelongsTo
     {
         return $this->belongsTo(DiningTable::class, 'dining_table_id')->withTrashed();
+    }
+
+    /**
+     * @return BelongsTo<Customer, $this>
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
     }
 
     /**

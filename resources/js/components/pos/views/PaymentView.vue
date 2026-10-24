@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Trash2, Wallet } from '@lucide/vue';
+import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Trash2, UserRound, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
+import CustomerPicker from '@/components/pos/CustomerPicker.vue';
 import LinePriceDialog from '@/components/pos/LinePriceDialog.vue';
 import MoneyKeypad from '@/components/pos/MoneyKeypad.vue';
 import PrintPreview from '@/components/pos/PrintPreview.vue';
@@ -13,6 +14,7 @@ import { t, tr } from '@/i18n';
 import { issueTicket, orderLabel, pendingSelection, printOrOpen, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { uuid } from '@/pos/crypto';
+import { assignCustomer } from '@/pos/customers';
 import { formatMoney, parseMoney } from '@/pos/money';
 import { childLines, editSentLines, markProforma, proformaDocument, proformaTitle, unpricedGroups } from '@/pos/orders';
 import type { LineEdit, LineGroup } from '@/pos/orders';
@@ -53,6 +55,7 @@ const printingProforma = ref(false);
 const printOnCharge = ref(false);
 /** The ticket printer prints by itself: tickets come out on charging, no PDF. */
 const directPrinter = computed(() => directTicketPrinter());
+const pickingCustomer = ref(false);
 const result = ref<{ fullNumber: string; document: PrintDocument; change: number; tip: number; surplus: number; closed: boolean; printed: boolean } | null>(null);
 
 const pending = computed(() => (order.value ? pendingSelection(order.value) : []));
@@ -391,8 +394,14 @@ function finish(): void {
                     <h2 class="truncate text-lg font-bold">{{ orderLabel(order) }}</h2>
                     <p class="text-xs text-slate-500">{{ waiterName(order) }}<template v-if="order.guests"> · {{ t('floor.guests', { count: order.guests }) }}</template></p>
                 </div>
+                <Button variant="outline" class="h-11 gap-1 px-3" :title="t('customers.button')" @click="pickingCustomer = true">
+                    <UserRound class="size-4" />
+                    <span v-if="order.customer" class="font-bold">{{ order.customer.code }}</span>
+                    <span v-else class="max-sm:hidden">{{ t('customers.button') }}</span>
+                </Button>
                 <Button variant="outline" class="h-11" @click="go(order.tableId ? `/taula/${order.tableId}` : `/comanda/${order.uuid}`)">{{ t('order.title') }}</Button>
             </header>
+            <CustomerPicker v-if="pickingCustomer" :current="order.customer ?? null" @select="(customer) => order && assignCustomer(order, customer)" @close="pickingCustomer = false" />
 
             <div class="flex gap-1 border-b p-2">
                 <button

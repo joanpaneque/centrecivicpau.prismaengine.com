@@ -3,9 +3,11 @@
 namespace App\Services\Tickets;
 
 use App\Models\AuditLog;
+use App\Models\CustomerStatement;
 use App\Models\Invoice;
 use App\Models\Ticket;
 use App\Models\TicketSeries;
+use App\Services\Customers\StatementService;
 use App\Support\AppSettings;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\DB;
@@ -19,24 +21,52 @@ use RuntimeException;
  */
 class InvoiceService
 {
-    public function __construct(private readonly VerifactuService $verifactu) {}
+    public function __construct(
+        private readonly VerifactuService $verifactu,
+        private readonly StatementService $statements,
+    ) {}
 
     /**
      * @param  array{customer_name: string, customer_tax_id: string, customer_address: string, customer_email?: string|null}  $customer
      */
     public function issue(Ticket $ticket, array $customer, ?int $userId = null): Invoice
     {
-        if ($ticket->invoice()->exists()) {
+        if ($ticket->invoiced()) {
             throw new RuntimeException('invoice_already_issued');
         }
 
-        $invoice = DB::transaction(function () use ($ticket, $customer) {
+        return $this->create(['ticket_id' => $ticket->id], $customer, $userId, ['ticket' => $ticket->full_number]);
+    }
+
+    /**
+     * One invoice for every ticket of a customer summary (none of them invoiced on its own).
+     *
+     * @param  array{customer_name: string, customer_tax_id: string, customer_address: string, customer_email?: string|null}  $customer
+     */
+    public function issueForStatement(CustomerStatement $statement, array $customer, ?int $userId = null): Invoice
+    {
+        $statement->loadMissing('tickets');
+
+        if ($statement->invoice()->exists() || $statement->tickets->contains(fn (Ticket $t) => $t->invoice()->exists())) {
+            throw new RuntimeException('invoice_already_issued');
+        }
+
+        return $this->create(['customer_statement_id' => $statement->id], $customer, $userId, ['statement' => $statement->label(), 'tickets' => $statement->tickets->pluck('full_number')->all()]);
+    }
+
+    /**
+     * @param  array<string, int>  $target  ticket_id or customer_statement_id
+     * @param  array{customer_name: string, customer_tax_id: string, customer_address: string, customer_email?: string|null}  $customer
+     * @param  array<string, mixed>  $audit
+     */
+    private function create(array $target, array $customer, ?int $userId, array $audit): Invoice
+    {
+        $invoice = DB::transaction(function () use ($target, $customer) {
             $series = $this->series();
             $number = $series->last_number + 1;
             $series->forceFill(['last_number' => $number])->save();
 
-            return Invoice::query()->create([
-                'ticket_id' => $ticket->id,
+            return Invoice::query()->create($target + [
                 'ticket_series_id' => $series->id,
                 'number' => $number,
                 'full_number' => $series->format($number),
@@ -49,7 +79,7 @@ class InvoiceService
         });
 
         $this->storePdf($invoice);
-        AuditLog::record('invoice.issue', $invoice, ['ticket' => $ticket->full_number], userId: $userId);
+        AuditLog::record('invoice.issue', $invoice, $audit, userId: $userId);
 
         if ($invoice->customer_email) {
             $this->email($invoice);
@@ -69,15 +99,20 @@ class InvoiceService
 
     public function pdf(Invoice $invoice): string
     {
-        $invoice->loadMissing('ticket.lines', 'ticket.payments');
-        $ticket = $invoice->ticket;
+        $invoice->loadMissing('ticket.lines', 'ticket.payments', 'statement.tickets.lines', 'statement.tickets.payments');
+        $tickets = $invoice->tickets();
+        $issuer = $tickets->last()->issuer ?? [];
+        $total = (int) $tickets->sum('total');
 
         return Pdf::loadView('pdf.invoice', [
             'invoice' => $invoice,
-            'ticket' => $ticket,
-            'issuer' => $ticket->issuer,
+            'tickets' => $tickets,
+            'statement' => $invoice->statement,
+            'vat' => $this->statements->vatBreakdown($tickets),
+            'total' => $total,
+            'issuer' => $issuer,
             'logo' => $this->logoPath(),
-            'qr' => $this->verifactu->qrUrl((string) ($ticket->issuer['tax_id'] ?? ''), $invoice->full_number, $invoice->issued_at->format('d-m-Y'), $ticket->total),
+            'qr' => $this->verifactu->qrUrl((string) ($issuer['tax_id'] ?? ''), $invoice->full_number, $invoice->issued_at->format('d-m-Y'), $total),
         ])->setPaper('a4')->output();
     }
 
@@ -99,8 +134,10 @@ class InvoiceService
             : $this->pdf($invoice);
 
         try {
-            $invoice->loadMissing('ticket');
-            $body = __('tpv.invoice_mail_body', ['name' => $invoice->customer_name, 'number' => $invoice->full_number, 'ticket' => $invoice->ticket->full_number]);
+            $invoice->loadMissing('ticket', 'statement.tickets');
+            $body = $invoice->statement
+                ? __('tpv.invoice_statement_mail_body', ['name' => $invoice->customer_name, 'number' => $invoice->full_number, 'tickets' => $invoice->statement->tickets->pluck('full_number')->implode(', ')])
+                : __('tpv.invoice_mail_body', ['name' => $invoice->customer_name, 'number' => $invoice->full_number, 'ticket' => $invoice->ticket?->full_number]);
 
             Mail::raw($body."\n\n".AppSettings::get('business_name'), function ($message) use ($invoice, $pdf) {
                 $message->to((string) $invoice->customer_email)

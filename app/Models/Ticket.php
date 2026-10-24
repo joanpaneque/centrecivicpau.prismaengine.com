@@ -16,6 +16,8 @@ use Illuminate\Support\Carbon;
  * @property int $number
  * @property string $full_number
  * @property int|null $order_id
+ * @property int|null $customer_id
+ * @property int|null $customer_statement_id the customer summary that groups it
  * @property int|null $cash_session_id
  * @property int|null $device_id
  * @property string|null $table_label
@@ -42,6 +44,8 @@ use Illuminate\Support\Carbon;
  * @property-read User|null $waiter
  * @property-read User|null $cashier
  * @property-read Order|null $order
+ * @property-read Customer|null $customer
+ * @property-read CustomerStatement|null $statement
  */
 class Ticket extends Model
 {
@@ -64,6 +68,30 @@ class Ticket extends Model
     public function series(): BelongsTo
     {
         return $this->belongsTo(TicketSeries::class, 'ticket_series_id');
+    }
+
+    /**
+     * @return BelongsTo<Customer, $this>
+     */
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * @return BelongsTo<CustomerStatement, $this>
+     */
+    public function statement(): BelongsTo
+    {
+        return $this->belongsTo(CustomerStatement::class, 'customer_statement_id');
+    }
+
+    /**
+     * Already covered by a full invoice: its own, or the one of its customer summary.
+     */
+    public function invoiced(): bool
+    {
+        return $this->invoice()->exists() || ($this->customer_statement_id !== null && Invoice::query()->where('customer_statement_id', $this->customer_statement_id)->exists());
     }
 
     /**

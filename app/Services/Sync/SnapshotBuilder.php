@@ -370,7 +370,7 @@ class SnapshotBuilder
      */
     private function orders(?CarbonImmutable $from): array
     {
-        $query = Order::query()->with(['lines', 'table']);
+        $query = Order::query()->with(['lines', 'table', 'customer']);
         $from === null
             ? $query->whereIn('status', Order::ACTIVE_STATUSES)
             : $query->where('updated_at', '>=', $from);
@@ -398,6 +398,7 @@ class SnapshotBuilder
             'openedBy' => $order->opened_by,
             'openedAt' => $order->opened_at->toIso8601String(),
             'billRequestedAt' => $order->bill_requested_at?->toIso8601String(),
+            'customer' => $order->customer ? ['id' => $order->customer->id, 'code' => $order->customer->code, 'name' => $order->customer->name] : null,
             'proformaPrintedAt' => $order->proforma_printed_at?->toIso8601String(),
             'closedAt' => $order->closed_at?->toIso8601String(),
             'mergedIntoUuid' => $mergedIntoUuid,

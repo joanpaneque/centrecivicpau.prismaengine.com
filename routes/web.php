@@ -22,6 +22,7 @@ use App\Http\Controllers\Auth\QrLoginController;
 use App\Http\Controllers\InvoiceRequestController;
 use App\Http\Controllers\Tpv\CatalogMoveController;
 use App\Http\Controllers\Tpv\CategoryController as TpvCategoryController;
+use App\Http\Controllers\Tpv\CustomerController as TpvCustomerController;
 use App\Http\Controllers\Tpv\FloorController;
 use App\Http\Controllers\Tpv\PrintJobController;
 use App\Http\Controllers\Tpv\ProductController as TpvProductController;
@@ -41,6 +42,10 @@ Route::get('acceso/{token}', QrLoginController::class)->middleware('throttle:20,
 Route::post('idioma', [SessionController::class, 'locale'])->name('locale');
 
 Route::middleware('throttle:30,1')->group(function () {
+    // The summary ticket of a customer: one invoice for all its tickets.
+    Route::get('factura/resum/{token}', [InvoiceRequestController::class, 'showStatement'])->name('invoice-request.statement');
+    Route::post('factura/resum/{token}', [InvoiceRequestController::class, 'storeStatement'])->middleware('throttle:5,1')->name('invoice-request.statement.store');
+    Route::get('factura/resum/{token}/pdf', [InvoiceRequestController::class, 'statementPdf'])->name('invoice-request.statement.pdf');
     Route::get('factura/{token}', [InvoiceRequestController::class, 'show'])->name('invoice-request');
     Route::post('factura/{token}', [InvoiceRequestController::class, 'store'])->middleware('throttle:5,1')->name('invoice-request.store');
     Route::get('factura/{token}/pdf', [InvoiceRequestController::class, 'pdf'])->name('invoice-request.pdf');
@@ -67,6 +72,15 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
         Route::post('switch-user', [SessionController::class, 'switchUser'])->middleware('throttle:30,1')->name('switch-user');
         Route::post('products', [TpvProductController::class, 'store'])->name('products.store');
         Route::post('products/suggest', [TpvProductController::class, 'suggest'])->middleware('throttle:30,1')->name('products.suggest');
+        Route::get('customers', [TpvCustomerController::class, 'index'])->name('customers.index');
+        Route::post('customers', [TpvCustomerController::class, 'store'])->name('customers.store');
+        Route::get('customers/{customer}', [TpvCustomerController::class, 'show'])->name('customers.show');
+        Route::patch('customers/{customer}', [TpvCustomerController::class, 'update'])->name('customers.update');
+        Route::post('customers/{customer}/tickets', [TpvCustomerController::class, 'attach'])->name('customers.attach');
+        Route::delete('customers/{customer}/tickets/{ticket:uuid}', [TpvCustomerController::class, 'detach'])->name('customers.detach');
+        Route::post('customers/{customer}/statements', [TpvCustomerController::class, 'createStatement'])->name('customers.statements.store');
+        Route::get('customer-tickets', [TpvCustomerController::class, 'tickets'])->name('customers.tickets');
+        Route::get('statements/{statement}', [TpvCustomerController::class, 'statement'])->name('statements.show');
 
         Route::middleware('admin')->group(function () {
             Route::post('catalog/move', CatalogMoveController::class)->name('catalog.move');

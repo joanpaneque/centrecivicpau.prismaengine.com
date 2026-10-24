@@ -162,7 +162,7 @@ export function voidDocument(order: Order, destinationName: string, line: OrderL
     return { width, lines: out };
 }
 
-function businessHeader(out: PrintLine[]): void {
+export function businessHeader(out: PrintLine[]): void {
     const s = state.settings;
 
     if (!s) {

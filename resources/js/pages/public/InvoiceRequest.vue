@@ -11,23 +11,29 @@ import { store, pdf } from '@/routes/invoice-request';
 const props = defineProps<{
     token: string;
     business: { name: string; logoUrl: string | null };
-    ticket: { fullNumber: string; issuedAt: string; total: number } | null;
+    ticket: { fullNumber: string; issuedAt: string; total: number; count?: number } | null;
     invoice: { fullNumber: string } | null;
+    /** A customer summary (several tickets): its own addresses and the customer's data to start from. */
+    urls?: { store: string; pdf: string };
+    customer?: { name: string; taxId: string | null; address: string | null; email: string | null };
 }>();
+
+const storeUrl = props.urls?.store ?? store.url(props.token);
+const pdfUrl = props.urls?.pdf ?? pdf.url(props.token);
 
 const { t, locale, setLocale } = useI18n();
 
 const form = useForm({
-    customer_name: '',
-    customer_tax_id: '',
-    address: '',
+    customer_name: props.customer?.name ?? '',
+    customer_tax_id: props.customer?.taxId ?? '',
+    address: props.customer?.address ?? '',
     postal_code: '',
     city: '',
-    customer_email: '',
+    customer_email: props.customer?.email ?? '',
 });
 
 function submit(): void {
-    form.transform((data) => ({ ...data, customer_email: data.customer_email || null })).post(store.url(props.token), { preserveScroll: true });
+    form.transform((data) => ({ ...data, customer_email: data.customer_email || null })).post(storeUrl, { preserveScroll: true });
 }
 
 async function toggleLocale(): Promise<void> {
@@ -74,12 +80,14 @@ async function toggleLocale(): Promise<void> {
                         <CheckCircle2 class="size-12 text-emerald-500" />
                         <p class="font-medium">{{ t('invoiceRequest.done', { number: invoice.fullNumber }) }}</p>
                         <Button as-child size="lg">
-                            <a :href="pdf.url(token)"><Download class="size-4" /> {{ t('invoiceRequest.downloadPdf') }}</a>
+                            <a :href="pdfUrl"><Download class="size-4" /> {{ t('invoiceRequest.downloadPdf') }}</a>
                         </Button>
                     </div>
 
                     <form v-else class="mt-6 space-y-4" @submit.prevent="submit">
-                        <p class="text-sm text-muted-foreground">{{ t('invoiceRequest.description', { number: ticket.fullNumber }) }}</p>
+                        <p class="text-sm text-muted-foreground">
+                            {{ customer ? t('invoiceRequest.descriptionStatement', { count: ticket.count ?? 0, number: ticket.fullNumber }) : t('invoiceRequest.description', { number: ticket.fullNumber }) }}
+                        </p>
                         <Field :label="t('invoiceRequest.customerName')" :error="form.errors.customer_name">
                             <Input v-model="form.customer_name" required autocomplete="organization" />
                         </Field>
@@ -91,10 +99,10 @@ async function toggleLocale(): Promise<void> {
                         </Field>
                         <div class="grid grid-cols-[8rem_1fr] gap-3">
                             <Field :label="t('invoiceRequest.postalCode')" :error="form.errors.postal_code">
-                                <Input v-model="form.postal_code" required inputmode="numeric" autocomplete="postal-code" />
+                                <Input v-model="form.postal_code" :required="!customer" inputmode="numeric" autocomplete="postal-code" />
                             </Field>
                             <Field :label="t('invoiceRequest.city')" :error="form.errors.city">
-                                <Input v-model="form.city" required autocomplete="address-level2" />
+                                <Input v-model="form.city" :required="!customer" autocomplete="address-level2" />
                             </Field>
                         </div>
                         <Field :label="t('invoiceRequest.email')" :error="form.errors.customer_email">

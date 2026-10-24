@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CustomerStatement;
+use App\Models\Invoice;
 use App\Models\Ticket;
 use App\Services\Tickets\InvoiceService;
 use App\Support\AppSettings;
@@ -26,7 +28,8 @@ class InvoiceRequestController extends Controller
     public function show(string $token): Response
     {
         abort_if(strlen($token) < 16, 404);
-        $ticket = Ticket::query()->with('invoice')->where('public_token', $token)->first();
+        $ticket = Ticket::query()->with('invoice', 'statement.invoice')->where('public_token', $token)->first();
+        $invoice = $ticket?->invoice ?? $ticket?->statement?->invoice;
 
         return Inertia::render('public/InvoiceRequest', [
             'token' => $token,
@@ -36,7 +39,7 @@ class InvoiceRequestController extends Controller
                 'issuedAt' => $ticket->issued_at->toIso8601String(),
                 'total' => $ticket->total,
             ],
-            'invoice' => $ticket?->invoice ? ['fullNumber' => $ticket->invoice->full_number] : null,
+            'invoice' => $invoice ? ['fullNumber' => $invoice->full_number] : null,
         ]);
     }
 
@@ -44,22 +47,8 @@ class InvoiceRequestController extends Controller
     {
         $ticket = $this->ticket($token);
 
-        $data = $request->validate([
-            'customer_name' => ['required', 'string', 'max:160'],
-            'customer_tax_id' => ['required', 'string', 'min:8', 'max:30'],
-            'address' => ['required', 'string', 'max:160'],
-            'postal_code' => ['required', 'string', 'max:10'],
-            'city' => ['required', 'string', 'max:80'],
-            'customer_email' => ['nullable', 'email', 'max:160'],
-        ]);
-
         try {
-            $invoices->issue($ticket, [
-                'customer_name' => $data['customer_name'],
-                'customer_tax_id' => $data['customer_tax_id'],
-                'customer_address' => trim("{$data['address']}, {$data['postal_code']} {$data['city']}"),
-                'customer_email' => $data['customer_email'] ?? null,
-            ]);
+            $invoices->issue($ticket, $this->customer($request));
         } catch (RuntimeException) {
             return back()->withErrors(['customer_name' => __('tpv.invoice_already_issued')]);
         }
@@ -69,7 +58,84 @@ class InvoiceRequestController extends Controller
 
     public function pdf(string $token, InvoiceService $invoices): HttpResponse
     {
-        $invoice = $this->ticket($token)->invoice;
+        $ticket = $this->ticket($token);
+
+        return $this->download($ticket->invoice ?? $ticket->statement?->invoice, $invoices);
+    }
+
+    /**
+     * The QR of a customer summary: one invoice for all its tickets. The form comes filled
+     * with the customer's data when the staff has it.
+     */
+    public function showStatement(string $token): Response
+    {
+        $statement = $this->statement($token);
+
+        return Inertia::render('public/InvoiceRequest', [
+            'token' => $token,
+            'business' => ['name' => AppSettings::get('business_name'), 'logoUrl' => AppSettings::logoUrl()],
+            'ticket' => [
+                'fullNumber' => $statement->label(),
+                'issuedAt' => $statement->issued_at->toIso8601String(),
+                'total' => $statement->total,
+                'count' => $statement->tickets()->count(),
+            ],
+            'invoice' => $statement->invoice ? ['fullNumber' => $statement->invoice->full_number] : null,
+            'urls' => [
+                'store' => route('invoice-request.statement.store', $token),
+                'pdf' => route('invoice-request.statement.pdf', $token),
+            ],
+            'customer' => [
+                'name' => $statement->customer->name,
+                'taxId' => $statement->customer->tax_id,
+                'address' => $statement->customer->address,
+                'email' => $statement->customer->email,
+            ],
+        ]);
+    }
+
+    public function storeStatement(Request $request, string $token, InvoiceService $invoices): RedirectResponse
+    {
+        $statement = $this->statement($token);
+
+        try {
+            $invoices->issueForStatement($statement, $this->customer($request));
+        } catch (RuntimeException) {
+            return back()->withErrors(['customer_name' => __('tpv.invoice_already_issued')]);
+        }
+
+        return to_route('invoice-request.statement', $token);
+    }
+
+    public function statementPdf(string $token, InvoiceService $invoices): HttpResponse
+    {
+        return $this->download($this->statement($token)->invoice, $invoices);
+    }
+
+    /**
+     * @return array{customer_name: string, customer_tax_id: string, customer_address: string, customer_email: string|null}
+     */
+    private function customer(Request $request): array
+    {
+        $data = $request->validate([
+            'customer_name' => ['required', 'string', 'max:160'],
+            'customer_tax_id' => ['required', 'string', 'min:8', 'max:30'],
+            'address' => ['required', 'string', 'max:160'],
+            'postal_code' => ['nullable', 'string', 'max:10'],
+            'city' => ['nullable', 'string', 'max:80'],
+            'customer_email' => ['nullable', 'email', 'max:160'],
+        ]);
+
+        return [
+            'customer_name' => $data['customer_name'],
+            'customer_tax_id' => $data['customer_tax_id'],
+            'customer_address' => trim(trim($data['address']).(filled($data['postal_code'] ?? null) || filled($data['city'] ?? null) ? ', '.trim(($data['postal_code'] ?? '').' '.($data['city'] ?? '')) : '')),
+            'customer_email' => $data['customer_email'] ?? null,
+        ];
+    }
+
+    private function download(?Invoice $invoice, InvoiceService $invoices): HttpResponse
+    {
         abort_if($invoice === null, 404);
 
         $content = $invoice->pdf_path && Storage::disk('local')->exists($invoice->pdf_path)
@@ -86,6 +152,13 @@ class InvoiceRequestController extends Controller
     {
         abort_if(strlen($token) < 16, 404);
 
-        return Ticket::query()->with('invoice')->where('public_token', $token)->firstOrFail();
+        return Ticket::query()->with('invoice', 'statement.invoice')->where('public_token', $token)->firstOrFail();
+    }
+
+    private function statement(string $token): CustomerStatement
+    {
+        abort_if(strlen($token) < 16, 404);
+
+        return CustomerStatement::query()->with('invoice', 'customer')->where('public_token', $token)->firstOrFail();
     }
 }

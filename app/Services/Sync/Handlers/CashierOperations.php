@@ -165,6 +165,7 @@ class CashierOperations implements OperationHandler
             'number' => $number,
             'full_number' => $series->format($number),
             'order_id' => $order?->id,
+            'customer_id' => $order?->customer_id,
             'cash_session_id' => $session?->id,
             'device_id' => $context->device?->id,
             'table_label' => is_string($data['tableLabel'] ?? null) ? $data['tableLabel'] : null,

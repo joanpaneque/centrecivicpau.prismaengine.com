@@ -43,6 +43,11 @@ o.label = p.label;
                 o.billRequestedAt = op.createdAt;
             });
             break;
+        case 'order.customer':
+            withOrder(p.orderUuid, (o) => {
+                o.customer = p.customer ?? null;
+            });
+            break;
         case 'order.proforma':
             withOrder(p.orderUuid, (o) => {
                 o.proformaPrintedAt = op.createdAt;

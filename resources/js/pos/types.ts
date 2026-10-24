@@ -176,6 +176,8 @@ export type Order = {
     openedAt: string;
     billRequestedAt: string | null;
     proformaPrintedAt: string | null;
+    /** Regular customer the order is assigned to (its tickets go to their summary). */
+    customer?: { id: number; code: string; name: string } | null;
     closedAt: string | null;
     mergedIntoUuid: string | null;
     reservationUuid: string | null;
