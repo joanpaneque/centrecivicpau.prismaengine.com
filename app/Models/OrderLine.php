@@ -79,7 +79,7 @@ class OrderLine extends Model
 
     public function unitTotal(): int
     {
-        $modifiers = array_sum(array_map(fn (array $m): int => (int) $m['price_delta'], $this->modifiers ?? []));
+        $modifiers = array_sum(array_map(fn (array $m): int => (int) ($m['price_delta'] ?? $m['priceDelta'] ?? 0), $this->modifiers ?? []));
 
         return $this->unit_price + $modifiers;
     }

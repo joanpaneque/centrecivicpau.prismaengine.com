@@ -215,7 +215,7 @@ class CustomerController extends Controller
                 'unit_price' => $whole ? intdiv($total, (int) $quantity) : $total,
                 'vat_rate' => (float) $line['vat_rate'],
                 // Names only: the price of the extras is already in the line.
-                'modifiers' => array_values(array_map(fn ($m) => ['name' => is_array($m) ? ($m['name'] ?? $m) : $m, 'priceDelta' => 0], (array) ($line['modifiers'] ?? []))),
+                'modifiers' => array_values(array_map(fn ($m) => ['id' => null, 'name' => is_array($m) ? ($m['name'] ?? '') : $m, 'price_delta' => 0], (array) ($line['modifiers'] ?? []))),
                 'created_by' => $userId,
                 'sent_at' => now(),
             ]);

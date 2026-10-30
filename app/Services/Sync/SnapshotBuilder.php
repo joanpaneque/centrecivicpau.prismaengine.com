@@ -417,7 +417,7 @@ class SnapshotBuilder
                 'unitPrice' => $line->unit_price,
                 'unpriced' => $line->unpriced,
                 'vatRate' => $line->vat_rate,
-                'modifiers' => array_map(fn (array $m) => ['id' => $m['id'], 'name' => $m['name'], 'priceDelta' => $m['price_delta']], $line->modifiers ?? []),
+                'modifiers' => array_map(fn (array $m) => ['id' => $m['id'] ?? null, 'name' => $m['name'] ?? '', 'priceDelta' => (int) ($m['price_delta'] ?? $m['priceDelta'] ?? 0)], array_values(array_filter($line->modifiers ?? [], 'is_array'))),
                 'note' => $line->note,
                 'course' => $line->course,
                 'discountType' => $line->discount_type,
