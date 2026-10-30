@@ -1134,6 +1134,11 @@ const ca = {
         selected: '{count} seleccionats',
     },
     customers: {
+        rangeAll: 'Tots',
+        rangeThisMonth: 'Aquest mes',
+        rangeLastMonth: 'Mes passat',
+        rangeFrom: 'Des de',
+        rangeTo: 'Fins a',
         button: 'Client',
         pickTitle: 'Client d\'aquest compte',
         pickHelp: 'Cerca per codi o nom, o crea\'n un de nou. Els seus tiquets aniran al seu resum.',

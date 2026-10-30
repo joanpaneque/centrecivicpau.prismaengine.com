@@ -1136,6 +1136,11 @@ const es: Messages = {
         selected: '{count} seleccionados',
     },
     customers: {
+        rangeAll: 'Todos',
+        rangeThisMonth: 'Este mes',
+        rangeLastMonth: 'Mes pasado',
+        rangeFrom: 'Desde',
+        rangeTo: 'Hasta',
         button: 'Cliente',
         pickTitle: 'Cliente de esta cuenta',
         pickHelp: 'Busca por código o nombre, o crea uno nuevo. Sus tickets irán a su resumen.',

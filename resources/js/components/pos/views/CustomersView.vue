@@ -83,6 +83,33 @@ async function saved(customer: Customer): Promise<void> {
     await open(customer);
 }
 
+// Tickets to put in the summary by date: this month, last month or between two days.
+const rangeFrom = ref('');
+const rangeTo = ref('');
+
+function day(date: Date): string {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function selectRange(from: string, to: string): void {
+    rangeFrom.value = from;
+    rangeTo.value = to;
+    selected.value = new Set(
+        (detail.value?.pending ?? [])
+            .filter((ticket) => {
+                const issued = day(new Date(ticket.issuedAt));
+
+                return (!from || issued >= from) && (!to || issued <= to);
+            })
+            .map((ticket) => ticket.uuid),
+    );
+}
+
+function selectMonth(offset: number): void {
+    const now = new Date();
+    selectRange(day(new Date(now.getFullYear(), now.getMonth() + offset, 1)), day(new Date(now.getFullYear(), now.getMonth() + offset + 1, 0)));
+}
+
 function toggle(uuid: string, value: boolean): void {
     const next = new Set(selected.value);
 
@@ -298,6 +325,16 @@ async function detach(ticket: CustomerTicket): Promise<void> {
                     <div class="flex items-center gap-2 border-b px-4 py-3">
                         <h3 class="flex-1 font-bold">{{ t('customers.pending') }}</h3>
                         <Button variant="outline" class="h-10" @click="adding = true"><Plus class="size-4" /> {{ t('customers.addTicket') }}</Button>
+                    </div>
+                    <div v-if="detail.pending.length" class="flex flex-wrap items-center gap-2 border-b bg-slate-50 px-4 py-2 text-sm">
+                        <Button variant="outline" size="sm" class="h-9" @click="selectRange('', '')">{{ t('customers.rangeAll') }}</Button>
+                        <Button variant="outline" size="sm" class="h-9" @click="selectMonth(0)">{{ t('customers.rangeThisMonth') }}</Button>
+                        <Button variant="outline" size="sm" class="h-9" @click="selectMonth(-1)">{{ t('customers.rangeLastMonth') }}</Button>
+                        <span class="ml-auto flex items-center gap-1">
+                            <input :value="rangeFrom" type="date" class="h-9 rounded-lg border px-2" :aria-label="t('customers.rangeFrom')" @change="selectRange(($event.target as HTMLInputElement).value, rangeTo)" />
+                            –
+                            <input :value="rangeTo" type="date" class="h-9 rounded-lg border px-2" :aria-label="t('customers.rangeTo')" @change="selectRange(rangeFrom, ($event.target as HTMLInputElement).value)" />
+                        </span>
                     </div>
                     <div class="divide-y">
                         <label v-for="ticket in detail.pending" :key="ticket.uuid" class="flex cursor-pointer items-center gap-3 px-4 py-2.5">
