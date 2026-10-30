@@ -229,6 +229,8 @@ Para quien viene muchas veces, paga cada vez y al final quiere **un solo documen
 - **Imprimir el resumen:** **Clients** → el cliente → salen sus **tickets pendientes** (todos marcados; se pueden desmarcar) → **Imprimeix el resum / Imprimir resumen**. Sale un ticket con todos sus tickets y líneas, el total, el IVA y un **QR**. **No es factura.** Los tickets incluidos ya no vuelven a salir como pendientes; los resúmenes se pueden **reimprimir**.
 - **Factura de todo junto:** el cliente escanea el QR del resumen (`/factura/resum/…`) y rellena sus datos (vienen ya puestos si el cliente los tenía). Se emite **una sola factura completa** que sustituye a todos esos tickets. Después, ni el resumen ni ninguno de sus tickets se pueden volver a facturar (el QR de cada ticket muestra esa factura).
 - Un ticket que ya tiene factura propia no entra en ningún resumen.
+- **Albarán (paga más tarde):** si la cuenta tiene cliente, al cobrar sale una cuarta forma de pago, **Albarà / Albarán**. **Imprimeix l'albarà / Imprimir albarán** imprime **2 copias** (cliente, para firmar, y establecimiento), lo guarda y cierra la mesa **sin cobrar**. Solo con la cuenta entera.
+- **Cobrar los albaranes:** **Clients** → el cliente → **Albarans pendents / Albaranes pendientes** (todos marcados; se pueden desmarcar y **reimprimir**) → **Cobra / Cobrar**. Se abre el cobro normal (efectivo, tarjeta o mixto) con todo lo pendiente y sale un **ticket normal con su QR**, que también entra en el resumen y en la factura de todo junto.
 
 ---
 

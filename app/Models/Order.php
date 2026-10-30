@@ -11,6 +11,7 @@ use Illuminate\Support\Carbon;
 /**
  * @property int $id
  * @property string $uuid
+ * @property int|null $number order number of the day, printed on the kitchen tickets
  * @property int|null $dining_table_id
  * @property string $status open|bill_requested|paid|cancelled|merged
  * @property int|null $guests
@@ -59,6 +60,16 @@ class Order extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    /**
+     * Delivery notes this order charges (an order made to collect them).
+     *
+     * @return HasMany<DeliveryNote, $this>
+     */
+    public function collectedNotes(): HasMany
+    {
+        return $this->hasMany(DeliveryNote::class, 'collect_order_id');
     }
 
     /**

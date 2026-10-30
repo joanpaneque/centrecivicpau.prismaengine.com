@@ -19,6 +19,7 @@ return [
     'customer_ticket_closed' => 'Este ticket ya está en un resumen o facturado: no se puede cambiar.',
     'customer_nothing_pending' => 'Este cliente no tiene tickets pendientes.',
     'invoice_statement_mail_body' => 'Hola :name, adjuntamos la factura :number, que agrupa los tickets :tickets.',
+    'delivery_notes_label' => 'Albaranes :code',
     'carta_item_price' => 'Falta el precio (o un texto como «S.M.»): este plato no está en la carta del TPV o no tiene precio allí.',
     'invoice_already_issued' => 'Este ticket ya tiene una factura emitida.',
     'invoice_issued' => 'Factura emitida correctamente.',

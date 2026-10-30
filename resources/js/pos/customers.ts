@@ -1,7 +1,7 @@
 import { t, tr } from '@/i18n';
 import { api } from '@/lib/http';
 import { formatMoney, formatRate } from './money';
-import { businessHeader } from './print';
+import { businessHeader, deliveryNoteDocument } from './print';
 import { enqueue } from './sync';
 import type { Order, PrintDocument, PrintLine, T9n } from './types';
 
@@ -14,7 +14,19 @@ export type Customer = { id: number; code: string; name: string; taxId: string |
 export type CustomerListItem = Customer & { pendingCount: number; pendingTotal: number };
 export type CustomerTicket = { uuid: string; fullNumber: string; issuedAt: string; tableLabel: string | null; total: number; customerCode?: string | null };
 export type StatementSummary = { id: number; label: string; issuedAt: string; total: number; invoice: string | null };
-export type CustomerDetail = { customer: Customer; pending: CustomerTicket[]; statements: StatementSummary[] };
+export type DeliveryNoteItem = {
+    uuid: string;
+    issuedAt: string;
+    tableLabel: string | null;
+    total: number;
+    surchargeRate: number;
+    surchargeAmount: number;
+    vatBreakdown: { rate: number; base: number; vat: number; total: number }[];
+    lines: { name: T9n; quantity: number; unitPrice: number; vatRate: number; total: number }[];
+    /** An order to charge it is already open. */
+    collecting: boolean;
+};
+export type CustomerDetail = { customer: Customer; pending: CustomerTicket[]; statements: StatementSummary[]; notes: DeliveryNoteItem[] };
 export type CustomerInput = { code: string; name: string; taxId: string | null; address: string | null; email: string | null; phone: string | null };
 
 export type Statement = {
@@ -60,6 +72,31 @@ export async function detachTicket(customerId: number, ticketUuid: string): Prom
 
 export async function createStatement(customerId: number, ticketUuids: string[]): Promise<Statement> {
     return (await api<{ statement: Statement }>('POST', `/tpv/api/customers/${customerId}/statements`, { ticketUuids }, 30000)).statement;
+}
+
+/** The chosen delivery notes become an order of the customer, to charge like any other. */
+export async function collectNotes(customerId: number, noteUuids: string[]): Promise<Order> {
+    return (await api<{ order: Order }>('POST', `/tpv/api/customers/${customerId}/notes/collect`, { noteUuids }, 30000)).order;
+}
+
+/** A pending delivery note printed again (both copies). */
+export function noteDocument(note: DeliveryNoteItem, customer: Pick<Customer, 'code' | 'name'>, width: number): PrintDocument {
+    return deliveryNoteDocument(
+        {
+            fullNumber: null,
+            issuedAt: note.issuedAt,
+            tableLabel: note.tableLabel,
+            waiter: '',
+            lines: note.lines.map((line) => ({ name: tr(line.name), quantity: line.quantity, unitPrice: line.unitPrice, total: line.total, vatRate: line.vatRate })),
+            surchargeRate: note.surchargeRate,
+            surchargeAmount: note.surchargeAmount,
+            total: note.total,
+            vatBreakdown: note.vatBreakdown,
+            payments: [],
+        },
+        customer,
+        width,
+    );
 }
 
 export async function fetchStatement(id: number): Promise<Statement> {

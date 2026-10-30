@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Order;
+use App\Models\PrintJob;
 use App\Models\Ticket;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -303,4 +304,30 @@ test('an expired clock QR is rejected', function () {
     ]])->assertOk();
 
     expect($response->json('results.0.reason'))->toBe('invalid_clock_qr');
+});
+
+test('orders get a number of the day that the server writes on their kitchen tickets', function () {
+    $user = User::factory()->create();
+    $cookie = registerTpvDevice($this, $user);
+    $first = (string) Str::uuid();
+    $second = (string) Str::uuid();
+    $payload = orderSendPayload($second) + ['printJobs' => [[
+        'uuid' => (string) Str::uuid(),
+        'kind' => 'order',
+        'title' => 'Cuina',
+        'printerId' => null,
+        'document' => ['width' => 48, 'lines' => [
+            ['type' => 'text', 'text' => 'COMANDA {#ORDER}'],
+            ['type' => 'text', 'text' => '1 x Braves'],
+        ]],
+    ]]];
+
+    $this->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie)->postJson(route('tpv.push'), ['operations' => [
+        tpvOperation('order.send', orderSendPayload($first), $user->id),
+        tpvOperation('order.send', $payload, $user->id),
+    ]])->assertOk();
+
+    expect(Order::query()->where('uuid', $first)->value('number'))->toBe(1)
+        ->and(Order::query()->where('uuid', $second)->value('number'))->toBe(2)
+        ->and(PrintJob::query()->latest('id')->first()?->document['lines'][0]['text'])->toBe('COMANDA 2');
 });

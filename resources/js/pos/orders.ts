@@ -468,8 +468,15 @@ export async function marchCourse(order: Order, course = 2): Promise<void> {
             .map((k) => k.destinationId),
     );
 
-    for (const line of order.lines) {
-        if ((line.course ?? 0) >= course && line.destinationId && state.destinations[line.destinationId]?.mode === 'printer' && !line.voided) {
+    // The dishes of this course, as they went on the first ticket (set menu dishes one by one).
+    const dishes = order.lines.filter((line) => {
+        const parent = line.parentUuid ? order.lines.find((l) => l.uuid === line.parentUuid) : null;
+
+        return !line.voided && (line.course ?? 0) === course && (!line.parentUuid || !!parent?.setMenuId);
+    });
+
+    for (const line of dishes) {
+        if (line.destinationId && state.destinations[line.destinationId]?.mode === 'printer') {
             destinations.add(line.destinationId);
         }
     }
@@ -477,8 +484,10 @@ export async function marchCourse(order: Order, course = 2): Promise<void> {
     const printJobs: PrintJobPayload[] = [];
 
     for (const destinationId of destinations) {
+        const lines = dishes.filter((line) => line.destinationId === destinationId);
+
         for (const printerId of printersFor(destinationId)) {
-            printJobs.push(job('march', `${t('order.march', { course: t(`order.courses.${course}`) })}`, printerId, marchDocument(order, tr(state.destinations[destinationId]?.name), course, widthFor(printerId))));
+            printJobs.push(job('march', `${t('order.march', { course: t(`order.courses.${course}`) })}`, printerId, marchDocument(order, tr(state.destinations[destinationId]?.name), course, lines, order.lines, widthFor(printerId))));
         }
     }
 

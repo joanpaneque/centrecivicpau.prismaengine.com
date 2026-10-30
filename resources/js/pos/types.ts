@@ -176,6 +176,10 @@ export type Order = {
     openedAt: string;
     billRequestedAt: string | null;
     proformaPrintedAt: string | null;
+    /** Order number of the day (given by the server). */
+    number?: number | null;
+    /** It charges delivery notes of its customer (it cannot become a delivery note itself). */
+    collectsNotes?: boolean;
     /** Regular customer the order is assigned to (its tickets go to their summary). */
     customer?: { id: number; code: string; name: string } | null;
     closedAt: string | null;

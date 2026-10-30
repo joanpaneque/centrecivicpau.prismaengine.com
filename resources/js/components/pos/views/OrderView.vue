@@ -107,6 +107,18 @@ const heldCourses = computed(() => {
 
     return [...courses].sort();
 });
+/** Courses after the first that are already in the kitchen: they can be asked for (again) from any device. */
+const askableCourses = computed(() => {
+    const courses = new Set<number>(heldCourses.value);
+
+    for (const line of order.value?.lines ?? []) {
+        if (!line.voided && (line.course ?? 0) >= 2) {
+            courses.add(line.course!);
+        }
+    }
+
+    return [...courses].sort();
+});
 const hasSecondCourse = computed(() => draft.value.lines.some((l) => (l.course ?? 0) >= 2 || l.children.some((c) => (c.course ?? 0) >= 2)));
 const title = computed(() => (table.value ? t('order.table', { label: table.value.label }) : order.value?.label || draft.value.label || t('floor.quickSaleLabel')));
 const canCharge = computed(() => state.device?.type === 'cashier' && !!order.value);
@@ -309,7 +321,7 @@ async function send(holdSecond = false, after: 'charge' | 'proforma' | null = nu
 async function march(c: number): Promise<void> {
     if (order.value) {
         await marchCourse(order.value, c);
-        toast.success(t('order.marched'));
+        toast.success(t('order.asked', { course: t(`order.courseTitles.${c}`) }));
     }
 }
 
@@ -482,6 +494,7 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                 <div class="min-w-0 flex-1">
                     <h2 class="truncate text-lg font-bold text-[#00056a]">{{ title }}</h2>
                     <p class="flex items-center gap-2 text-xs text-slate-500">
+                        <span v-if="order?.number" class="font-semibold text-slate-700">#{{ order.number }}</span>
                         <span v-if="zone">{{ tr(zone.name) }}</span>
                         <span v-if="firstProductAt">{{ formatDateTime(firstProductAt) }}</span>
                         <span v-if="order?.status === 'bill_requested'" class="rounded bg-amber-100 px-1.5 font-semibold text-amber-800">{{ t('order.billRequested') }}</span>
@@ -679,9 +692,15 @@ const statusIcon: Record<string, { cls: string; label: string }> = {
                         <Timer class="size-4" />
                         {{ t('order.sendHold') }}
                     </Button>
-                    <Button v-for="c in heldCourses" :key="c" class="h-12 bg-amber-500 text-amber-950 hover:bg-amber-400" @click="march(c)">
+                    <Button
+                        v-for="c in askableCourses"
+                        :key="c"
+                        class="h-12"
+                        :class="heldCourses.includes(c) ? 'bg-amber-500 text-amber-950 hover:bg-amber-400' : 'border border-amber-500 bg-amber-50 text-amber-900 hover:bg-amber-100'"
+                        @click="march(c)"
+                    >
                         <ChefHat class="size-5" />
-                        {{ t('order.march', { course: t(`order.courses.${c}`) }) }}
+                        {{ t('order.askCourse', { course: t(`order.courseTitles.${c}`) }) }}
                     </Button>
                     <Button v-if="order && !draft.lines.length" variant="outline" class="h-12" @click="bill">
                         <BellRing class="size-5" />

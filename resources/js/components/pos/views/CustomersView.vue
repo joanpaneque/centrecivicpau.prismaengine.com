@@ -1,19 +1,21 @@
 <script setup lang="ts">
-import { FileText, Pencil, Plus, Printer, Search, UserRound, X } from '@lucide/vue';
+import { ClipboardSignature, FileText, Pencil, Plus, Printer, Search, UserRound, Wallet, X } from '@lucide/vue';
 import { computed, onMounted, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import CustomerForm from '@/components/pos/CustomerForm.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { t } from '@/i18n';
+import { t, tr } from '@/i18n';
 import { formatDateTime } from '@/lib/format';
 import { HttpError } from '@/lib/http';
 import { printOrOpen } from '@/pos/cashier';
-import { attachTicket, createStatement, customerDetail, detachTicket, fetchStatement, searchCustomers, searchTickets, statementDocument } from '@/pos/customers';
-import type { Customer, CustomerDetail, CustomerListItem, CustomerTicket, Statement } from '@/pos/customers';
+import { attachTicket, collectNotes, createStatement, customerDetail, detachTicket, fetchStatement, noteDocument, searchCustomers, searchTickets, statementDocument } from '@/pos/customers';
+import type { Customer, CustomerDetail, CustomerListItem, CustomerTicket, DeliveryNoteItem, Statement } from '@/pos/customers';
 import { formatMoney } from '@/pos/money';
 import { directTicketPrinter, ticketPrinterId, widthFor } from '@/pos/print';
+import { go } from '@/pos/router';
+import { upsert } from '@/pos/store';
 
 /**
  * Regular customers (cashier, online): find or create them, see the tickets they still have
@@ -24,6 +26,8 @@ const query = ref('');
 const customers = ref<CustomerListItem[]>([]);
 const detail = ref<CustomerDetail | null>(null);
 const selected = ref<Set<string>>(new Set());
+/** Delivery notes ticked to charge now. */
+const selectedNotes = ref<Set<string>>(new Set());
 const creating = ref(false);
 const editing = ref(false);
 const adding = ref(false);
@@ -32,6 +36,7 @@ const ticketResults = ref<CustomerTicket[]>([]);
 const busy = ref(false);
 let timer: ReturnType<typeof setTimeout> | null = null;
 
+const selectedNotesTotal = computed(() => (detail.value?.notes ?? []).filter((note) => selectedNotes.value.has(note.uuid)).reduce((sum, note) => sum + note.total, 0));
 const selectedTotal = computed(() => (detail.value?.pending ?? []).filter((ticket) => selected.value.has(ticket.uuid)).reduce((sum, ticket) => sum + ticket.total, 0));
 
 function failed(e: unknown): void {
@@ -59,6 +64,7 @@ onMounted(search);
 function show(value: CustomerDetail): void {
     detail.value = value;
     selected.value = new Set(value.pending.map((ticket) => ticket.uuid));
+    selectedNotes.value = new Set(value.notes.map((note) => note.uuid));
 }
 
 async function open(customer: Pick<Customer, 'id'>): Promise<void> {
@@ -113,6 +119,53 @@ async function printSummary(): Promise<void> {
         failed(e);
     } finally {
         busy.value = false;
+    }
+}
+
+function toggleNote(uuid: string, value: boolean): void {
+    const next = new Set(selectedNotes.value);
+
+    if (value) {
+        next.add(uuid);
+    } else {
+        next.delete(uuid);
+    }
+
+    selectedNotes.value = next;
+}
+
+/** The ticked notes become an order of the customer and go to the usual payment screen. */
+async function collect(): Promise<void> {
+    if (!detail.value || !selectedNotes.value.size || busy.value) {
+        return;
+    }
+
+    busy.value = true;
+
+    try {
+        const order = await collectNotes(detail.value.customer.id, [...selectedNotes.value]);
+        upsert('orders', order);
+        go(`/caixa/${order.uuid}`);
+    } catch (e) {
+        failed(e);
+    } finally {
+        busy.value = false;
+    }
+}
+
+async function reprintNote(note: DeliveryNoteItem): Promise<void> {
+    if (!detail.value) {
+        return;
+    }
+
+    try {
+        const outcome = await printOrOpen('delivery_note', `${t('deliveryNotes.title')} · ${detail.value.customer.code}`, noteDocument(note, detail.value.customer, widthFor(ticketPrinterId())));
+
+        if (outcome === 'printed') {
+            toast.success(t('cashier.sentTo', { name: directTicketPrinter()?.name ?? '' }));
+        }
+    } catch (e) {
+        failed(e);
     }
 }
 
@@ -213,6 +266,31 @@ async function detach(ticket: CustomerTicket): Promise<void> {
                             <p v-if="detail.customer.address" class="text-sm text-slate-500">{{ detail.customer.address }}</p>
                         </div>
                         <Button variant="outline" size="icon" class="size-10" :title="t('common.edit')" @click="editing = true"><Pencil class="size-4" /></Button>
+                    </div>
+                </div>
+
+                <div v-if="detail.notes.length" class="rounded-xl border-2 border-amber-300 bg-white shadow-sm">
+                    <h3 class="flex items-center gap-2 border-b px-4 py-3 font-bold"><ClipboardSignature class="size-5 text-amber-600" /> {{ t('deliveryNotes.pending') }}</h3>
+                    <div class="divide-y">
+                        <label v-for="note in detail.notes" :key="note.uuid" class="flex cursor-pointer items-center gap-3 px-4 py-2.5">
+                            <Checkbox :model-value="selectedNotes.has(note.uuid)" @update:model-value="(value) => toggleNote(note.uuid, value === true)" />
+                            <span class="min-w-0 flex-1">
+                                <span class="font-medium">{{ formatDateTime(note.issuedAt) }}</span>
+                                <span class="block truncate text-xs text-slate-500">
+                                    <template v-if="note.tableLabel">{{ note.tableLabel }} · </template>{{ note.lines.map((line) => tr(line.name)).join(', ') }}
+                                    <template v-if="note.collecting"> · {{ t('deliveryNotes.collecting') }}</template>
+                                </span>
+                            </span>
+                            <span class="font-semibold tabular-nums">{{ formatMoney(note.total) }}</span>
+                            <Button variant="outline" size="sm" class="h-9" @click.prevent="reprintNote(note)"><Printer class="size-4" /> {{ t('deliveryNotes.reprint') }}</Button>
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-3 border-t bg-amber-50 px-4 py-3">
+                        <span class="flex-1 text-sm text-slate-600">{{ t('deliveryNotes.selected', { count: selectedNotes.size }) }}</span>
+                        <span class="text-xl font-bold text-amber-800 tabular-nums">{{ formatMoney(selectedNotesTotal) }}</span>
+                        <Button class="h-12 bg-emerald-600 hover:bg-emerald-700" :disabled="!selectedNotes.size || busy" @click="collect">
+                            <Wallet class="size-5" /> {{ t('deliveryNotes.collect') }}
+                        </Button>
                     </div>
                 </div>
 

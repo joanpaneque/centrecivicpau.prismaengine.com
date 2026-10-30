@@ -4,6 +4,8 @@ namespace App\Services\Sync\Handlers;
 
 use App\Models\AuditLog;
 use App\Models\CashSession;
+use App\Models\Customer;
+use App\Models\DeliveryNote;
 use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\Payment;
@@ -19,6 +21,7 @@ use App\Support\AppSettings;
 use App\Support\ClientTime;
 use App\Support\Translation;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -37,7 +40,7 @@ class CashierOperations implements OperationHandler
 
     public function types(): array
     {
-        return ['cash.open', 'cash.close', 'ticket.issue'];
+        return ['cash.open', 'cash.close', 'ticket.issue', 'delivery_note.issue'];
     }
 
     public function handle(string $type, array $payload, OperationContext $context): array
@@ -51,6 +54,7 @@ class CashierOperations implements OperationHandler
         return match ($type) {
             'cash.open' => $this->open($payload, $context),
             'cash.close' => $this->close($payload, $context),
+            'delivery_note.issue' => $this->issueNote($payload, $context),
             default => $this->issue($payload, $context),
         };
     }
@@ -213,7 +217,7 @@ class CashierOperations implements OperationHandler
         }
 
         if ($order) {
-            $this->settleOrder($order, $payload, $ticket, $context);
+            $this->settleOrder($order, $payload, $ticket, $ticket->issued_at, $context);
         }
 
         $context->touch('orders');
@@ -222,12 +226,70 @@ class CashierOperations implements OperationHandler
     }
 
     /**
+     * Delivery note (albarà): the order of a customer closes without a payment; it is paid
+     * later together with the customer's other pending notes.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function issueNote(array $payload, OperationContext $context): array
+    {
+        /** @var array<string, mixed> $data */
+        $data = is_array($payload['note'] ?? null) ? $payload['note'] : [];
+        $uuid = (string) ($data['uuid'] ?? '');
+
+        if ($uuid === '') {
+            throw new OperationRejected('invalid_payload', ['field' => 'note.uuid']);
+        }
+
+        if ($existing = DeliveryNote::query()->where('uuid', $uuid)->first()) {
+            return ['noteId' => $existing->id];
+        }
+
+        $order = is_string($data['orderUuid'] ?? null) ? Order::query()->where('uuid', $data['orderUuid'])->first() : null;
+        $customerId = $order->customer_id ?? (is_numeric($data['customerId'] ?? null) ? (int) $data['customerId'] : null);
+
+        if ($customerId === null || ! Customer::query()->whereKey($customerId)->exists()) {
+            throw new OperationRejected('customer_required');
+        }
+
+        $lines = $this->lines($data['lines'] ?? []);
+        $surchargeRate = (float) ($data['surchargeRate'] ?? 0);
+        $computed = $this->tax->compute(array_map(fn ($l) => ['total' => $l['total'], 'vat_rate' => $l['vat_rate']], $lines), $surchargeRate);
+
+        $note = DeliveryNote::query()->create([
+            'uuid' => $uuid,
+            'customer_id' => $customerId,
+            'order_id' => $order?->id,
+            'device_id' => $context->device?->id,
+            'created_by' => $context->operator->id,
+            'issued_at' => $this->time($data['issuedAt'] ?? null, $context),
+            'table_label' => is_string($data['tableLabel'] ?? null) ? $data['tableLabel'] : null,
+            'lines' => array_map(fn (array $l) => Arr::except($l, ['order_line_id']), $lines),
+            'surcharge_rate' => $surchargeRate,
+            'surcharge_amount' => $computed['surcharge_amount'],
+            'total' => $computed['total'],
+            'vat_breakdown' => $computed['vat_breakdown'],
+        ]);
+
+        AuditLog::record('delivery_note.issue', $note, ['customer' => $customerId, 'total' => $note->total], userId: $context->operator->id, deviceId: $context->device?->id);
+
+        if ($order) {
+            $this->settleOrder($order, $payload, $note, $note->issued_at, $context);
+        }
+
+        $context->touch('orders');
+
+        return ['noteId' => $note->id];
+    }
+
+    /**
      * @param  array<string, mixed>  $payload
      */
-    private function settleOrder(Order $order, array $payload, Ticket $ticket, OperationContext $context): void
+    private function settleOrder(Order $order, array $payload, Ticket|DeliveryNote $by, \DateTimeInterface $closedAt, OperationContext $context): void
     {
         if (in_array($order->status, ['paid', 'cancelled'], true)) {
-            AuditLog::record('ticket.order_already_closed', $ticket, ['order' => $order->uuid, 'status' => $order->status], userId: $context->operator->id, deviceId: $context->device?->id);
+            AuditLog::record('ticket.order_already_closed', $by, ['order' => $order->uuid, 'status' => $order->status], userId: $context->operator->id, deviceId: $context->device?->id);
         }
 
         foreach ((array) ($payload['paidLines'] ?? []) as $paid) {
@@ -251,7 +313,12 @@ class CashierOperations implements OperationHandler
             ->exists();
 
         if (! $pending || ! empty($payload['closeOrder'])) {
-            $order->forceFill(['status' => 'paid', 'closed_at' => $ticket->issued_at])->save();
+            $order->forceFill(['status' => 'paid', 'closed_at' => $closedAt])->save();
+
+            // An order that charged delivery notes: they are paid with this ticket.
+            if ($by instanceof Ticket) {
+                DeliveryNote::query()->where('collect_order_id', $order->id)->whereNull('ticket_id')->update(['ticket_id' => $by->id, 'collected_at' => $by->issued_at]);
+            }
         } else {
             $order->touch();
         }

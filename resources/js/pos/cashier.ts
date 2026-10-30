@@ -3,7 +3,7 @@ import { t } from '@/i18n';
 import { randomToken, uuid } from './crypto';
 import { computeTax, discountAmount, grossTotal } from './money';
 import { childLines, ticketViewFor } from './orders';
-import { directTicketPrinter, job, lineAmount, ticketDocument, ticketPrinterId, widthFor, zDocument } from './print';
+import { deliveryNoteDocument, directTicketPrinter, job, lineAmount, ticketDocument, ticketPrinterId, widthFor, zDocument } from './print';
 import type { TicketView, ZSummary } from './print';
 import { setKv, state } from './store';
 import { enqueue } from './sync';
@@ -221,6 +221,46 @@ export async function issueTicket(
     setKv('seriesNext', number + 1);
 
     return { fullNumber, document, change: paymentRows.reduce((sum, p) => sum + (p.change ?? 0), 0), tip, printed: !!opts.print };
+}
+
+/**
+ * Delivery note (albarà) instead of a payment, for an order with a customer: the whole
+ * bill closes unpaid and the note is printed twice (customer's and house copies). The
+ * customer pays it later with their other pending notes, from Clients.
+ */
+export async function issueDeliveryNote(order: Order, selection: Selection): Promise<'printed' | 'pdf'> {
+    if (!order.customer) {
+        throw new Error('customer_required');
+    }
+
+    const issuedAt = new Date().toISOString();
+    const base = ticketViewFor(order, selection);
+    const merged = mergeTicketLines(
+        ticketLines(order, selection).map((input, i) => ({ input, view: { ...base.lines[i], quantity: input.quantity, total: input.total, discount: input.discountAmount } })),
+    );
+    const lines = merged.map((m) => m.input);
+    const surchargeRate = surchargeRateFor(order);
+    const tax = computeTax(lines.map((l) => ({ total: l.total, vatRate: l.vatRate })), surchargeRate);
+    const tableLabel = order.tableId ? (state.tables[order.tableId]?.label ?? null) : order.label;
+    const view: TicketView = {
+        ...base,
+        fullNumber: null,
+        issuedAt,
+        lines: merged.map((m) => m.view),
+        surchargeRate,
+        surchargeAmount: tax.surchargeAmount,
+        total: tax.total,
+        vatBreakdown: tax.vatBreakdown,
+        payments: [],
+    };
+
+    await enqueue('delivery_note.issue', {
+        note: { uuid: uuid(), orderUuid: order.uuid, customerId: order.customer.id, issuedAt, tableLabel, surchargeRate, total: tax.total, lines },
+        paidLines: selection.map(({ line, quantity }) => ({ lineUuid: line.uuid, quantity })),
+        closeOrder: true,
+    });
+
+    return printOrOpen('delivery_note', `${t('deliveryNotes.title')} · ${order.customer.code}`, deliveryNoteDocument(view, order.customer, widthFor(ticketPrinterId())));
 }
 
 export async function reprint(title: string, document: PrintDocument): Promise<void> {

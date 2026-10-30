@@ -7,10 +7,16 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Customer;
 use App\Models\CustomerStatement;
+use App\Models\DeliveryNote;
+use App\Models\Order;
+use App\Models\OrderLine;
 use App\Models\Ticket;
 use App\Services\Customers\StatementService;
+use App\Services\Sync\SnapshotBuilder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use RuntimeException;
 
@@ -135,12 +141,95 @@ class CustomerController extends Controller
     }
 
     /**
+     * Charge pending delivery notes: they become the lines of a new order of the customer,
+     * charged like any other (cash, card, mixed) into a ticket with its QR. The terrace
+     * surcharge of a note goes into its prices, so the total is the same.
+     */
+    public function collectNotes(Request $request, Customer $customer, SnapshotBuilder $snapshots): JsonResponse
+    {
+        $this->staff($request);
+        $data = $request->validate(['noteUuids' => ['required', 'array', 'min:1'], 'noteUuids.*' => ['string']]);
+
+        $order = DB::transaction(function () use ($customer, $data, $request) {
+            $notes = DeliveryNote::query()->where('customer_id', $customer->id)->whereNull('ticket_id')->whereIn('uuid', $data['noteUuids'])->orderBy('issued_at')->lockForUpdate()->get();
+            abort_if($notes->isEmpty(), 422, __('tpv.customer_nothing_pending'));
+
+            // An earlier charge of these notes that was left half way is dropped.
+            Order::query()->whereIn('id', $notes->pluck('collect_order_id')->filter()->unique())->whereIn('status', Order::ACTIVE_STATUSES)
+                ->whereDoesntHave('lines', fn ($q) => $q->where('paid_quantity', '>', 0))
+                ->update(['status' => 'cancelled', 'closed_at' => now()]);
+
+            $order = Order::query()->create([
+                'uuid' => (string) Str::uuid(),
+                'status' => 'open',
+                'label' => mb_substr(__('tpv.delivery_notes_label', ['code' => $customer->code]), 0, 60),
+                'opened_by' => $request->user()?->id,
+                'opened_at' => now(),
+                'customer_id' => $customer->id,
+            ]);
+
+            foreach ($notes as $note) {
+                $this->noteLines($order, $note, $request->user()?->id);
+            }
+
+            DeliveryNote::query()->whereKey($notes->modelKeys())->update(['collect_order_id' => $order->id]);
+            AuditLog::record('delivery_note.collect', $order, ['customer' => $customer->code, 'notes' => $notes->count()], userId: $request->user()?->id);
+
+            return $order;
+        });
+
+        TpvChanged::notify(['orders']);
+
+        return response()->json(['order' => $snapshots->order($order->load('lines', 'customer'))], 201);
+    }
+
+    private function noteLines(Order $order, DeliveryNote $note, ?int $userId): void
+    {
+        $factor = 1 + $note->surcharge_rate / 100;
+        $rows = [];
+
+        foreach ($note->lines as $line) {
+            $rows[] = ['line' => $line, 'total' => (int) round($line['total'] * $factor)];
+        }
+
+        // Rounding: the lines add up exactly to the note.
+        if ($rows !== []) {
+            $rows[count($rows) - 1]['total'] += $note->total - array_sum(array_column($rows, 'total'));
+        }
+
+        foreach ($rows as ['line' => $line, 'total' => $total]) {
+            $quantity = (float) $line['quantity'];
+            $whole = $quantity >= 1 && floor($quantity) === $quantity && $total % (int) $quantity === 0;
+            $name = (array) $line['name'];
+
+            if (! $whole) {
+                $label = rtrim(rtrim(number_format($quantity, 3, ',', ''), '0'), ',').' x ';
+                $name = array_map(fn ($text) => $label.$text, $name);
+            }
+
+            OrderLine::query()->create([
+                'uuid' => (string) Str::uuid(),
+                'order_id' => $order->id,
+                'name' => $name,
+                'quantity' => $whole ? (int) $quantity : 1,
+                'unit_price' => $whole ? intdiv($total, (int) $quantity) : $total,
+                'vat_rate' => (float) $line['vat_rate'],
+                // Names only: the price of the extras is already in the line.
+                'modifiers' => array_values(array_map(fn ($m) => ['name' => is_array($m) ? ($m['name'] ?? $m) : $m, 'priceDelta' => 0], (array) ($line['modifiers'] ?? []))),
+                'created_by' => $userId,
+                'sent_at' => now(),
+            ]);
+        }
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private function detail(Customer $customer): array
     {
         return [
             'customer' => $this->customer($customer),
+            'notes' => DeliveryNote::query()->where('customer_id', $customer->id)->whereNull('ticket_id')->orderBy('issued_at')->get()->map(fn (DeliveryNote $n) => $this->note($n))->all(),
             'pending' => $customer->pendingTickets()->latest('issued_at')->get()->map(fn (Ticket $t) => $this->ticket($t))->all(),
             'statements' => $customer->statements()->with('invoice')->latest('issued_at')->limit(10)->get()->map(fn (CustomerStatement $s) => [
                 'id' => $s->id,
@@ -149,6 +238,26 @@ class CustomerController extends Controller
                 'total' => $s->total,
                 'invoice' => $s->invoice?->full_number,
             ])->all(),
+        ];
+    }
+
+    /**
+     * A pending delivery note, with what the TPV needs to print it again.
+     *
+     * @return array<string, mixed>
+     */
+    private function note(DeliveryNote $note): array
+    {
+        return [
+            'uuid' => $note->uuid,
+            'issuedAt' => $note->issued_at->toIso8601String(),
+            'tableLabel' => $note->table_label,
+            'total' => $note->total,
+            'surchargeRate' => $note->surcharge_rate,
+            'surchargeAmount' => $note->surcharge_amount,
+            'vatBreakdown' => $note->vat_breakdown,
+            'lines' => array_map(fn (array $l) => ['name' => $l['name'], 'quantity' => (float) $l['quantity'], 'unitPrice' => (int) $l['unit_price'], 'vatRate' => (float) $l['vat_rate'], 'total' => (int) $l['total']], $note->lines),
+            'collecting' => $note->collect_order_id !== null,
         ];
     }
 

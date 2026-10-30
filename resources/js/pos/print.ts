@@ -16,6 +16,13 @@ export function rowText(left: string, right: string, width = DEFAULT_WIDTH): str
     return pad(left, right, width);
 }
 
+/** Replaced by the server with the order number of the day (App\Services\Printing\PrintService). */
+export const ORDER_NUMBER_TOKEN = '{#ORDER}';
+
+function hour(iso: string): string {
+    return new Date(iso).toLocaleTimeString('ca-ES', { hour: '2-digit', minute: '2-digit' });
+}
+
 function time(iso: string): string {
     return new Date(iso).toLocaleString('ca-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
@@ -72,9 +79,11 @@ export function job(kind: string, title: string, printerId: number | null, docum
 }
 
 function header(lines: PrintLine[], title: string, order: Order, width: number, extra: string[] = []): void {
+    // The order number of the day on top, so the second courses asked later match this ticket.
+    lines.push({ type: 'text', text: t('order.orderNumber', { number: ORDER_NUMBER_TOKEN }).toUpperCase(), align: 'center', bold: true, size: 2 });
     lines.push({ type: 'text', text: title, align: 'center', bold: true, size: 2, invert: true });
     lines.push({ type: 'text', text: `${t('reservations.table')} ${tableLabel(order)}`, align: 'center', bold: true, size: 2 });
-    lines.push({ type: 'row', left: time(new Date().toISOString()), right: staffName(state.operatorId) });
+    lines.push({ type: 'row', left: `${t('order.hour')} ${hour(new Date().toISOString())}`, right: staffName(state.operatorId), bold: true });
 
     for (const text of extra) {
         lines.push({ type: 'text', text, align: 'center', bold: true });
@@ -125,8 +134,7 @@ export function kitchenDocument(order: Order, destinationName: string, lines: Or
 
     for (const course of [...byCourse.keys()].sort()) {
         if (course) {
-            const heldText = opts.held && course >= 2 ? ` - ${t('order.held').toUpperCase()}` : '';
-            out.push({ type: 'text', text: `-- ${t(`order.courses.${course}`).toUpperCase()}${heldText} --`, align: 'center', bold: true });
+            courseHeader(out, course, opts.held && course >= 2);
         }
 
         for (const line of byCourse.get(course) ?? []) {
@@ -139,10 +147,27 @@ export function kitchenDocument(order: Order, destinationName: string, lines: Or
     return { width, lines: out };
 }
 
-export function marchDocument(order: Order, destinationName: string, course: number, width = DEFAULT_WIDTH): PrintDocument {
+/** "PRIMEROS", "SEGUNDOS"… in big reversed type, so each course stands out on the ticket. */
+function courseHeader(out: PrintLine[], course: number, held = false): void {
+    const title = t(`order.courseTitles.${course}`).toUpperCase();
+    out.push({ type: 'feed' });
+    out.push({ type: 'text', text: ` ${title}${held ? ` · ${t('order.held').toUpperCase()}` : ''} `, align: 'center', bold: true, size: 2, invert: true });
+}
+
+/**
+ * Second courses asked for (from any device): the same order number, marked apart, with the
+ * dishes of that course again so the kitchen does not have to look for the first ticket.
+ */
+export function marchDocument(order: Order, destinationName: string, course: number, lines: OrderLine[], allLines: OrderLine[], width = DEFAULT_WIDTH): PrintDocument {
     const out: PrintLine[] = [];
     header(out, destinationName.toUpperCase(), order, width);
-    out.push({ type: 'text', text: t('order.march', { course: t(`order.courses.${course}`) }).toUpperCase(), align: 'center', bold: true, size: 2 });
+    out.push({ type: 'text', text: t('order.marchTitle', { course: t(`order.courseTitles.${course}`) }).toUpperCase(), align: 'center', bold: true, size: 2, invert: true });
+    out.push({ type: 'feed' });
+
+    for (const line of lines) {
+        out.push(...lineDescription(line, allLines.filter((l) => l.parentUuid === line.uuid && !line.setMenuId)));
+    }
+
     out.push({ type: 'feed', lines: 2 }, { type: 'cut' });
 
     return { width, lines: out };
@@ -259,6 +284,31 @@ export function billDocument(ticket: TicketView, width = DEFAULT_WIDTH): PrintDo
     out.push({ type: 'feed' });
     out.push({ type: 'text', text: '*** NO VÀLID COM A FACTURA / NO VÁLIDO COMO FACTURA ***', align: 'center' });
     out.push({ type: 'feed', lines: 2 }, { type: 'cut' });
+
+    return { width, lines: out };
+}
+
+/**
+ * Delivery note (albarà) of a customer who pays later: two copies, one for them (to sign
+ * and keep) and one for the house, with the same lines and VAT as a ticket. Not an invoice.
+ */
+export function deliveryNoteDocument(note: TicketView, customer: { code: string; name: string }, width = DEFAULT_WIDTH): PrintDocument {
+    const out: PrintLine[] = [];
+
+    for (const copy of ['customersCopy', 'houseCopy']) {
+        businessHeader(out);
+        out.push({ type: 'divider' });
+        out.push({ type: 'text', text: t('deliveryNotes.title').toUpperCase(), align: 'center', bold: true, size: 2 });
+        out.push({ type: 'text', text: time(note.issuedAt), align: 'center' });
+        out.push({ type: 'text', text: `${customer.code} · ${customer.name}`, align: 'center', bold: true });
+        ticketBody(out, note, width);
+        out.push({ type: 'text', text: t('deliveryNotes.unpaid').toUpperCase(), align: 'center', bold: true, invert: true });
+        out.push({ type: 'feed', lines: 2 });
+        out.push({ type: 'text', text: `${t('deliveryNotes.signature')}: ____________________` });
+        out.push({ type: 'feed' });
+        out.push({ type: 'text', text: `— ${t(`deliveryNotes.${copy}`)} —`, align: 'center' });
+        out.push({ type: 'feed', lines: 2 }, { type: 'cut' });
+    }
 
     return { width, lines: out };
 }

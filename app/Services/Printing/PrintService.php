@@ -10,6 +10,8 @@ use Illuminate\Support\Facades\DB;
 
 class PrintService
 {
+    public const ORDER_NUMBER_TOKEN = '{#ORDER}';
+
     public function __construct(
         private readonly SimulatedPrinterDriver $simulated,
         private readonly EscPosPrinterDriver $escpos,
@@ -20,7 +22,7 @@ class PrintService
      * @param  array<int, mixed>  $jobs
      * @return list<string> Names of the printers that received a job
      */
-    public function storeMany(array $jobs, OperationContext $context): array
+    public function storeMany(array $jobs, OperationContext $context, ?int $orderNumber = null): array
     {
         $printed = [];
 
@@ -30,7 +32,7 @@ class PrintService
             }
 
             /** @var array<string, mixed> $document */
-            $document = $job['document'];
+            $document = $this->withOrderNumber($job['document'], $orderNumber);
 
             $stored = $this->store(
                 uuid: $job['uuid'],
@@ -46,6 +48,42 @@ class PrintService
         }
 
         return $printed;
+    }
+
+    /**
+     * The TPV writes the order number of the day as ORDER_NUMBER_TOKEN (only the server
+     * knows it); a line with it and no number is left out.
+     *
+     * @param  array<string, mixed>  $document
+     * @return array<string, mixed>
+     */
+    public function withOrderNumber(array $document, ?int $number): array
+    {
+        $lines = [];
+
+        foreach ((array) ($document['lines'] ?? []) as $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            $text = (string) json_encode([$line['text'] ?? null, $line['left'] ?? null, $line['right'] ?? null]);
+
+            if (str_contains($text, self::ORDER_NUMBER_TOKEN)) {
+                if ($number === null) {
+                    continue;
+                }
+
+                foreach (['text', 'left', 'right'] as $key) {
+                    if (is_string($line[$key] ?? null)) {
+                        $line[$key] = str_replace(self::ORDER_NUMBER_TOKEN, (string) $number, $line[$key]);
+                    }
+                }
+            }
+
+            $lines[] = $line;
+        }
+
+        return ['lines' => $lines] + $document;
     }
 
     /**

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Banknote, CheckCircle2, CreditCard, FileText, Minus, Plus, Split, Trash2, UserRound, Wallet } from '@lucide/vue';
+import { ArrowLeft, Banknote, CheckCircle2, ClipboardSignature, CreditCard, FileText, Minus, Plus, Split, Trash2, UserRound, Wallet } from '@lucide/vue';
 import { computed, reactive, ref, watch } from 'vue';
 import { toast } from 'vue-sonner';
 import CustomerPicker from '@/components/pos/CustomerPicker.vue';
@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { t, tr } from '@/i18n';
-import { issueTicket, orderLabel, pendingSelection, printOrOpen, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
+import { issueDeliveryNote, issueTicket, orderLabel, pendingSelection, printOrOpen, selectionTotal, splits, surchargeRateFor, waiterName } from '@/pos/cashier';
 import type { PaymentInput, Selection } from '@/pos/cashier';
 import { uuid } from '@/pos/crypto';
 import { assignCustomer } from '@/pos/customers';
@@ -25,10 +25,11 @@ import { enqueue } from '@/pos/sync';
 import type { OrderLine, PrintDocument } from '@/pos/types';
 
 type Mode = 'all' | 'items' | 'equal';
-type Method = 'cash' | 'card' | 'mixed';
+/** note: a delivery note (albarà) instead of a payment; only for an order with a customer. */
+type Method = 'cash' | 'card' | 'mixed' | 'note';
 
 const MODES: Mode[] = ['all', 'items', 'equal'];
-const METHODS: { id: Method; icon: typeof Banknote }[] = [
+const PAYMENT_METHODS: { id: Method; icon: typeof Banknote }[] = [
     { id: 'cash', icon: Banknote },
     { id: 'card', icon: CreditCard },
     { id: 'mixed', icon: Split },
@@ -42,6 +43,9 @@ const order = computed(() => {
 
 const mode = ref<Mode>('all');
 const method = ref<Method>('cash');
+const canNote = computed(() => !!order.value?.customer && !order.value.collectsNotes);
+const METHODS = computed(() => (canNote.value ? [...PAYMENT_METHODS, { id: 'note' as Method, icon: ClipboardSignature }] : PAYMENT_METHODS));
+const isNote = computed(() => method.value === 'note' && canNote.value);
 const tendered = ref('');
 const cardAmount = ref('');
 const customCents = ref<number | null>(null);
@@ -92,6 +96,19 @@ watch(
     { immediate: true },
 );
 
+// A delivery note takes the whole bill.
+watch(isNote, (value) => {
+    if (value && mode.value !== 'all') {
+        setMode('all');
+    }
+});
+
+watch(canNote, (value) => {
+    if (!value && method.value === 'note') {
+        method.value = 'cash';
+    }
+});
+
 watch(method, (value) => {
     if (customCents.value !== null && (value === 'cash' || value === 'mixed')) {
         tendered.value = formatMoney(customCents.value, false);
@@ -139,7 +156,7 @@ const remainingAfter = computed(() => {
 });
 
 const cardCents = computed(() => (method.value === 'mixed' ? Math.min(due.value, parseMoney(cardAmount.value)) : method.value === 'card' ? due.value : 0));
-const cashCents = computed(() => due.value - cardCents.value);
+const cashCents = computed(() => (isNote.value ? 0 : due.value - cardCents.value));
 const tenderedCents = computed(() => (tendered.value ? parseMoney(tendered.value) : cashCents.value));
 const change = computed(() => Math.max(0, tenderedCents.value - cashCents.value));
 const insufficient = computed(() => cashCents.value > 0 && tenderedCents.value < cashCents.value);
@@ -325,6 +342,24 @@ async function charge(): Promise<void> {
     }
 }
 
+async function issueNote(): Promise<void> {
+    if (!order.value || !isNote.value || due.value <= 0 || charging.value || missingPrices.value.length) {
+        return;
+    }
+
+    charging.value = true;
+
+    try {
+        const outcome = await issueDeliveryNote(order.value, pending.value);
+        toast.success(outcome === 'printed' ? t('deliveryNotes.printed', { name: directPrinter.value?.name ?? '' }) : t('deliveryNotes.done'));
+        go('/sala');
+    } catch {
+        toast.error(t('common.error'));
+    } finally {
+        charging.value = false;
+    }
+}
+
 async function printProforma(): Promise<void> {
     if (!order.value || printingProforma.value) {
         return;
@@ -408,8 +443,9 @@ function finish(): void {
                     v-for="m in MODES"
                     :key="m"
                     type="button"
-                    class="h-11 flex-1 rounded-lg text-sm font-medium"
+                    class="h-11 flex-1 rounded-lg text-sm font-medium disabled:opacity-40"
                     :class="mode === m ? 'bg-[#00056a] text-white' : 'bg-slate-100 dark:bg-slate-800'"
+                    :disabled="isNote && m !== 'all'"
                     @click="setMode(m)"
                 >
                     {{ m === 'all' ? t('cashier.payAll') : m === 'items' ? t('cashier.splitByItems') : t('cashier.splitEqual') }}
@@ -482,12 +518,12 @@ function finish(): void {
                 <FileText class="size-5" /> {{ printingProforma ? (directPrinter ? t('cashier.sending') : t('cashier.openingPdf')) : t('cashier.printProforma') }}
             </Button>
 
-            <div v-if="due > 0" class="space-y-2">
+            <div v-if="due > 0 && !isNote" class="space-y-2">
                 <Button variant="outline" class="h-14 w-full text-base" @click="openPaidMore">{{ t('cashier.paidMore') }}</Button>
                 <button v-if="customCents" type="button" class="w-full text-sm text-slate-500 underline" @click="clearPaidMore">{{ t('cashier.paidMoreClear') }}</button>
             </div>
 
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid gap-2" :class="METHODS.length > 3 ? 'grid-cols-4' : 'grid-cols-3'">
                 <button
                     v-for="m in METHODS"
                     :key="m.id"
@@ -520,13 +556,17 @@ function finish(): void {
                 </div>
             </div>
 
-            <label class="mt-auto flex h-14 cursor-pointer items-center gap-3 rounded-xl border-2 bg-white px-4 text-base font-medium dark:bg-slate-900" :class="printOnCharge ? 'border-[#00056a]' : 'border-transparent'">
+            <p v-if="isNote" class="rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-900">{{ t('deliveryNotes.help', { code: order.customer?.code ?? '' }) }}</p>
+            <Button v-if="isNote" class="mt-auto h-16 bg-amber-600 text-xl hover:bg-amber-700" :disabled="due <= 0 || charging" @click="issueNote">
+                <ClipboardSignature class="size-6" /> {{ charging ? t('cashier.sending') : t('deliveryNotes.print') }}
+            </Button>
+            <label v-if="!isNote" class="mt-auto flex h-14 cursor-pointer items-center gap-3 rounded-xl border-2 bg-white px-4 text-base font-medium dark:bg-slate-900" :class="printOnCharge ? 'border-[#00056a]' : 'border-transparent'">
                 <Checkbox v-model="printOnCharge" class="size-6" />
                 <FileText class="size-5 text-slate-500" />
                 <span class="flex-1">{{ t('cashier.printOnCharge') }}</span>
                 <span v-if="printOnCharge && directPrinter" class="truncate text-sm font-normal text-slate-500">{{ directPrinter.name }}</span>
             </label>
-            <Button class="h-16 bg-emerald-600 text-xl hover:bg-emerald-700" :disabled="due <= 0 || insufficient || charging" @click="charge">
+            <Button v-if="!isNote" class="h-16 bg-emerald-600 text-xl hover:bg-emerald-700" :disabled="due <= 0 || insufficient || charging" @click="charge">
                 <Wallet class="size-6" /> {{ charging ? t('cashier.charging') : `${t('cashier.charge')} ${formatMoney(customCents && method === 'card' ? customCents : due)}` }}
             </Button>
             <p v-if="surplus > 0" class="rounded-xl bg-amber-100 px-4 py-3 text-center text-lg font-semibold text-amber-950 dark:bg-amber-900/40 dark:text-amber-100">

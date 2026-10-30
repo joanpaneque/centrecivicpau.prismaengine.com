@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\CustomerStatement;
+use App\Models\DeliveryNote;
 use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\User;
@@ -94,4 +95,69 @@ test('the summary groups the pending tickets of a customer and its qr gives one 
     ])->assertSessionHasErrors('customer_name');
 
     expect(Invoice::query()->count())->toBe(1);
+});
+
+test('a delivery note closes the order unpaid and is charged later into a normal ticket', function () {
+    $admin = User::factory()->admin()->create();
+    $customer = Customer::query()->create(['code' => 'ALB', 'name' => 'Client albarans']);
+    $cookie = registerTpvDevice($this, $admin, 'cashier');
+    $client = fn () => $this->actingAs($admin)->withCredentials()->withCookie(DeviceManager::COOKIE, $cookie);
+    $order = Order::query()->create(['uuid' => (string) Str::uuid(), 'status' => 'open', 'opened_at' => now(), 'customer_id' => $customer->id]);
+    $line = $order->lines()->create(['uuid' => (string) Str::uuid(), 'name' => ['ca' => 'Cafè', 'es' => 'Café'], 'quantity' => 2, 'unit_price' => 150, 'vat_rate' => 10]);
+
+    $client()->postJson(route('tpv.push'), ['operations' => [tpvOperation('delivery_note.issue', [
+        'note' => [
+            'uuid' => (string) Str::uuid(),
+            'orderUuid' => $order->uuid,
+            'issuedAt' => now()->toIso8601String(),
+            'surchargeRate' => 0,
+            'total' => 300,
+            'lines' => [['orderLineUuid' => $line->uuid, 'name' => ['ca' => 'Cafè', 'es' => 'Café'], 'quantity' => 2, 'unitPrice' => 150, 'vatRate' => 10, 'total' => 300]],
+        ],
+        'paidLines' => [['lineUuid' => $line->uuid, 'quantity' => 2]],
+        'closeOrder' => true,
+    ], $admin->id)]])->assertOk()->assertJsonPath('results.0.status', 'ok');
+
+    $note = DeliveryNote::query()->firstOrFail();
+
+    expect($note->customer_id)->toBe($customer->id)
+        ->and($note->total)->toBe(300)
+        ->and($note->ticket_id)->toBeNull()
+        ->and($order->refresh()->status)->toBe('paid');
+
+    $client()->getJson(route('tpv.customers.show', $customer))->assertJsonCount(1, 'notes');
+
+    $collect = $client()->postJson(route('tpv.customers.notes.collect', $customer), ['noteUuids' => [$note->uuid]])->assertCreated();
+    $collector = Order::query()->where('uuid', $collect->json('order.uuid'))->firstOrFail();
+
+    expect($collect->json('order.collectsNotes'))->toBeTrue()
+        ->and($collector->customer_id)->toBe($customer->id)
+        ->and((int) $collector->lines->sum(fn ($l) => $l->unit_price * $l->quantity))->toBe(300);
+
+    $sessionUuid = (string) Str::uuid();
+    $client()->postJson(route('tpv.push'), ['operations' => [tpvOperation('cash.open', ['sessionUuid' => $sessionUuid], $admin->id)]])->assertOk();
+    $series = $client()->getJson(route('tpv.bootstrap'))->json('cashier.series.code');
+
+    $client()->postJson(route('tpv.push'), ['operations' => [tpvOperation('ticket.issue', [
+        'ticket' => [
+            'uuid' => (string) Str::uuid(),
+            'seriesCode' => $series,
+            'number' => 1,
+            'orderUuid' => $collector->uuid,
+            'cashSessionUuid' => $sessionUuid,
+            'issuedAt' => now()->toIso8601String(),
+            'surchargeRate' => 0,
+            'total' => 300,
+            'publicToken' => str_repeat('h', 32),
+            'lines' => [['name' => ['ca' => 'Cafè', 'es' => 'Café'], 'quantity' => 2, 'unitPrice' => 150, 'vatRate' => 10, 'total' => 300]],
+            'payments' => [['method' => 'cash', 'amount' => 300]],
+        ],
+        'paidLines' => $collector->lines->map(fn ($l) => ['lineUuid' => $l->uuid, 'quantity' => $l->quantity])->all(),
+        'closeOrder' => true,
+    ], $admin->id)]])->assertOk()->assertJsonPath('results.0.status', 'ok');
+
+    expect($note->refresh()->ticket_id)->not->toBeNull()
+        ->and($note->ticket->customer_id)->toBe($customer->id);
+
+    $client()->getJson(route('tpv.customers.show', $customer))->assertJsonCount(0, 'notes')->assertJsonCount(1, 'pending');
 });

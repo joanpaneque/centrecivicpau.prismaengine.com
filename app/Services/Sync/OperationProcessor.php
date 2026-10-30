@@ -5,6 +5,7 @@ namespace App\Services\Sync;
 use App\Events\TpvChanged;
 use App\Models\ClientOperation;
 use App\Models\Device;
+use App\Models\Order;
 use App\Models\User;
 use App\Services\Printing\PrintService;
 use App\Support\ClientTime;
@@ -60,6 +61,20 @@ class OperationProcessor
     }
 
     /**
+     * Number of the day of the order the operation is about (the one it merged into, if so).
+     */
+    private function orderNumber(mixed $uuid): ?int
+    {
+        $order = is_string($uuid) ? Order::query()->where('uuid', $uuid)->first() : null;
+
+        for ($guard = 0; $order !== null && $order->status === 'merged' && $order->merged_into_id !== null && $guard < 10; $guard++) {
+            $order = Order::query()->find($order->merged_into_id);
+        }
+
+        return $order?->number;
+    }
+
+    /**
      * @param  array<string, mixed>  $operation
      * @param  list<string>  $scopes
      * @return array<string, mixed>
@@ -100,7 +115,7 @@ class OperationProcessor
                 $result = $handler->handle($type, $payload, $context);
 
                 if (is_array($payload['printJobs'] ?? null) && $payload['printJobs'] !== []) {
-                    $result['printed'] = $this->prints->storeMany($payload['printJobs'], $context);
+                    $result['printed'] = $this->prints->storeMany($payload['printJobs'], $context, $this->orderNumber($result['orderUuid'] ?? $payload['orderUuid'] ?? null));
                     $context->touch('prints');
                 }
 

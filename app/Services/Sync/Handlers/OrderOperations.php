@@ -19,6 +19,7 @@ use App\Support\ClientTime;
 use App\Support\Translation;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -107,6 +108,7 @@ class OrderOperations implements OperationHandler
 
         $order = Order::query()->create([
             'uuid' => $uuid,
+            'number' => $active ? null : $this->nextNumber(),
             'dining_table_id' => $tableId,
             'status' => $active ? 'merged' : 'open',
             'guests' => is_numeric($payload['guests'] ?? null) ? (int) $payload['guests'] : null,
@@ -130,6 +132,25 @@ class OrderOperations implements OperationHandler
         $context->touch('orders');
 
         return $active ?? $order;
+    }
+
+    /**
+     * Next order number of today (the server's day, also for orders queued offline).
+     */
+    private function nextNumber(): int
+    {
+        $day = now()->toDateString();
+        $counter = DB::table('order_counters')->where('day', $day)->lockForUpdate()->first();
+
+        if ($counter === null) {
+            DB::table('order_counters')->insertOrIgnore(['day' => $day, 'last_number' => 0]);
+            $counter = DB::table('order_counters')->where('day', $day)->lockForUpdate()->first();
+        }
+
+        $number = (int) ($counter->last_number ?? 0) + 1;
+        DB::table('order_counters')->where('day', $day)->update(['last_number' => $number]);
+
+        return $number;
     }
 
     private function follow(Order $order): Order

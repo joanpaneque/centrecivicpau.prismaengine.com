@@ -186,6 +186,9 @@ o.label = p.label;
         case 'ticket.issue':
             issueTicket(p);
             break;
+        case 'delivery_note.issue':
+            settleOrder(p, p.note?.orderUuid, p.note?.issuedAt);
+            break;
     }
 }
 
@@ -639,7 +642,12 @@ function issueTicket(p: Payload): void {
 
     touchKv('cashier');
 
-    const order = ticket.orderUuid ? state.orders[ticket.orderUuid] : null;
+    settleOrder(p, ticket.orderUuid, ticket.issuedAt);
+}
+
+/** The lines a ticket (or a delivery note) covers are paid, and the order closes when nothing is left. */
+function settleOrder(p: Payload, orderUuid: string | undefined, closedAt: string | undefined): void {
+    const order = orderUuid ? state.orders[orderUuid] : null;
 
     if (!order) {
         return;
@@ -661,7 +669,7 @@ function issueTicket(p: Payload): void {
 
     if (!pending || p.closeOrder) {
         order.status = 'paid';
-        order.closedAt = ticket.issuedAt;
+        order.closedAt = closedAt ?? new Date().toISOString();
     }
 
     markDirty('orders', order.uuid);

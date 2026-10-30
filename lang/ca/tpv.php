@@ -19,6 +19,7 @@ return [
     'customer_ticket_closed' => 'Aquest tiquet ja és en un resum o facturat: no es pot canviar.',
     'customer_nothing_pending' => 'Aquest client no té tiquets pendents.',
     'invoice_statement_mail_body' => 'Hola :name, us adjuntem la factura :number, que agrupa els tiquets :tickets.',
+    'delivery_notes_label' => 'Albarans :code',
     'carta_item_price' => 'Falta el preu (o un text com «S.M.»): aquest plat no és a la carta del TPV o no hi té preu.',
     'invoice_already_issued' => 'Aquest tiquet ja té una factura emesa.',
     'invoice_issued' => 'Factura emesa correctament.',

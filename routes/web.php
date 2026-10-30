@@ -80,6 +80,7 @@ Route::middleware(['auth'])->prefix('tpv')->group(function () {
         Route::delete('customers/{customer}/tickets/{ticket:uuid}', [TpvCustomerController::class, 'detach'])->name('customers.detach');
         Route::post('customers/{customer}/statements', [TpvCustomerController::class, 'createStatement'])->name('customers.statements.store');
         Route::get('customer-tickets', [TpvCustomerController::class, 'tickets'])->name('customers.tickets');
+        Route::post('customers/{customer}/notes/collect', [TpvCustomerController::class, 'collectNotes'])->name('customers.notes.collect');
         Route::get('statements/{statement}', [TpvCustomerController::class, 'statement'])->name('statements.show');
 
         Route::middleware('admin')->group(function () {

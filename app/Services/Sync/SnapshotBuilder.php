@@ -370,7 +370,7 @@ class SnapshotBuilder
      */
     private function orders(?CarbonImmutable $from): array
     {
-        $query = Order::query()->with(['lines', 'table', 'customer']);
+        $query = Order::query()->with(['lines', 'table', 'customer'])->withExists('collectedNotes');
         $from === null
             ? $query->whereIn('status', Order::ACTIVE_STATUSES)
             : $query->where('updated_at', '>=', $from);
@@ -391,6 +391,7 @@ class SnapshotBuilder
 
         return [
             'uuid' => $order->uuid,
+            'number' => $order->number,
             'tableId' => $order->dining_table_id,
             'status' => $order->status,
             'guests' => $order->guests,
@@ -399,6 +400,8 @@ class SnapshotBuilder
             'openedAt' => $order->opened_at->toIso8601String(),
             'billRequestedAt' => $order->bill_requested_at?->toIso8601String(),
             'customer' => $order->customer ? ['id' => $order->customer->id, 'code' => $order->customer->code, 'name' => $order->customer->name] : null,
+            // It charges delivery notes: it cannot become a delivery note itself.
+            'collectsNotes' => (bool) ($order->getAttribute('collected_notes_exists') ?? false),
             'proformaPrintedAt' => $order->proforma_printed_at?->toIso8601String(),
             'closedAt' => $order->closed_at?->toIso8601String(),
             'mergedIntoUuid' => $mergedIntoUuid,
