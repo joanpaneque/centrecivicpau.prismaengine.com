@@ -3,9 +3,12 @@ import { toast } from 'vue-sonner';
 import { t, tr } from '@/i18n';
 import { state } from './store';
 
-export const soundEnabled = ref(localStorage.getItem('tpv-sound') !== 'off');
+// No localStorage when the page is rendered on the server (SSR).
+const storage = typeof localStorage === 'undefined' ? null : localStorage;
 
-watch(soundEnabled, (value) => localStorage.setItem('tpv-sound', value ? 'on' : 'off'));
+export const soundEnabled = ref(storage?.getItem('tpv-sound') !== 'off');
+
+watch(soundEnabled, (value) => storage?.setItem('tpv-sound', value ? 'on' : 'off'));
 
 let audio: AudioContext | null = null;
 
