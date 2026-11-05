@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\ShiftController;
 use App\Http\Controllers\Admin\SupplierInvoiceController;
 use App\Http\Controllers\Admin\TicketController;
 use App\Http\Controllers\Admin\TimeTrackingController;
+use App\Http\Controllers\Admin\TrafficController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Admin\ZoneController;
 use App\Http\Controllers\AssistantController;
@@ -199,6 +200,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('facturas/{invoice}/pdf', [TicketController::class, 'invoicePdf'])->name('invoices.pdf');
         Route::post('facturas/{invoice}/reenviar', [TicketController::class, 'resendInvoice'])->name('invoices.resend');
         Route::get('cierres', [TicketController::class, 'cashSessions'])->name('cash-sessions');
+        Route::get('afluencia', TrafficController::class)->name('traffic');
         Route::get('cierres/{session}/pdf', [TicketController::class, 'zPdf'])->name('cash-sessions.pdf');
 
         Route::get('registro-horario', [TimeTrackingController::class, 'index'])->name('time');

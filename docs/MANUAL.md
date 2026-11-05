@@ -398,6 +398,17 @@ Una jornada que cruza medianoche cuenta en el día en que empezó.
 
 ---
 
+### Afluencia (Gestión → Afluència)
+
+Gráficos para ver cuándo hay más y menos gente, a partir de las comandas que se abren (cada mesa o pedido cuenta cuando se abre; las anuladas no). Funciona en el móvil.
+
+- **Periodo:** 30, 90 o 365 días. **Comandes / Comensals:** contar mesas abiertas o personas.
+- Arriba: **hora punta**, **día más fuerte**, **día más flojo** y la **media por día abierto** (las medias solo cuentan los días con actividad, así los días cerrados no las bajan).
+- **Mapa de afluencia:** horas en filas y días de la semana en columnas; cuanto más oscuro, más comandas de media. Al tocar una casilla se ve su media.
+- **Por hora:** media de comandas que se abren cada hora, todos los días juntos.
+- **Franjas más tranquilas** (con el local abierto) y **más llenas**: para organizar turnos, descansos o promociones.
+- **Ver tabla** muestra todos los números.
+
 ## 19. Facturas de proveedores (Gestión → Facturas de proveedores)
 
 Pensado también para el móvil. **Escanear con la cámara** (recorte por esquinas, rotación, mejora) o **subir** imagen/PDF. Campos opcionales: proveedor, fecha, importe, notas. Listado con filtros y visor.

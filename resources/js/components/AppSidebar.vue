@@ -3,6 +3,7 @@ import {
     BookOpen,
     BookOpenText,
     CalendarClock,
+    ChartColumn,
     Clock,
     KeyRound,
     LayoutGrid,
@@ -52,6 +53,7 @@ import {
     suppliers,
     tickets,
     time,
+    traffic,
     users,
     zones,
 } from '@/routes/admin';
@@ -91,6 +93,7 @@ const groups = computed<{ label?: string; items: NavItem[] }[]>(() => [
             { title: t('nav.tickets'), href: tickets(), icon: Receipt },
             { title: t('nav.invoices'), href: invoices(), icon: ReceiptText },
             { title: t('nav.cashSessions'), href: cashSessions(), icon: Vault },
+            { title: t('nav.traffic'), href: traffic(), icon: ChartColumn },
         ],
     },
     {
